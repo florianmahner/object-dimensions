@@ -24,20 +24,18 @@ device = torch.device('cuda:0')
 torch.manual_seed(42)
 np.random.seed(42)
 
+# NOTE maybe change this to without ref!
 features = np.load('/LOCAL/fmahner/THINGS/vgg_bn_features6/features.npy')
 n_objects, n_features = features.shape
 init_dim = 100
 
 features = (features - np.mean(features, axis=0)) / np.std(features, axis=0) # zscore features
 features = (features * init_dim) / n_features # NOTE check why we do this?!
-# features += 2 # shift the mean of the gaussian distribution to be positive!
 
 similarity_mat = features @ features.T
-# similarity_mat /= n_objects**2
 similarity_mat = torch.from_numpy(similarity_mat).to(device)
-# similarity_mat = F.relu(similarity_mat)
 
-indices = list(combinations(range(n_objects), 2))[:1_000_000]
+indices = list(combinations(range(n_objects), 2))[:10_000_000]
 random.shuffle(indices)
 
 n_pairwise = len(indices)
@@ -68,31 +66,20 @@ for ep in range(epochs):
         embedding, loc, scale = model()
 
         i, j = batch
-        # NOTE Lukas makes a positivity constraint on these logits, ie. F.relu(embeddings). 
-        # NOTE Does that make sense when drawn from unit gaussian?
         
-        # embeddings_i = F.relu(embedding[i])
-        # embeddings_j = F.relu(embedding[j])
-
+    
         embeddings_i = embedding[i]
         embeddings_j = embedding[j]
 
         # There is stil something wrong with the likelihood maybe?!
         sim_embedding = torch.sum(embeddings_i * embeddings_j, dim=1) # NOTE dot product of the embedding!
-        # sim_embedding /= init_dim
-        # sim_embedding /= init_dim ** 2
 
 
         # likelihood = F.cosine_similarity(sim_embedding.unsqueeze_(0), sim_features.unsqueeze_(0))
         # likelihood *= init_dim
 
-
-        likelihood = F.mse_loss(sim_features, sim_embedding)
-        # likelihood /= (n_objects * init_dim)
-
-
-        # likelihood /= init_dim # NOTE same as with similarity mat, check why we do this?!
-        # likelihood *= 10 # This is very hacky -> Find a good solutio to this and check what the complexity loss does?!
+        log_likelihood = F.mse_loss(sim_features, sim_embedding)
+        log_likelihood *= 100 # This is very hacky -> Find a good solutio to this and check what the complexity loss does?!
 
         # log probability of variational distribution
         log_q = normalized_pdf(embedding, loc, scale).log()
@@ -101,13 +88,13 @@ for ep in range(epochs):
         log_p = prior(embedding).log()
 
         complexity_loss = (1 / n_pairwise) * (log_q.sum() - log_p.sum())
-        loss = likelihood + complexity_loss
+        loss = log_likelihood + complexity_loss
 
         loss.backward()
         optim.step()
 
         losses.append(loss.item())
-        print(f'Batch {k}/{n_batches} Likelihood {likelihood.item()}, Complexity {complexity_loss.item()}', end='\r')
+        print(f'Batch {k}/{n_batches} Likelihood {log_likelihood.item()}, Complexity {complexity_loss.item()}', end='\r')
 
 
     # NOTE Prune stuff -> This doesnt change the embedding dim though out of the box!
@@ -122,7 +109,9 @@ for ep in range(epochs):
 
     if (ep ) % 1 == 0:
         embedding = model.detached_params()['q_mu']
-        np.savetxt(f'./weights/weights_epoch_{ep+1}.txt', embedding)
+        np.savetxt(f'./weights_small/weights_epoch_{ep+1}.txt', embedding)
+        np.savetxt(f'./weights_small/weights_pruned_epoch_{ep+1}.txt', signal)
+        
         rsm_embedding = compute_rsm(embedding)
         rsm_features = compute_rsm(features)
         corr = correlate_rsms(rsm_features, rsm_embedding)
