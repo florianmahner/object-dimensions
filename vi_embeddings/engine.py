@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import numpy as np
 import torch
 import os
@@ -17,21 +16,12 @@ class RunConfig:
     checkpoint_interval: int  # how often to save a checkpoint
     params_interval: int  # how often to save the weights
     stability_interval: int  # interval to oberserve change in ll loss
-    
-
     best_train_loss: float = np.inf
     best_val_loss: float = np.inf
     start_epoch: int = 1
-    dim_over_time: list = []
+    # dim_over_time: list = None
     smallest_dim: int = np.inf
     n_steps_same_dim: int = 0
-
-
-
-
-
-
-
 
 
 class MLTrainer:
@@ -49,7 +39,6 @@ class MLTrainer:
         n_epochs=100,
         mc_samples=5,
         checkpoint_interval=50,
-        params_interval=20,
         lr=0.001,
         stability_time=200,
     ):
@@ -64,7 +53,6 @@ class MLTrainer:
         self.n_epochs = n_epochs
         self.log_path = logger.log_path
         self.checkpoint_interval = checkpoint_interval
-        self.params_interval = params_interval
         self.stability_time = stability_time
         self._init_training()
 
@@ -76,6 +64,14 @@ class MLTrainer:
     def update_training_params(self):
         pass
 
+    def parse_from_config(self, cfg):
+        attrs = ['n_epochs', 'mc_samples', 
+                 'checkpoint_interval', 'lr', 
+                 'stability_time']
+        for attr in attrs:
+            if hasattr(cfg, attr):
+                setattr(self, attr, getattr(cfg,attr))
+
     def _init_training(self):
         self.start_epoch = 1
         self.loss = 0
@@ -83,6 +79,7 @@ class MLTrainer:
         self.smallest_dim = np.inf
         self.n_steps_same_dim = 0
         self.dimensionality_over_time = []
+        self.init_dimensions = self.model.init_dim
         self._build_optimizer()
 
     def _build_optimizer(self):
@@ -197,8 +194,8 @@ class MLTrainer:
         return val_loss
 
     def evaluate_convergence(self, epoch):
-        signal, _, _ = self.model.pruned_dimensions()
-        dimensions = signal.shape[1]
+        signal, _, _ = self.model.prune_dimensions()
+        dimensions = len(signal)
         self.dimensionality_over_time.append(dimensions)
 
         # we only check the convergence of the dimensionality after a certain number of epochs
@@ -218,32 +215,24 @@ class MLTrainer:
             train_loss = self.train_one_epoch()
             val_loss = self.evaluate_one_epoch()
 
-            logging.info(f"\nEpoch {epoch} - Loss train: {train_loss:>14.6f}")
-            logging.info(f"Epoch {epoch} - Loss val: {val_loss:>15.6f}")
-
-
             if self.evaluate_convergence(epoch):
                 print(f"Stopped training after {epoch} epochs. Model has converged!")
                 self.save_checkpoint(epoch)
-                self.store_embeddings(epoch)
+                self.store_final_embeddings(epoch)
                 break
-    
-            if epoch % self.weight_interval == 0:
-                self.store_embeddings(epoch)
 
+            # we log and store intermediate weights concurrently
+            log_params = dict(train_loss=train_loss, val_loss=val_loss)
+            self.logger.log(**log_params, prepend='Epoch {}'.format(epoch))
+    
             if epoch % self.checkpoint_interval == 0:
                 self.save_checkpoint(epoch)
 
-    def prune_dimensions(self):
-        _, pruned_loc, pruned_scale = self.model.prune_dimensions()
-        return pruned_loc, pruned_scale
+    def store_final_embeddings(self, epoch):
+        pruned_loc, pruned_scale = self.model.sorted_pruned_params()
+        f_path = os.path.join(self.log_path, "final_pruned_params.npz")
 
-    def store_embeddings(self, epoch):
-        # NOTE do i maybe need to sort the dimensions
-        pruned_loc, pruned_scale = self.prune_dimensions()
-        f_path = os.path.join(self.log_path, "{}_epoch_{}.npz")
-
-        with open(f_path.format("pruned_params", epoch), "wb") as f:
+        with open(f_path, "wb") as f:
             np.savez(f, pruned_loc=pruned_loc, pruned_scale=pruned_scale)
 
     def compute_embedding_similarities(self, embedding, indices):
