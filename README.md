@@ -1,1 +1,1 @@
-# vi-embeddings
+# Deep Neural Net Concept Embeddings
