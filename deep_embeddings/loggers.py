@@ -6,8 +6,17 @@ from collections import defaultdict
 from abc import ABC, abstractmethod
 import numpy as np
 import operator
+import inspect
+from copy import deepcopy
+import shutil
+
+import time
 
 # TODO Have to still check with the step counter when logging per epoch vs per batch!
+# TODO Maybe the ML Logger can also have an update function where it stores parameters?
+# TODO I think my approach is so nice, as everybody can extent loggers as they wish by simply inheriting!
+
+
 
 class Logger(ABC):    
 
@@ -20,7 +29,13 @@ class Logger(ABC):
     def log(self, *args, **kwargs):
         raise NotImplementedError
 
-    def _make_dir(self):
+    def _make_dir(self, fresh=False):
+        if fresh:
+            try:
+                shutil.rmtree(self.log_path)
+            except OSError:
+                logging.info('Not able to delete file or entire path {}'.format(self.log_path))
+
         filename, file_extension = os.path.splitext(self.log_path)
         # create directory if log path is not a file
         if not file_extension and not os.path.exists(filename):
@@ -38,11 +53,29 @@ class Logger(ABC):
     def __call__(self, *args, **kwargs):
         return self.log(*args, **kwargs)
 
+class DeepEmbeddingLogger:
+    def __init__(self, model, cfg):
+        self.log_path = cfg.log_path
+        self.logger = DefaultLogger(cfg.log_path, cfg.fresh)
+        self.logger.add_logger('checkpoint', CheckpointLogger(cfg.log_path), callbacks=['model', 'optim', 'train_loader', 'val_loader', 'epoch'],
+                                update_interval=cfg.checkpoint_interval)
+        self.logger.add_logger('params', ParameterLogger(cfg.log_path, model, ['sorted_pruned_params']), update_interval=cfg.params_interval)
+        if cfg.tensorboard:
+            self.logger.add_logger('tensorboard', TensorboardLogger(cfg.log_path), callbacks=['train_loss', 'val_loss', 'dim'], update_interval=1)
+
+        self.logger.add_logger('file', FileLogger(cfg.log_path), callbacks=['train_loss', 'val_loss', 'dim'], update_interval=1)
+
+    def log(self, *args, **kwargs):
+        self.logger.log(*args, **kwargs)
+
+    def __call__(self, *args, **kwargs):
+        return self.log(*args, **kwargs)
+    
 
 class DefaultLogger(Logger):
-    def __init__(self, log_path):
+    def __init__(self, log_path, fresh=False):
         self._log_path = log_path
-        self._make_dir()
+        self._make_dir(fresh)
         self.callbacks = defaultdict(list)
         self.extensions = defaultdict(Logger)
         # incremental counter for the number of logging operations
@@ -67,20 +100,32 @@ class DefaultLogger(Logger):
     def log(self, *args, **kwargs):
         self.step_ctr += 1
         for name, (logger, update_interval) in self.extensions.items():        
+
+            # start_time = time.time()
+
+
             if self.step_ctr % update_interval != 0:
                 continue
 
             # iterate over all callbacks for that logger
             call_keys = self.callbacks.get(name) 
+
             if call_keys:
                 # filter dict with call keys
                 log_dict = {k: kwargs[k] for k in call_keys if k in kwargs}
+                
+                # update also with other parameter matching names that the logger log function accepts!
+                signature = inspect.signature(logger.log).parameters.keys()
+                log_dict.update({k: kwargs[k] for k in signature if k in kwargs})
+
                 logger.log(*args, step=self.step_ctr, **log_dict)
 
             else: 
                 # some loggers dont have callbacks and just log e.g. model parameters
                 logger.log(*args, step=self.step_ctr, **kwargs)
 
+
+            # print(f"{logger} time--- {time.time() - start_time} seconds ---")
 
 class FileLogger(Logger):
     def __init__(self, log_path):
@@ -106,15 +151,37 @@ class FileLogger(Logger):
             log.addHandler(stdlog) # also print to stout    
             log.addHandler(fileh)      # set the new handler
 
-    def log(self, step=None, prepend=None, *args, **kwargs):
+    def log(self, step=None, print_prepend=None, *args, **kwargs):
+        # TODO Add print fmt too -> e.g. max number of floating points!
         logging.info("")
-        prepend = prepend + ' - ' if prepend else ''
+        print_prepend = print_prepend + ' - ' if print_prepend else ''
         for a in args:
             a = a.replace("_", " ").capitalize()
-            logging.info(prepend + a)
+            logging.info(print_prepend + a)
         for k, v in kwargs.items():
             k = k.replace("_", " ").capitalize()
-            logging.info(f'{prepend}{k}: {v}')
+            logging.info(f'{print_prepend}{k}: {v}')
+
+
+class CheckpointLogger(Logger):
+    """ Logs models and optimizer each checkpoint"""
+    def __init__(self, log_path, ext='.tar'):
+        self._log_path = os.path.join(log_path, 'checkpoints')
+        self.ext = ext
+        self._make_dir()
+
+    @property
+    def log_path(self):
+        return self._log_path
+
+    def log(self, *args, **kwargs):
+        if kwargs.get('model'):
+            model = deepcopy(kwargs['model'].state_dict)
+        if kwargs.get('optim'):
+            optim = deepcopy(kwargs['optim'].state_dict)
+        epoch = kwargs.get('epoch')
+        save_dict = {'model': model, 'optim': optim}.update(kwargs)
+        torch.save(save_dict, os.path.join(self.log_path, f'checkpoint_epoch_{epoch}{self.ext}'))
         
 
 class ParameterLogger(Logger):
@@ -144,9 +211,9 @@ class ParameterLogger(Logger):
 
     def _save_params(self, param_dict, step):
         for key, val in param_dict.items():
-            key = key + '_' + str(step)
+            key = key + '_epoch_' + str(step)
             if self.ext == 'npz':
-                np.savez(os.path.join(self.log_path, key + self.ext), val)
+                np.savez(os.path.join(self.log_path, key  + self.ext), val)
             else:
                 np.savetxt(os.path.join(self.log_path, key + self.ext), val)
 
@@ -213,31 +280,4 @@ class TensorboardLogger(Logger):
         # NOTE Need to include args here too, even though that seems weird. Required by abstract method!
         self.update(step, **kwargs)
         self.flush()
-
-
-
-if __name__ == '__main__':
-
-    print('Hello')
-
-    from vi_embeddings.model import VI
-    model = VI(1000, 100)
-
-    logger = DefaultLogger('test')
-
-    logger.add_logger('params', ParameterLogger('test', model, ['detached_params', 'pruned_params']), update_interval=1)
-    # logger.add_logger('tensorboard', TensorboardLogger('test'), callbacks=['train_loss', 'val_loss'], update_interval=1)
-    logger.add_logger('file', FileLogger('test'), callbacks=['train_loss', 'val_loss'], update_interval=1)
-
-    for i in range(10):
-
-        train_loss = i
-        val_loss = i
-
-        log_dict = {'train_loss': i, 'val_loss': i}
-        
-        logger.log(**log_dict)
-
-
-
-
+ 
