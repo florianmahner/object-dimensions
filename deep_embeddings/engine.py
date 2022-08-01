@@ -9,9 +9,10 @@ from dataclasses import dataclass, field
 @dataclass
 class TrainingParams:
     lr: float = 0.001
+    gamma: float = 0.5 # balances complexity and reconstruction loss
     n_epochs: int = 100
     mc_samples: int = 5 
-    stability_time: int = 500
+    stability_time: int = 200
 
     best_train_loss: float = np.inf
     best_val_loss: float = np.inf
@@ -54,6 +55,7 @@ class MLTrainer:
         n_epochs=100,
         mc_samples=5,
         lr=0.001,
+        gamma=0.5, 
         stability_time=200,
     ):
         self.model = model
@@ -61,7 +63,7 @@ class MLTrainer:
         self.val_loader = val_loader
         
         self.logger = logger
-        self.params = TrainingParams(lr, n_epochs, mc_samples, stability_time)
+        self.params = TrainingParams(lr, gamma, n_epochs, mc_samples, stability_time)
         self.log_path = logger.log_path
         self.init_dim = self.model.init_dim
         self._build_optimizer()
@@ -73,7 +75,7 @@ class MLTrainer:
         self.similarity_mat = similarity_mat.to(device)
 
     def parse_from_config(self, cfg):
-        attrs = ['n_epochs', 'mc_samples',  'lr', 'stability_time']
+        attrs = ['n_epochs', 'mc_samples',  'lr', 'gamma', 'stability_time']
         for attr in attrs:
             if hasattr(cfg, attr):
                 setattr(self.params, attr, getattr(cfg,attr))        
@@ -95,11 +97,10 @@ class MLTrainer:
 
     
     def compute_embedding_similarities(self, embedding, indices):
-        indices_i, indices_j = indices
+        indices_i, indices_j = indices\
 
-        # NOTE we dont activate right now!
-        # embeddings_i = F.relu(embedding[indices_i])
-        # embeddings_j = F.relu(embedding[indices_j])
+        embeddings_i = F.relu(embedding[indices_i])
+        embeddings_j = F.relu(embedding[indices_j])
 
         embeddings_i = embedding[indices_i]
         embeddings_j = embedding[indices_j]
@@ -142,6 +143,9 @@ class MLTrainer:
                 log_likelihood, log_q, log_p = self.step_batch(indices)
                 complexity_loss = (1 / n_pairwise) * (log_q.sum() - log_p.sum())
 
+                # balance the log likelihood and complexity loss by gamma
+                log_likelihood = self.params.gamma * log_likelihood
+                complexity_loss = (1 - self.params.gamma) * complexity_loss
                 loss = log_likelihood + complexity_loss
 
                 # faster alternative to optim.zero_grad()
@@ -164,6 +168,7 @@ class MLTrainer:
                 )
                 for s in range(self.params.mc_samples):
                     log_likelihood, log_q, log_p = self.step_batch(indices)
+                    log_likelihood = self.params.gamma * log_likelihood
                     complexity_loss = (1 / n_pairwise) * (log_q.sum() - log_p.sum())
                     sampled_likelihoods[s] = log_likelihood.item()
 
@@ -235,7 +240,7 @@ class MLTrainer:
             # TODO add final logging step before it ends!
             if convergence:
                 print(f"Stopped training after {epoch} epochs. Model has converged!")
-                self.logger.log(log_params)
+                self.logger.log(**log_params)
                 self.store_final_embeddings(epoch)
                 break
     
