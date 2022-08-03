@@ -6,14 +6,12 @@ from statsmodels.stats.multitest import multipletests
 import torch
 import math
 
-
 # Determine the cosine similarity between two vectors in pytorch
 def cosine_similarity(embedding_i, embedding_j):
     if isinstance((embedding_i, embedding_j), torch.Tensor):
         return torch.nn.functional.cosine_similarity(embedding_i, embedding_j)
     else:
         return np.dot(embedding_i, embedding_j) / (np.linalg.norm(embedding_j) * np.linalg.norm(embedding_j))
-
 
 def compute_positive_rsm(F):
     rsm = relu_correlation_matrix(F)
@@ -58,30 +56,3 @@ def normalized_pdf(X, loc, scale):
     gauss_pdf = torch.exp(-((X - loc) ** 2) / (2 * scale.pow(2))) / scale * math.sqrt(2 * math.pi)
 
     return gauss_pdf
-
-def compute_pvals(W_loc, W_scale):
-    # Adapted from https://github.com/LukasMut/VICE/utils.py
-    # Compute the probability for an embedding value x_{ij} <= 0,
-    # given mu and sigma of the variational posterior q_{\theta}
-
-    # NOTE does this for every dimensions j, by looking at the cumulative sum of the pdf given zero mean! does not translate to non gaussian distributions, i guess
-    def pval(W_loc, W_scale, j):
-        return norm.cdf(0.0, W_loc[:, j], W_scale[:, j])
-        
-    pvals = partial(pval, W_loc, W_scale)(np.arange(W_loc.shape[1])).T 
-
-    return pvals
-
-def fdr_corrections(p_vals, alpha = 0.05):
-    # Taken from LukasMut/VICE/utils.py    
-    # For each dimension, statistically test how many objects have non-zero weight
-    fdr = np.array(list(map(lambda p: multipletests(p, alpha=alpha, method='fdr_bh')[0], p_vals)))
-    
-    return fdr
-
-def get_importance(rejections):
-    # Taken from LukasMut/VICE/utils.py    
-    # Yield the the number of rejections given by the False Discovery Rates
-    importance = np.array(list(map(sum, rejections)))[:, None]
-    
-    return importance
