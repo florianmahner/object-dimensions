@@ -2,27 +2,31 @@ import torch
 
 class PairwiseDataset(torch.utils.data.Dataset):
     ''' Sample pairwise indices from the list combinations'''
-    def __init__(self, similarity_mat, n_objects, n_samples=None):
+    def __init__(self, pairwise_indices, n_samples=None):
         super().__init__()
-        self.n_objects = n_objects
-        self.n_samples = n_samples
-        self._build_indices()
-
-    def _build_indices(self):
-        pairwise_indices = torch.combinations(torch.arange(self.n_objects), 2, with_replacement=False)
-        shuffle_indices = torch.randperm(len(pairwise_indices))
-        pairwise_indices = pairwise_indices[shuffle_indices]
-        pairwise_indices = pairwise_indices[:self.n_samples]
         self.pairwise_indices = pairwise_indices
-        self.n_indices = len(pairwise_indices)
+        self.n_indices = n_samples if n_samples else len(pairwise_indices) 
 
     def __getitem__(self, idx):
-        indices = self.pairwise_indices[idx]
-        
-        return indices
+        return self.pairwise_indices[idx]
 
     def __len__(self):
         return self.n_indices
 
 
+class TripletDataset(torch.utils.data.Dataset):
+    ''' Sample triplet indices from the list combinations'''
+    def __init__(self, triplet_indices, n_samples=None, device=torch.device("cpu")):
+        super().__init__()
+        self.triplet_indices = triplet_indices
+        self.triplets_indices = self.triplet_indices.astype(int)
+        # self.triplet_indices = torch.as_tensor(self.triplet_indices)
+        # self.triplet_indices = self.triplet_indices.to(device)
+        self.n_indices = n_samples if n_samples else len(triplet_indices) 
+
+    def __getitem__(self, idx):
+        return self.triplet_indices[idx]
+
+    def __len__(self):
+        return self.n_indices
 

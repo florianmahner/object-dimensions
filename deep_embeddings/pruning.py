@@ -4,10 +4,21 @@ from functools import partial
 
 
 class DimensionPruning(nn.Module):
+    """We prune dimensions based on the importance of each dimension, which is determined by the set of pvalues obtained from the
+    cdf of the normal distribution given the mean and variance of the embedding, corrected for multiple comparisons by calculting
+    the FDR given the Benjamin-Hochberg procedure."""
+
     def __init__(self, n_objects):
         super().__init__()
         self.register_buffer("cdf_loc", torch.Tensor([0]))
-        self.register_buffer("ecdf_factor", self._ecdf_torch(n_objects))
+        # empirical cumulative distribution function factor for the benjamin hochberg correction
+        self.register_buffer("ecdf_factor", self._ecdf_torch(n_objects)) 
+
+    def __call__(self, q_mu, q_var, alpha=0.05):
+        pvals = self.compute_pvals_torch(q_mu, q_var)
+        rejections = self.adjust_pvals_mutliple_comparisons_torch(pvals, alpha)
+        importance = self.get_importance_torch(rejections)
+        return importance
 
     def pval_torch(self, q_mu, q_var, j):
         # the cdf describes the probability that a random sample X of n objects at dimension j
@@ -24,27 +35,23 @@ class DimensionPruning(nn.Module):
         return pvals.T
 
     def adjust_pvals_mutliple_comparisons_torch(self, p_vals, alpha=0.05):
-        def pval_rejection(p):
-            return self.fdr_correction_torch(p, alpha=alpha)[0]
-
         fdr = torch.empty_like(p_vals)
         n_pvals = p_vals.shape[0]
         for i in range(n_pvals):
-            fdr[i] = pval_rejection(p_vals[i])
-
+            fdr[i] = self.fdr_correction_torch(p_vals[i], alpha=alpha)[0]
         return fdr
 
     def get_importance_torch(self, rejections):
         importance = rejections.sum(dim=1)
-
         return importance
 
     def _ecdf_torch(self, nobs):
-        """no frills empirical cdf used in fdrcorrection (torch version)"""
+        """No frills empirical cdf used in fdrcorrection"""
         return torch.arange(1, nobs + 1, dtype=torch.float64) / float(nobs)
 
     def fdr_correction_torch(self, pvals, alpha=0.05, is_sorted=False):
-        """pytorch implementation of fdr correction, adapted from scipy.stats.multipletests"""
+        """Pytorch implementation of fdr correction for only the benjamin hochberg method. see for more details:
+        https://github.com/statsmodels/statsmodels/blob/09a89a3b11445e6221eba87a1f86a6789a725be2/statsmodels/stats/multitest.py#L63-L266"""
 
         assert pvals.ndim == 1, "pvals must be 1-dimensional, that is of shape (n,)"
         if not is_sorted:
@@ -61,7 +68,7 @@ class DimensionPruning(nn.Module):
 
         pvals_corrected_raw = pvals_sorted / self.ecdf_factor
 
-        # same as np.minimum.accumulate
+        # torch.cummin is the same as np.minimum.accumulate
         # note torch.flip(a, dims=(0,)) is the same as a[::-1]
         pvals_cummin, _ = torch.cummin(
             torch.flip(pvals_corrected_raw, dims=(0,)), dim=0
@@ -79,10 +86,3 @@ class DimensionPruning(nn.Module):
             return reject_, pvals_corrected_
         else:
             return reject, pvals_corrected
-
-    def __call__(self, q_mu, q_var, alpha=0.05):
-        pvals = self.compute_pvals_torch(q_mu, q_var)
-        rejections = self.adjust_pvals_mutliple_comparisons_torch(pvals, alpha)
-        importance = self.get_importance_torch(rejections)
-
-        return importance

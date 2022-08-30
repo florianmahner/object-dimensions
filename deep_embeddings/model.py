@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
-import vi_embeddings.utils as utils
+from deep_embeddings.pruning import DimensionPruning
 
                 
 class QLogVar(nn.Module):
@@ -31,10 +30,12 @@ class VI(nn.Module):
         super().__init__()
         self.q_mu = QMu(n_objects, init_dim, bias=True) 
         self.q_logvar = QLogVar(n_objects, init_dim, bias=True)
-        self.non_zero_weights = 10 # minimum number of non-zero weights
+        self.non_zero_weights = 5 # minimum number of non-zero weights
         self.init_dim = init_dim
         if init_weights:
             self._initialize_weights()
+
+        self.pruner = DimensionPruning(n_objects)
 
     @staticmethod
     def reparameterize(loc, scale):
@@ -61,23 +62,17 @@ class VI(nn.Module):
         q_var = self.q_logvar().exp() # we need to exponentiate the logvar
         X = self.reparameterize(q_mu, q_var)
 
-        # NOTE very important question: do i need to do the gradient here to have it differentiable?!
-        # probably not -> maybe also dont make the embedding positive, since the positvity constraint then doesnt work?
-        # q_mu = F.relu(q_mu)
+        # TODO Maybe do F.relu(X)?, z = F.relu(X) -> we need original, not relu X for prior eval.
         
         return X, q_mu, q_var
 
+    @torch.no_grad()
     def prune_dimensions(self, alpha=0.05):
-        # Prune the variational parameters theta
-        # by identifying the number of *relevant* dimensions
-        # according to our dimensionality reduction procedure,
-        # defined in VICE §3.3.4
-        q_mu = self.detached_params()['q_mu']
-        q_var = self.detached_params()['q_var']
-        p_vals = utils.compute_pvals(q_mu, q_var)
-        rejections = utils.fdr_corrections(p_vals, alpha)
-        importance = utils.get_importance(rejections).ravel()
-        signal = np.where(importance > self.non_zero_weights)[0]
+        q_mu = self.q_mu()
+        q_var = self.q_logvar().exp()
+
+        importance = self.pruner(q_mu, q_var, alpha)
+        signal = torch.where(importance > self.non_zero_weights)[0] # we have a certain minimum number of dimensions that we maintain!
         pruned_loc = q_mu[:, signal]
         pruned_scale = q_var[:, signal]
 
@@ -93,7 +88,11 @@ class VI(nn.Module):
 
     def sorted_pruned_params(self):
         _, pruned_loc, pruned_scale = self.prune_dimensions()
+        pruned_loc = pruned_loc.detach().cpu().numpy()
+        pruned_scale = pruned_scale.detach().cpu().numpy()
+        q_mu = self.q_mu().detach().cpu().cpu().numpy()
+        q_mu = q_mu[:, np.argsort(-np.linalg.norm(q_mu, axis=0, ord=1))]
         pruned_loc = pruned_loc[:, np.argsort(-np.linalg.norm(pruned_loc, axis=0, ord=1))]
         pruned_scale = pruned_scale[:, np.argsort(-np.linalg.norm(pruned_loc, axis=0, ord=1))]
-        params = dict(pruned_q_mu=pruned_loc, pruned_q_var=pruned_scale)
+        params = dict(pruned_q_mu=pruned_loc, pruned_q_var=pruned_scale, q_mu=q_mu)
         return params

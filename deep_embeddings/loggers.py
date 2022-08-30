@@ -16,6 +16,8 @@ from copy import deepcopy
 # TODO Maybe the ML Logger can also have an update function where it stores parameters?
 # TODO I think my approach is so nice, as everybody can extent loggers as they wish by simply inheriting!
 # TODO Also need to find a way to relaod a logger from the experiment logging dir and to store certain parameter/values!
+# TODO Save the logger also at the checkpoint and then load this logger again!
+# TODO Maybe also add a ploting logger that e.g. plots train and validation loss over time by accessing its callbacks!
 
 
 class Logger(ABC):
@@ -63,26 +65,26 @@ class DeepEmbeddingLogger:
         self.logger.add_logger(
             "checkpoint",
             CheckpointLogger(cfg.log_path),
-            callbacks=["model", "optim", "train_loader", "val_loader", "epoch"],
+            callbacks=["model", "optim", "train_loader", "val_loader", "epoch", "logger"],
             update_interval=cfg.checkpoint_interval,
         )
         self.logger.add_logger(
             "params",
-            ParameterLogger(cfg.log_path, model, ["sorted_pruned_params"]),
+            ParameterLogger(cfg.log_path, model, ["module.sorted_pruned_params"]),
             update_interval=cfg.params_interval,
         )
         if cfg.tensorboard:
             self.logger.add_logger(
                 "tensorboard",
                 TensorboardLogger(cfg.log_path),
-                callbacks=["train_loss", "val_loss", "dim"],
+                callbacks=["train_loss", "train_ll", "train_complexity", "val_loss", "dim", "val_acc", "train_acc"],
                 update_interval=1,
             )
 
         self.logger.add_logger(
             "file",
             FileLogger(cfg.log_path),
-            callbacks=["train_loss", "val_loss", "dim"],
+            callbacks=["train_loss", "val_loss", "train_acc", "val_acc", "dim"],
             update_interval=1,
         )
 
@@ -121,11 +123,10 @@ class DefaultLogger(Logger):
         self.callbacks[logger_key] = callbacks
 
     def log(self, *args, **kwargs):
+        # NOTE parameter loggers take the longest time, since they log to disk
+        import time
         self.step_ctr += 1
         for name, (logger, update_interval) in self.extensions.items():
-
-            # start_time = time.time()
-
             if self.step_ctr % update_interval != 0:
                 continue
 
@@ -145,9 +146,6 @@ class DefaultLogger(Logger):
             else:
                 # some loggers dont have callbacks and just log e.g. model parameters
                 logger.log(*args, step=self.step_ctr, **kwargs)
-
-            # print(f"{logger} time--- {time.time() - start_time} seconds ---")
-
 
 class FileLogger(Logger):
     def __init__(self, log_path):
@@ -183,6 +181,7 @@ class FileLogger(Logger):
         for k, v in kwargs.items():
             k = k.replace("_", " ").capitalize()
             logging.info(f"{print_prepend}{k}: {v}")
+        
 
 
 class CheckpointLogger(Logger):
@@ -211,7 +210,7 @@ class CheckpointLogger(Logger):
 
 
 class ParameterLogger(Logger):
-    def __init__(self, log_path, model, attributes, ext=".npz"):
+    def __init__(self, log_path, model, attributes, ext=".txt"):
         "attributes can either be attributes as strings or a function that transforms attributes for storing"
         self._log_path = os.path.join(log_path, "params")
         self._make_dir()
@@ -238,11 +237,12 @@ class ParameterLogger(Logger):
             ), "Model {} has no attribute of name {}".format(self.model, v)
 
     def _save_params(self, param_dict, step):
-        for key, val in param_dict.items():
-            key = key + "_epoch_" + str(step)
-            if self.ext == "npz":
-                np.savez(os.path.join(self.log_path, key + self.ext), val)
-            else:
+        if self.ext == "npz":
+            key = "params_epoch_" + str(step)
+            np.savez(os.path.join(self.log_path, key + self.ext), **param_dict)
+        else:
+            for key, val in param_dict.items():
+                key = key + "_epoch_" + str(step)
                 np.savetxt(os.path.join(self.log_path, key + self.ext), val)
 
     def log(self, step=None, *args, **kwargs):

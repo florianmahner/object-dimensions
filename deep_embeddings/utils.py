@@ -52,10 +52,23 @@ def correlate_rsms(rsm_a, rsm_b, correlation = 'pearson'):
     
     return rho
 
-def normalized_pdf(X, loc, scale):
-    gauss_pdf = torch.exp(-((X - loc) ** 2) / (2 * scale.pow(2))) / scale * math.sqrt(2 * math.pi)
+# NOTE This seems to be wrong -> not the same results as obtained from torch.Distributions or scipy.stats
+# def normal_pdf(X, loc, scale):
+    # gauss_pdf = torch.exp(-((X - loc) ** 2) / (2 * scale.pow(2))) / scale * math.sqrt(2 * math.pi)
 
-    return gauss_pdf
+    # return gauss_pdf
+
+    
+def normal_pdf(X, loc, scale):
+    """Probability density function of a normal distribution."""
+    return (
+        torch.exp(-((X - loc) ** 2) / (2 * scale.pow(2)))
+        / scale
+        * math.sqrt(2 * math.pi)
+    )
+
+def log_normal_pdf(X, loc, scale):
+    return torch.distributions.Normal(loc, scale).log_prob(X)
 
 
 def pval(W_loc, W_scale, j):

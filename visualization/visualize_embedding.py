@@ -1,10 +1,11 @@
-import thingsvision.vision as tvision # NOTE need this to prevent circular import error!
 from thingsvision.dataset import ImageDataset
 import skimage.io as io
 import matplotlib.pyplot as plt
 import numpy as np
 import argparse
 
+# TODO add image path for load data
+# NOTE large things dataset, eacn image per category has suffix _b. -> need to make behavior dataset for visualisation!
 
 parser = argparse.ArgumentParser(description='Visualize embedding')
 parser.add_argument('--w_dir', type=str, default='./weights', help='path to weights directory') # TODO remove default
@@ -16,14 +17,17 @@ parser.add_argument('--add_ref_imgs', type=bool, default=True, help='add referen
 
 
 def load_data(n_images, add_ref_imgs):
-    dataset = ImageDataset(root=f'/LOCAL/fmahner/THINGS/image_data/images{n_images}', out_path='', backend='pt', 
+    dataset = ImageDataset(root=f'../../THINGS/image_data/images{n_images}', out_path='', backend='pt', 
                                         imagenet_train=False, imagenet_val=False,
-                                        things=True, things_behavior=False, add_ref_imgs=add_ref_imgs,
+                                        things=True, things_behavior=True, add_ref_imgs=add_ref_imgs,
                                         transforms=None)
+
 
     idx2obj = dataset.idx_to_cls
     obj2idx = dataset.cls_to_idx
     images = dataset.images
+
+    breakpoint()
 
     return idx2obj, obj2idx, images
     
@@ -35,7 +39,7 @@ def plot(args):
     _, _, images = load_data(args.n_images, args.add_ref_imgs)
 
     top_j = 39
-    top_k = 10
+    top_k = 12
 
     n_rows = top_j if top_j <= W.shape[0] else W.shape[0]
     n_cols = top_k
@@ -66,5 +70,8 @@ def plot(args):
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    args.w_dir = '/LOCAL/fmahner/DeepEmbeddings/weights_sslab12_featact/weights_pruned_epoch_1700.txt'
+
+    # args.w_dir = '/LOCAL/fmahner/DeepEmbeddings/weights_sslab12_20mio_cosine_gamma_097/params/pruned_q_var_epoch_200.txt'
+    # args.w_dir = "../weights_triplets_50mio/params/pruned_q_mu_epoch_500.txt"
+    args.w_dir = "/home/florian/DeepEmbeddings/weights_things_behavior_256bs/params/pruned_q_mu_epoch_500.txt"
     plot(args)
