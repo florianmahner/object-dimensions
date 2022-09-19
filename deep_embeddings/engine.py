@@ -79,7 +79,6 @@ class MLTrainer:
         train_loader,
         val_loader,
         logger,  # defines the log path!
-        similarity_mat,
         device="cpu",
         n_epochs=100,
         mc_samples=5,
@@ -106,8 +105,6 @@ class MLTrainer:
         self.model.to(self.device)
         self.prior.to(self.device)
 
-        # NOTE we only need to do this for pairiwse!
-        # self.similarity_mat = similarity_mat.to(device)
 
     def parse_from_config(self, cfg):
         attrs = ["n_epochs", "mc_samples", "lr", "gamma", "stability_time", "prune_dim"]
@@ -132,22 +129,6 @@ class MLTrainer:
         self.logger = checkpoint["logger"]  # only if exists!
 
 
-    def compute_embedding_similarities(self, embedding, indices):
-        indices_i, indices_j = indices
-
-        embeddings_i = F.relu(embedding[indices_i])
-        embeddings_j = F.relu(embedding[indices_j])
-
-        # embeddings_i = embedding[indices_i]
-        # embeddings_j = embedding[indices_j]
-        # sim_embedding = F.cosine_similarity(embeddings_i, embeddings_j)
-
-        sim_embedding = torch.sum(
-            embeddings_i * embeddings_j, dim=1
-        )  # this is the dot produt of the embedding vectors
-
-        return sim_embedding
-
     def step_triplet_batch(self, indices):
 
         # maybe do this somewhere else to improve speed
@@ -156,10 +137,7 @@ class MLTrainer:
         indices = indices.unbind(1)
 
         ind_i, ind_j, ind_k = indices
-
         embedding, loc, scale = self.model()
-
-
 
         embedding_i = F.relu(embedding[ind_i])
         embedding_j = F.relu(embedding[ind_j])
@@ -185,21 +163,19 @@ class MLTrainer:
         # we just use the similarities at index 0, all other targets are 0 and redundant!
         log_likelihood = torch.mean(-log_softmax_ij)
 
+        # # NOTE can I make the complexity loss like this also dependent on the batch size?
+        # loc_i = loc[ind_i]
+        # loc_j = loc[ind_j]
+        # loc_k = loc[ind_k]
 
+        # scale_i = scale[ind_i]
+        # scale_j = scale[ind_j]
+        # scale_k = scale[ind_k]
 
-        # NOTE can I make the complexity loss like this also dependent on the batch size?
-        loc_i = loc[ind_i]
-        loc_j = loc[ind_j]
-        loc_k = loc[ind_k]
-
-        scale_i = scale[ind_i]
-        scale_j = scale[ind_j]
-        scale_k = scale[ind_k]
-
-        loc = torch.cat([loc_i, loc_j, loc_k])
-        scale = torch.cat([scale_i, scale_j, scale_k])
-        embedding = torch.cat([embedding_i, embedding_j, embedding_k])
-        indices = torch.cat(indices)
+        # loc = torch.cat([loc_i, loc_j, loc_k])
+        # scale = torch.cat([scale_i, scale_j, scale_k])
+        # embedding = torch.cat([embedding_i, embedding_j, embedding_k])
+        # indices = torch.cat(indices)
 
     
         # log probability of variational distribution
@@ -207,38 +183,11 @@ class MLTrainer:
         log_q = utils.normal_pdf(embedding, loc, scale).log()
 
         # gaussian prior log probability of the prior distribution
-        log_p = self.prior(embedding, indices).log()
+        log_p = self.prior(embedding).log()
         
 
         return log_likelihood, log_q, log_p, triplet_accuracy
 
-    def step_batch(self, indices):
-        indices = indices.to(self.device)
-        indices = indices.unbind(1)  # convert into two lists of x,y indices
-
-        sim_features = self.similarity_mat[indices]
-
-        if self.model.training:
-            embedding, loc, scale = self.model()
-
-        # NOTE added this -> we evaluate the validation loss on the pruned dimensions!
-        else:
-            _, loc, scale = self.model.prune_dimensions()
-            embedding = self.model.reparameterize(loc, scale)
-
-        sim_embedding = self.compute_embedding_similarities(embedding, indices)
-        # NOTE consider!
-        # sim_embedding /= beta (temp scaling)
-
-        log_likelihood = F.mse_loss(sim_features, sim_embedding)
-
-        # log probability of variational distribution
-        # log_q = utils.log_normal_pdf(embedding, loc, scale)
-        log_q = utils.normal_pdf(embedding, loc, scale).log()
-
-        # gaussian prior log probability of the prior distribution
-        log_p = self.prior(embedding).log()
-        return log_likelihood, log_q, log_p
 
     # NOTE pruned dim is for pairiwise -> need to do this later!
     def step_dataloader(self, dataloader, pruned_dim=None):
@@ -258,7 +207,7 @@ class MLTrainer:
 
             # only for trainin batches, not val batches
             if self.model.training:
-                # log_likelihood, log_q, log_p = self.step_batch(indices)
+                # log_likelihood, log_q, log_p = self.step_pairwise_batch(indices)
 
                 log_likelihood, log_q, log_p, accuracy = self.step_triplet_batch(indices)
 
@@ -266,10 +215,8 @@ class MLTrainer:
                 log_likelihood /= beta
 
                 # NOTE short hack to adapt the complexity loss as a function of the batch size!
-                # complexity_loss = ((batch_size /2) / n_pairwise) * (log_q.sum() - log_p.sum())
-                complexity_loss = (1 / n_pairwise) * (log_q.sum() - log_p.sum())
-
-                breakpoint()
+                complexity_loss = ((batch_size) / n_pairwise) * (log_q.sum() - log_p.sum())
+                # complexity_loss = (1 / n_pairwise) * (log_q.sum() - log_p.sum())
 
                 # balance the log likelihood and complexity loss by gamma
                 log_likelihood = self.params.gamma * log_likelihood

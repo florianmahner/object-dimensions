@@ -1,19 +1,5 @@
 import torch
 
-class PairwiseDataset(torch.utils.data.Dataset):
-    ''' Sample pairwise indices from the list combinations'''
-    def __init__(self, pairwise_indices, n_samples=None):
-        super().__init__()
-        self.pairwise_indices = pairwise_indices
-        self.n_indices = n_samples if n_samples else len(pairwise_indices) 
-
-    def __getitem__(self, idx):
-        return self.pairwise_indices[idx]
-
-    def __len__(self):
-        return self.n_indices
-
-
 class TripletDataset(torch.utils.data.Dataset):
     ''' Sample triplet indices from the list combinations'''
     def __init__(self, triplet_indices, n_samples=None, device=torch.device("cpu")):
