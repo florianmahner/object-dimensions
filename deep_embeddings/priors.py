@@ -57,29 +57,6 @@ class SpikeSlabPrior(nn.Module):
     def forward(self, X):
         return self.spike_and_slab(X)
 
-class SpikeSlabPriorConstrained(nn.Module):
-    def __init__(self, n_objects, init_dim, pi=0.5, spike=0.25, slab=1.0):
-        super().__init__()
-        self.register_buffer('loc', torch.zeros(n_objects, init_dim)) 
-        self.register_buffer('pi', torch.ones(n_objects, init_dim) * pi)
-        self.register_buffer('spike', torch.ones(n_objects, init_dim) * spike)
-        self.register_buffer('slab', torch.ones(n_objects, init_dim) * slab)
-
-    def spike_and_slab(self, X, indices):
-        loc = self.loc[indices]
-        spike = self.spike[indices]
-        slab = self.slab[indices]
-        pi = self.pi[indices]
-
-        spike = pi * utils.log_normal_pdf(X, loc, spike).exp()
-        slab = (1 - pi) * utils.log_normal_pdf(X, loc, slab).exp()
-        
-        return spike + slab
-
-    def forward(self, X, indices):
-        return self.spike_and_slab(X, indices)
-
-
 class GaussianPrior(nn.Module):
     def __init__(self, n_objects, init_dim=100):
         super().__init__()

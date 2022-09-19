@@ -137,21 +137,6 @@ class MLTrainer:
         # compute the cross entropy loss -> we dont need to one hot encode the batch
         # we just use the similarities at index 0, all other targets are 0 and redundant!
         log_likelihood = torch.mean(-log_softmax_ij)
-
-        # # NOTE can I make the complexity loss like this also dependent on the batch size?
-        # loc_i = loc[ind_i]
-        # loc_j = loc[ind_j]
-        # loc_k = loc[ind_k]
-
-        # scale_i = scale[ind_i]
-        # scale_j = scale[ind_j]
-        # scale_k = scale[ind_k]
-
-        # loc = torch.cat([loc_i, loc_j, loc_k])
-        # scale = torch.cat([scale_i, scale_j, scale_k])
-        # embedding = torch.cat([embedding_i, embedding_j, embedding_k])
-        # indices = torch.cat(indices)
-
     
         # log probability of variational distribution
         # log_q = utils.log_normal_pdf(embedding, loc, scale)
