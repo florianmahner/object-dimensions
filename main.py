@@ -1,7 +1,5 @@
-from selectors import EpollSelector
-from sys import breakpointhook
 from deep_embeddings.model import VI
-from deep_embeddings.priors import SpikeSlabPrior, ExponentialPrior, SpikeSlabPriorConstrained
+from deep_embeddings.priors import SpikeSlabPrior, ExponentialPrior
 from deep_embeddings.dataset import TripletDataset
 from deep_embeddings.engine import MLTrainer
 from deep_embeddings.loggers import DeepEmbeddingLogger
@@ -17,7 +15,7 @@ def build_triplet_dataset(triplet_path, device):
     # train = np.loadtxt(os.path.join(triplet_path, "test_10.txt"))
     # test = np.loadtxt(os.path.join(triplet_path, "test_10.txt"))
 
-    train = np.load(os.path.join(triplet_path, "train_90.npy"))
+    train = np.load(os.path.join(triplet_path, "test_10.npy"))
     test = np.load(os.path.join(triplet_path, "test_10.npy"))
 
     # maybe need to do train/val split here beforehand and test=test?
@@ -27,6 +25,7 @@ def build_triplet_dataset(triplet_path, device):
     return train_dataset, val_dataset
 
 def train(cfg):
+    assert (cfg.fresh and cfg.load_model) is not True, "You can either load a model (config.load_model) or train a new one (config.fresh), not both!"
     
     torch.manual_seed(cfg.rnd_seed)
     np.random.seed(cfg.rnd_seed)
@@ -67,10 +66,6 @@ def train(cfg):
 
     trainer = MLTrainer(model, prior, train_loader, val_loader, logger, device)
     trainer.parse_from_config(cfg)
-
-    if cfg.load_model:
-        model_path = os.path.join(cfg.log_path, cfg.model_name)
-        trainer.init_model_from_checkpoint(model_path)
 
     trainer.train()
 

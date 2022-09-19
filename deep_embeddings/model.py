@@ -90,9 +90,7 @@ class VI(nn.Module):
         _, pruned_loc, pruned_scale = self.prune_dimensions()
         pruned_loc = pruned_loc.detach().cpu().numpy()
         pruned_scale = pruned_scale.detach().cpu().numpy()
-        q_mu = self.q_mu().detach().cpu().cpu().numpy()
-        q_mu = q_mu[:, np.argsort(-np.linalg.norm(q_mu, axis=0, ord=1))]
         pruned_loc = pruned_loc[:, np.argsort(-np.linalg.norm(pruned_loc, axis=0, ord=1))]
         pruned_scale = pruned_scale[:, np.argsort(-np.linalg.norm(pruned_loc, axis=0, ord=1))]
-        params = dict(pruned_q_mu=pruned_loc, pruned_q_var=pruned_scale, q_mu=q_mu)
+        params = dict(pruned_q_mu=pruned_loc, pruned_q_var=pruned_scale)
         return params

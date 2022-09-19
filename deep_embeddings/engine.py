@@ -2,6 +2,7 @@
 import numpy as np
 import torch
 import os
+import glob
 import torch.nn.functional as F
 import deep_embeddings.utils as utils
 from dataclasses import dataclass, field
@@ -15,7 +16,7 @@ class TrainingParams:
     mc_samples: int = 5
     stability_time: int = 300
     prune_dim: bool = True
-    burnin: int = 100
+    load_model: bool = False
 
     best_train_loss: float = np.inf
     best_val_loss: float = np.inf
@@ -55,6 +56,7 @@ class MLTrainer:
         val_loader,
         logger,  # defines the log path!
         device="cpu",
+        load_model=False,
         n_epochs=100,
         mc_samples=5,
         lr=0.001,
@@ -68,7 +70,7 @@ class MLTrainer:
 
         self.logger = logger
         self.params = TrainingParams(
-            lr, gamma, n_epochs, mc_samples, stability_time, prune_dim
+            lr, gamma, n_epochs, mc_samples, stability_time, prune_dim, load_model
         )
         self.log_path = logger.log_path
 
@@ -80,9 +82,8 @@ class MLTrainer:
         self.model.to(self.device)
         self.prior.to(self.device)
 
-
     def parse_from_config(self, cfg):
-        attrs = ["n_epochs", "mc_samples", "lr", "gamma", "stability_time", "prune_dim"]
+        attrs = ["n_epochs", "mc_samples", "lr", "gamma", "stability_time", "prune_dim", "load_model"]
         for attr in attrs:
             if hasattr(cfg, attr):
                 setattr(self.params, attr, getattr(cfg, attr))
@@ -93,19 +94,25 @@ class MLTrainer:
     def update_training_params(self, **kwargs):
         self.params.update(**kwargs)
 
-    def init_model_from_checkpoint(self, checkpoint):
-        print("Load model and optimizer from state dict and continue training")
-        checkpoint = torch.load(checkpoint)
-        self.optim = self.optim.load_state_dict(checkpoint["optim_state_dict"])
+    def init_model_from_checkpoint(self):
+        print("Load model and optimizer from state dict to resume training")
+        
+        # Find file with .tar ending in directory
+        checkpoint_path = os.path.join(self.log_path, "checkpoints/*.tar")
+        checkpoint_path = glob.glob(checkpoint_path)[0]
+
+        checkpoint = torch.load(checkpoint_path)
+        self.optim.load_state_dict(checkpoint["optim_state_dict"])
         self.model.load_state_dict(checkpoint["model_state_dict"])
 
-        self.params = checkpoint["params"]
-        self.n_epochs = self.params.start_epoch + self.n_epochs
+        params = checkpoint["params"]
+        self.params = params 
+        self.params.n_epochs = checkpoint['epoch'] + self.params.n_epochs
+        self.params.start_epoch = checkpoint['epoch'] + 1
+        
         self.logger = checkpoint["logger"]  # only if exists!
 
-
     def step_triplet_batch(self, indices):
-
         # maybe do this somewhere else to improve speed
         indices = indices.type("torch.LongTensor")
         indices = indices.to(self.device)
@@ -145,7 +152,6 @@ class MLTrainer:
         # gaussian prior log probability of the prior distribution
         log_p = self.prior(embedding).log()
         
-
         return log_likelihood, log_q, log_p, triplet_accuracy
 
 
@@ -281,6 +287,9 @@ class MLTrainer:
         return False
 
     def train(self):
+        if self.params.load_model:
+            self.init_model_from_checkpoint()
+
         self.model.to(self.device)
         for epoch in range(self.params.start_epoch, self.params.n_epochs + 1):
 
@@ -306,19 +315,20 @@ class MLTrainer:
                 train_loader=self.train_loader,
                 val_loader=self.val_loader,
                 dim=self.params.smallest_dim,
+                params=self.params,
                 print_prepend="Epoch {}".format(epoch),
             )
 
             # TODO add final logging step before it ends!
-            if convergence:
-                print(f"Stopped training after {epoch} epochs. Model has converged!")
+            if convergence or (epoch == self.params.n_epochs + 1):
+                print(f"Stopped training after {epoch} epochs. Model has converged or max number of epochs have been reached!")
                 self.logger.log(**log_params)
                 self.store_final_embeddings(epoch)
                 break
 
             self.logger.log(**log_params)
 
-    def store_final_embeddings(self, epoch):
+    def store_final_embeddings(self):
         params = self.model.module.sorted_pruned_params()
         f_path = os.path.join(self.log_path, "final_pruned_params.npz")
 

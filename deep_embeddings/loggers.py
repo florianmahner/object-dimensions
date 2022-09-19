@@ -65,7 +65,7 @@ class DeepEmbeddingLogger:
         self.logger.add_logger(
             "checkpoint",
             CheckpointLogger(cfg.log_path),
-            callbacks=["model", "optim", "train_loader", "val_loader", "epoch", "logger"],
+            callbacks=["model", "optim", "epoch", "logger", "params"],
             update_interval=cfg.checkpoint_interval,
         )
         self.logger.add_logger(
@@ -186,7 +186,6 @@ class FileLogger(Logger):
 
 class CheckpointLogger(Logger):
     """Logs models and optimizer each checkpoint"""
-
     def __init__(self, log_path, ext=".tar"):
         self._log_path = os.path.join(log_path, "checkpoints")
         self.ext = ext
@@ -198,14 +197,25 @@ class CheckpointLogger(Logger):
 
     def log(self, *args, **kwargs):
         if kwargs.get("model"):
-            model = deepcopy(kwargs["model"].state_dict)
+            model_state_dict = deepcopy(kwargs["model"].state_dict())
         if kwargs.get("optim"):
-            optim = deepcopy(kwargs["optim"].state_dict)
+            optim_state_dict = deepcopy(kwargs["optim"].state_dict())
+    
         epoch = kwargs.get("epoch")
-        save_dict = {"model": model, "optim": optim}.update(kwargs)
+        kwargs['model_state_dict'] = model_state_dict
+        kwargs['optim_state_dict'] = optim_state_dict
+        del kwargs['model']
+        del kwargs['optim']
+        save_dict = kwargs
+
+        # Delete previous file with .tar ending in directory
+        for f in os.listdir(self.log_path):
+            if f.endswith(self.ext):
+                os.remove(os.path.join(self.log_path, f))
+
         torch.save(
             save_dict,
-            os.path.join(self.log_path, f"checkpoint_epoch_{epoch}{self.ext}"),
+            os.path.join(self.log_path, f"epoch_{epoch}{self.ext}"),
         )
 
 
@@ -246,6 +256,7 @@ class ParameterLogger(Logger):
                 np.savetxt(os.path.join(self.log_path, key + self.ext), val)
 
     def log(self, step=None, *args, **kwargs):
+
         param_dict = dict()
         for attr in self.attributes:
             # param = getattr(self.model, attr)

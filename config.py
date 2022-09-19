@@ -6,8 +6,8 @@ class Config:
 
 
     modality = "deep" 
-    model_name = 'model_epoch_9.tar'
-    load_model = False
+    load_model = True
+    fresh = False
 
     tensorboard = True
     
@@ -17,17 +17,17 @@ class Config:
 
     stability_time = 2000
 
-
-    triplet_path = "../THINGS/triplets_12_20mio/"
+    feature_path = '../THINGS/vgg_bn_features_12/features.npy'
+    triplet_path = '../THINGS/triplets_12_20mio/'
 
     val_split = .1
     rnd_seed= 42
     shuffle_dataset = True
 
-    batch_size = 8196
-    n_epochs = 5
+    batch_size = 4096
+    n_epochs = 1
 
-    params_interval = 200
-    checkpoint_interval = 1000 # we dont save the model in principle!
-    fresh=True
+    params_interval = 1
+    checkpoint_interval = 1  # we dont save the model in principle!
+    
 
