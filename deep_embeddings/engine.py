@@ -6,31 +6,6 @@ import torch.nn.functional as F
 import deep_embeddings.utils as utils
 from dataclasses import dataclass, field
 
-# TODO Make Relu activation fixed on X!!
-
-
-# NOTE How to approach triplets?!
-"""
-Triplets DataLoader -> Uses adaptive triplets
-Create pairs of indices ij, ik, jk -> Index all pairs in S -> Argmax is ground truth 
-=> Can I maybe precompute this, or have I already done this during the last triplet sampling that the last one is the ooo? 
-
-    -> This means that the forward batch method returns three dot products indexed for X output from model
-        ->  return ij, jk, ik similarities in X.
-        -> we have to compare this argmax to ground truth with CE loss.
-    -> Compare argmax to ground truth from S and CE error is then the loss => but how to do this?
-
-Update based on argmax only -> CE error?
-
-i.e. to calculate CE loss -> this does not work yet, needs to be one-hot?!
-x = torch.randn(3, 100) 
-y = torch.as_tensor([0,0,1]) # last one ooo.
-l = F.cross_entropy(x, y)
-
-=> Need to get all three sims and then compute the softmax!
-=> CE then just for the last one? or the first one ij (ie the argmax!)
-"""
-
 
 @dataclass
 class TrainingParams:
