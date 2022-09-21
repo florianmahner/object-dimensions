@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import torch
 import os
 import sys
@@ -13,12 +16,6 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 
 # TODO Have to still check with the step counter when logging per epoch vs per batch!
-# TODO Maybe the ML Logger can also have an update function where it stores parameters?
-# TODO I think my approach is so nice, as everybody can extent loggers as they wish by simply inheriting!
-# TODO Also need to find a way to relaod a logger from the experiment logging dir and to store certain parameter/values!
-# TODO Save the logger also at the checkpoint and then load this logger again!
-# TODO Maybe also add a ploting logger that e.g. plots train and validation loss over time by accessing its callbacks!
-
 
 class Logger(ABC):
     @property

@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-import numpy as np
+# -*- coding: utf-8 -*-
+
 import torch
 import os
 import glob
+
+import numpy as np
 import torch.nn.functional as F
 import deep_embeddings.utils as utils
+
 from dataclasses import dataclass, field
 
 
@@ -99,18 +103,22 @@ class MLTrainer:
         
         # Find file with .tar ending in directory
         checkpoint_path = os.path.join(self.log_path, "checkpoints/*.tar")
-        checkpoint_path = glob.glob(checkpoint_path)[0]
+        checkpoint_path = glob.glob(checkpoint_path)
 
-        checkpoint = torch.load(checkpoint_path)
-        self.optim.load_state_dict(checkpoint["optim_state_dict"])
-        self.model.load_state_dict(checkpoint["model_state_dict"])
+        if not checkpoint_path:
+            print("No checkpoint found in {}. Cannot resume training, start fresh instead".format(self.log_path))
+            
+        else:
+            checkpoint = torch.load(checkpoint_path[0])
+            self.optim.load_state_dict(checkpoint["optim_state_dict"])
+            self.model.load_state_dict(checkpoint["model_state_dict"])
 
-        params = checkpoint["params"]
-        self.params = params 
-        self.params.n_epochs = checkpoint['epoch'] + self.params.n_epochs
-        self.params.start_epoch = checkpoint['epoch'] + 1
-        
-        self.logger = checkpoint["logger"]  # only if exists!
+            params = checkpoint["params"]
+            self.params = params 
+            self.params.n_epochs = checkpoint['epoch'] + self.params.n_epochs
+            self.params.start_epoch = checkpoint['epoch'] + 1
+            
+            self.logger = checkpoint["logger"]  # only if exists!
 
     def step_triplet_batch(self, indices):
         # maybe do this somewhere else to improve speed
@@ -181,8 +189,8 @@ class MLTrainer:
                 log_likelihood /= beta
 
                 # NOTE short hack to adapt the complexity loss as a function of the batch size!
-                complexity_loss = ((batch_size) / n_pairwise) * (log_q.sum() - log_p.sum())
-                # complexity_loss = (1 / n_pairwise) * (log_q.sum() - log_p.sum())
+                # complexity_loss = ((batch_size//2) / n_pairwise) * (log_q.sum() - log_p.sum())
+                complexity_loss = (1 / n_pairwise) * (log_q.sum() - log_p.sum())
 
                 # balance the log likelihood and complexity loss by gamma
                 log_likelihood = self.params.gamma * log_likelihood

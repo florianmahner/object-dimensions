@@ -1,6 +1,10 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import torch
 import torch.nn as nn
 import numpy as np
+
 from deep_embeddings.pruning import DimensionPruning
 
                 

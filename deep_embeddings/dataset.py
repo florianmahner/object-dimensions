@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import torch
 
 class TripletDataset(torch.utils.data.Dataset):

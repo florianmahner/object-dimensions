@@ -1,9 +1,14 @@
-import numpy as np
-import scipy.stats
-from scipy.spatial.distance import pdist, squareform
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import torch
 import os
 import math
+import scipy.stats
+
+import numpy as np
+from scipy.spatial.distance import pdist, squareform
+
 
 # Determine the cosine similarity between two vectors in pytorch
 def cosine_similarity(embedding_i, embedding_j):
@@ -32,6 +37,12 @@ def load_sparse_codes(path):
     W = W[sorted_dims]
     return W, sorted_dims
 
+def fill_diag(rsm):
+    """ Fill main diagonal of the RSM with ones """
+    assert np.allclose(rsm, rsm.T), '\nRSM is required to be a symmetric matrix\n'
+    rsm[np.eye(len(rsm)) == 1.] = 1
+
+    return rsm
 
 def relu_correlation_matrix(F, a_min= -1., a_max= 1.):
     ''' Compute dissimilarity matrix based on correlation distance (on the matrix-level). '''
@@ -44,7 +55,6 @@ def relu_correlation_matrix(F, a_min= -1., a_max= 1.):
     corr_mat = (cov / denom).clip(min=a_min, max=a_max)
     
     return corr_mat
-
 
 def compute_rdm(X, method="correlation"):
     assert method in ["correlation", "euclidean"]

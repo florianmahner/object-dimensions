@@ -1,7 +1,11 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import torch
+
 import deep_embeddings.utils as utils
 import torch.nn as nn
-import torch.nn.functional as F
+
 
 class WeibullPrior(nn.Module):
     def __init__(self, lmbda=1., k=0.5):
