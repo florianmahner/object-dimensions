@@ -56,6 +56,7 @@ class Logger(ABC):
 
 
 class DeepEmbeddingLogger:
+    # TODO Make subscriptable, so that I can do logger['abc'] and logger['des']
     def __init__(self, model, cfg):
         self.log_path = cfg.log_path
         self.logger = DefaultLogger(cfg.log_path, cfg.fresh)

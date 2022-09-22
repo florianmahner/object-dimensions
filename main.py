@@ -1,8 +1,8 @@
-from deep_embeddings.model import VI
-from deep_embeddings.priors import SpikeSlabPrior, ExponentialPrior
-from deep_embeddings.dataset import TripletDataset
-from deep_embeddings.engine import MLTrainer
-from deep_embeddings.loggers import DeepEmbeddingLogger
+from deep_embeddings.core.model import VI
+from deep_embeddings.core.priors import SpikeSlabPrior, ExponentialPrior
+from deep_embeddings.core.dataset import TripletDataset
+from deep_embeddings.core.engine import MLTrainer
+from deep_embeddings.logging.loggers import DeepEmbeddingLogger
 from config import Config
 
 import torch

@@ -262,6 +262,7 @@ class MLTrainer:
                 print("take new batch size", self.batch_size)
                 dataset = self.train_loader.dataset
                 self.train_loader = torch.utils.data.DataLoader(dataset, self.batch_size, shuffle=True, num_workers=4)
+                train_loss = self.step_dataloader(self.train_loader)
 
             except RuntimeError:
                 # NOTE This except statement is way to large, e.g. I can fit a batch size of >8mio before this is triggered!
@@ -269,9 +270,10 @@ class MLTrainer:
                 print("Batch size too large!")
                 self.batch_size = self.batch_size // 2
                 self.train_loader = torch.utils.data.DataLoader(dataset, self.batch_size, shuffle=True, num_workers=4)
+                train_loss = self.step_dataloader(self.train_loader)
                 pass
 
-        train_loss = self.step_dataloader(self.train_loader)
+
         return train_loss
 
     @torch.no_grad()

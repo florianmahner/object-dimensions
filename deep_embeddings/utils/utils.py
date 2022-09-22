@@ -8,7 +8,11 @@ import scipy.stats
 
 import numpy as np
 from scipy.spatial.distance import pdist, squareform
+from thingsvision import Extractor
 
+def load_model(model_name, device):
+    model = Extractor(model_name, device=device, pretrained=True, source='torchvision')
+    return model
 
 # Determine the cosine similarity between two vectors in pytorch
 def cosine_similarity(embedding_i, embedding_j):
