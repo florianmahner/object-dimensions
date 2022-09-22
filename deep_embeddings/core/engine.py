@@ -86,6 +86,9 @@ class MLTrainer:
         self.model.to(self.device)
         self.prior.to(self.device)
 
+        # TODO Change this again at some point into another branch!
+        self.adapt = False
+
     def parse_from_config(self, cfg):
         attrs = ["n_epochs", "mc_samples", "lr", "gamma", "stability_time", "prune_dim", "load_model"]
         for attr in attrs:
@@ -266,7 +269,7 @@ class MLTrainer:
 
             except RuntimeError:
                 # NOTE This except statement is way to large, e.g. I can fit a batch size of >8mio before this is triggered!
-                self.adapt = False # we have reached the maximum batch size to fit into gpu memory!
+                # self.adapt = False # we have reached the maximum batch size to fit into gpu memory!
                 print("Batch size too large!")
                 self.batch_size = self.batch_size // 2
                 self.train_loader = torch.utils.data.DataLoader(dataset, self.batch_size, shuffle=True, num_workers=4)
