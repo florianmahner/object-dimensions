@@ -254,11 +254,29 @@ class MLTrainer:
 
     def train_one_epoch(self):
         self.model.train(True)
+
+        # NOTE We can make this more explict other than to do this every 10 epochs, e.g. go for a convergence criterion!
+        if self.epoch % 5 == 0 and self.adapt==True:
+            try:
+                self.batch_size = self.batch_size * 2 if self.batch_size < 40_000 else self.batch_size
+                print("take new batch size", self.batch_size)
+                dataset = self.train_loader.dataset
+                self.train_loader = torch.utils.data.DataLoader(dataset, self.batch_size, shuffle=True, num_workers=4)
+
+            except RuntimeError:
+                # NOTE This except statement is way to large, e.g. I can fit a batch size of >8mio before this is triggered!
+                self.adapt = False # we have reached the maximum batch size to fit into gpu memory!
+                print("Batch size too large!")
+                self.batch_size = self.batch_size // 2
+                self.train_loader = torch.utils.data.DataLoader(dataset, self.batch_size, shuffle=True, num_workers=4)
+                pass
+
         train_loss = self.step_dataloader(self.train_loader)
         return train_loss
 
     @torch.no_grad()
     def evaluate_one_epoch(self):
+        # NOTE we dont need to adapt the batch size
         self.model.eval()
         val_loss = self.step_dataloader(self.val_loader)
         return val_loss
@@ -299,7 +317,13 @@ class MLTrainer:
             self.init_model_from_checkpoint()
 
         self.model.to(self.device)
+
+        self.batch_size = self.train_loader.batch_size
+        self.adapt = True
+
         for epoch in range(self.params.start_epoch, self.params.n_epochs + 1):
+
+            self.epoch = epoch
 
             train_loss, train_acc = self.train_one_epoch()
             val_loss, val_acc = self.evaluate_one_epoch()
