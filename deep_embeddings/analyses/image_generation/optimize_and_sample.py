@@ -9,9 +9,10 @@ import os
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
 import torch.nn as nn 
+import matplotlib.gridspec as gridspec
 
 from pytorch_pretrained_biggan import BigGAN, truncated_noise_sample
-from model import LatentPredictor
+from latent_predictor import LatentPredictor
 from torch.utils.data import DataLoader
 
 class Config:
@@ -22,17 +23,19 @@ class Config:
     device = 'cuda:0'
 
     # training stuff
-    max_iter = 100 # number of optimizing iterationd
+    max_iter = 200 # number of optimizing iterationd
     lr = 0.001 # learning rate
     rnd_seed = 42
+
+    dim = 6 # specify a dim to do optimization for!
 
     latent_path = "./latent_samples"
 
     # sampling stuff
     n_samples = 100_000
-    batch_size = 64
+    batch_size = 32
     truncation = 0.4 # truncation values for noise sample
-    top_k = 10
+    top_k = 16
 
     sample_latents = False
 
@@ -123,6 +126,7 @@ class Sampler(object):
             plt.close()
 
 
+
 class Trainer(nn.Module):
     def __init__(self, lr, max_iter, dim, latent_size, in_path, truncation,
                 device, alpha=0.15, beta=2.):
@@ -165,10 +169,11 @@ class Trainer(nn.Module):
         for i in range(self.max_iter):
             optim.zero_grad()
             img = generator(latent, self.truncation) # Create an image
-            probas, codes = comparator(img) # Extract VGG features
+            _, codes = comparator(img) # Extract VGG features
             log_code = F.log_softmax(codes, dim=1).squeeze(0)[self.dim] # Get the value of that image within the dimension we want to optimize for
             
-            abs_loss = -self.alpha * codes.squeeze(0)[self.dim] # Increase absolute dimension value (if we don't add this loss term, abs dimension value won't increase)
+            # Increase absolute dimension value aka dimension size reward (if we don't add this loss term, abs dimension value won't increase)
+            abs_loss = -self.alpha * codes.squeeze(0)[self.dim] 
             nll = -self.beta * log_code #push probability mass in softmax towards dimension for which optimization is perfomed (argmax -> self.dim)
             loss = (abs_loss + nll)
             losses.append(loss.item())
@@ -206,18 +211,26 @@ class Trainer(nn.Module):
             torch.save(latent, os.path.join(out_path, f'optimized_latent_{k:02d}.pt'))
 
     def _save_images(self, images):
-        out_path = os.path.join(self.in_path, f'{self.dim:02d}', 'optimized_latents', 'images')
+        out_path = os.path.join(self.in_path, f'{self.dim:02d}', 'optimized_latents')
         if not os.path.exists(out_path):
             print(f'Creating directories...\n')
             os.makedirs(out_path)
+
+        fig = plt.figure(figsize=(4,4))
+        gs1 = gridspec.GridSpec(4,4)
+        gs1.update(wspace=0.002, hspace=0.002) # set the spacing between axes.
+
         for k, img in enumerate(images):
+            ax = plt.subplot(gs1[k])
             img = global_shift(img)
             img = img.permute(1, 2, 0).numpy()
-            plt.imshow(img)
-            plt.axis('off')
-            plt.savefig(os.path.join(out_path, f'image_{k:02d}.jpg'))
-            plt.clf()
-            plt.close()
+            ax.imshow(img)
+            ax.axis('off')
+
+        fname = os.path.join(out_path, f'dim_{self.dim}_optimized.png')
+        # fig.suptitle("Dimension: {}".format(self.dim))
+        fig.savefig(fname, dpi=150)
+        plt.close(fig)
 
 def global_shift(img:torch.Tensor):
     shifted_img = img.clone()
@@ -245,8 +258,7 @@ def optimize_latents(cfg):
     gan = BigGAN.from_pretrained('biggan-deep-256')
     generator = gan.generator
 
-    dim = 0 # NOTE we manually specify a dim that we want to optimize for and dont do it for all dims out of the box!
-    trainer = Trainer(lr=cfg.lr, max_iter=cfg.max_iter, dim=dim , latent_size=256, 
+    trainer = Trainer(lr=cfg.lr, max_iter=cfg.max_iter, dim=cfg.dim , latent_size=256, 
                       in_path=cfg.latent_path, truncation=cfg.truncation, device=device)
     
     trainer.optimize_latents(generator, predictor)
@@ -257,8 +269,6 @@ if __name__ == '__main__':
     np.random.seed(cfg.rnd_seed)
     random.seed(cfg.rnd_seed)
     torch.manual_seed(cfg.rnd_seed)
-
-    cfg.sample_latents = False
 
     # TODO dont make this an if else statement!
     if cfg.sample_latents:

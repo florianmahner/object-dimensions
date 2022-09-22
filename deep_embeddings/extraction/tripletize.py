@@ -142,7 +142,16 @@ class Sampler:
         random_sample = self.random_choice(self.n_samples, combs)
         return S, random_sample
 
-    def sample_similarity_judgements(self) -> Array:
+
+    def random_combination(self, iterable, r):
+        "Random selection from itertools.combinations(iterable, r)"
+        pool = tuple(iterable)
+        n = len(pool)
+        indices = sorted(random.sample(range(n), r))
+        return tuple(pool[i] for i in indices)
+        
+
+    def sample_adaptive_similarity_judgements(self) -> Array:
         """Create similarity judgements."""
         X = self.load_domain(self.in_path)
         M = X.shape[0]
@@ -165,7 +174,7 @@ class Sampler:
             triplet = np.random.choice(range(M), 3, replace=False, p=p_per_item)
 
             # Using this we can avoid duplicate triplets when adding to the set
-            triplet.sort() 
+            triplet.sort()  
             triplet = tuple(triplet)
 
             # Add to set and increase count if triplet is still unique
@@ -194,6 +203,38 @@ class Sampler:
 
         return triplets
 
+
+    def sample_similarity_judgements(self) -> Array:
+        """Create similarity judgements."""
+        X = self.load_domain(self.in_path)
+        M = X.shape[0]
+
+        # This is a matrix of N x N (i.e. image_features x image_features). 
+        # i.e. The dot product between the corresponding network representations
+        S = X @ X.T 
+        
+        unique_triplets = set()
+        items = list(range(M))
+        n_iter = 0
+        n_tri = len(unique_triplets)
+        while n_tri < self.n_samples:
+            n_iter += 1
+        
+            print(f'{n_iter} samples drawn, {n_tri}/{self.n_samples} added', end='\r')
+            sample = self.random_combination(items, 3)
+            unique_triplets.add(sample)
+
+            n_tri = len(unique_triplets)
+
+        triplets = np.zeros((self.n_samples, self.k), dtype=int)
+        for i, triplet in enumerate(unique_triplets):
+            print(f'Process {i}/{self.n_samples} triplets', end='\r')
+            choice = self.get_choice(S, triplet)
+            triplets[i] = choice # probably returns a list of indices of shape k where for that image the odd one out is
+
+        return triplets
+
+
     def create_train_test_split(
         self, similarity_judgements: Array
     ) -> Tuple[Array, Array]:
@@ -217,10 +258,10 @@ if __name__ == "__main__":
     # parse arguments
     args = parseargs()
 
-    args.in_path = '/home/florian/THINGS/vgg_bn_features12/features.npy'
-    args.out_path = '/home/florian/THINGS/triplets12_bn'
+    args.in_path = '/home/florian/THINGS/vgg_bn_features_12/features.npy'
+    args.out_path = '/home/florian/THINGS/triplets_12_20mio'
     args.k = 3
-    args.n_samples = int(5e7)
+    args.n_samples = int(2e7)
     
 
     tripletizer = Sampler(

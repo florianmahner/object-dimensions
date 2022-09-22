@@ -9,11 +9,11 @@ behavior = False
 
 if behavior:
     base_path = "../visualization/reference_images"
-    out_path = "/home/florian/THINGS/vgg_bn_features_behavior"
+    out_path = "../..//THINGS/vgg_bn_features_behavior"
 
 else:
     n_samples_per_class = 12
-    base_path = '/home/florian/THINGS/{}'
+    base_path = '../../THINGS/{}'
     root = base_path.format(f'image_data/images{n_samples_per_class}')
     out_path = base_path.format(f'vgg_bn_features_{n_samples_per_class}')
 

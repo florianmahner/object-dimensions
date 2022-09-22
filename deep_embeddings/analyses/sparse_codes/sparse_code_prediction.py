@@ -59,6 +59,7 @@ def kfold_cv(X:np.ndarray, y:np.ndarray, lmbda:float, rnd_seed:int, k_folds:int)
     for k, (train_idx, test_idx) in enumerate(kf.split(X)):
         X_train, X_test = X[train_idx], X[test_idx]
         y_train, y_test = y[train_idx], y[test_idx]
+        print(X_train.shape, y_train.shape)
         reg_model.fit(X_train, y_train)
         y_pred = reg_model.predict(X_test)
         r2_scores[k] = r2_score(y_test, y_pred)
@@ -98,11 +99,13 @@ def run(dnn_path:str, spose_path:str, k_folds:int, rnd_seed:int) -> None:
     X = np.maximum(X, 0)
     Y = np.maximum(Y, 0)
 
-    print(f'\nShape of SPoSE embedding matrix: {Y.shape}')
+    Y = Y[:,1].reshape(-1,1)
+
+    print(f'\nShape of embedding matrix: {Y.shape}')
     print(f'Shape of DNN feature matrix: {X.shape}\n')
 
 
-    assert X.shape[0] == Y.shape[0], '\nNumber of objects in SPoSE embedding and DNN feature matrix must be the same.\n'
+    assert X.shape[0] == Y.shape[0], '\nNumber of objects in embedding and DNN feature matrix must be the same.\n'
 
     # results_path = os.path.join(spose_path, 'sparse_code_predictions')
     results_path = './sparse_code_predictions'
@@ -110,7 +113,7 @@ def run(dnn_path:str, spose_path:str, k_folds:int, rnd_seed:int) -> None:
         print('\n...Creating directories.\n')
         os.makedirs(results_path)
 
-    r2_scores = prediction(X=X, Y=Y, lambdas=np.arange(0, 1.2, 1.2), results_path=results_path, rnd_seed=rnd_seed, k_folds=k_folds)
+    r2_scores = prediction(X=X, Y=Y, lambdas=np.arange(0, 1.2, 0.2), results_path=results_path, rnd_seed=rnd_seed, k_folds=k_folds)
 
     print(r2_scores)
 
@@ -128,7 +131,12 @@ if __name__ == "__main__":
     # NOTE k_folds = 5
     # NOTE rnd_seed = 42
     
-    args.dnn_path = '/home/florian/THINGS/vgg_bn_features_behavior/features.npy'
+    
+    args.dnn_path = '/home/florian/THINGS/vgg_bn_features_12/features.npy'
+    args.embedding_path = '/home/florian/DeepEmbeddings/learned_embeddings/weights_vgg_12_8196bs_adaptive/params/pruned_q_mu_epoch_200.txt'
+
+
+    # args.dnn_path = '/home/florian/THINGS/vgg_bn_features_behavior/features.npy'
     # args.embedding_path = "../learned_embeddings/weights_things_behavior_8196bs_adaptive_half/params/pruned_q_mu_epoch_5000.txt"
     args.k_folds = 5
     args.rnd_seed = 42
