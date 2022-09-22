@@ -11,11 +11,7 @@ import os
 
 
 def build_triplet_dataset(triplet_path, device):
-    # train = np.loadtxt(os.path.join(triplet_path, "train_90.txt"))
-    # train = np.loadtxt(os.path.join(triplet_path, "test_10.txt"))
-    # test = np.loadtxt(os.path.join(triplet_path, "test_10.txt"))
-
-    train = np.load(os.path.join(triplet_path, "test_10.npy"))
+    train = np.load(os.path.join(triplet_path, "train_90.npy"))
     test = np.load(os.path.join(triplet_path, "test_10.npy"))
 
     # maybe need to do train/val split here beforehand and test=test?
@@ -37,11 +33,11 @@ def train(cfg):
         n_objects = 1854
 
     model = VI(n_objects, cfg.init_dim)
-    device = torch.device('cuda:1') if torch.cuda.is_available() else torch.device("cpu")
+    device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device("cpu")
 
     if torch.cuda.device_count() > 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
-        model = torch.nn.DataParallel(model, device_ids=[1,2,0])
+        model = torch.nn.DataParallel(model, device_ids=[0,1,2])
     
     else:
         model = torch.nn.DataParallel(model, device_ids=[0])
@@ -58,8 +54,8 @@ def train(cfg):
     train_dataset, val_dataset = build_triplet_dataset(cfg.triplet_path, device)
 
     # If all data on GPU, num workers need to be 0 and pin memory false
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=cfg.batch_size, shuffle=True, num_workers=12, pin_memory=True)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=cfg.batch_size, shuffle=False, num_workers=12, pin_memory=True)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=cfg.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=cfg.batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     # Build loggers and 
     logger = DeepEmbeddingLogger(model, cfg)
