@@ -254,6 +254,9 @@ class ParameterLogger(Logger):
                 np.savetxt(os.path.join(self.log_path, key + self.ext), val)
 
     def log(self, step=None, *args, **kwargs):
+        # At checkpoints we want to take the most recent model that is also passed on the log function
+        if kwargs.get("model"):
+            self.model = kwargs["model"]
 
         param_dict = dict()
         for attr in self.attributes:
@@ -320,3 +323,15 @@ class TensorboardLogger(Logger):
         # NOTE Need to include args here too, even though that seems weird. Required by abstract method!
         self.update(step, **kwargs)
         self.flush()
+
+
+class DimensionLogger(Logger):
+    # TODO Implement this class that plots the topk dimensions each k iterations / epochs to visualize the emebdding!
+
+    def __init__(self, log_path):
+        self.log_path = os.path.join(log_path, "dimensions")
+        self._make_dir()
+        
+    def log(*args, **kwargs):
+        from deep_embeddings.analyses.visualization import plot_dimensions
+        pass
