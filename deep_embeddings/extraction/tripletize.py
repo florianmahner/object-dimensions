@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import argparse
-from email.policy import default
 import os
 import h5py
 import random
@@ -35,6 +34,8 @@ def parseargs():
         help='similarity function')
     aa("--rnd_seed", type=int, default=42, 
         help="random seed")
+    aa("--adaptive", type=bool, default=False, 
+        help="if adaptive sampling or not")
     args = parser.parse_args()
     return args
 
@@ -81,7 +82,13 @@ class Sampler:
         else:
             raise Exception("\nInput data does not seem to be in the right format\n")
         X = self.remove_nans_(X)
+        X = self.remove_negatives_(X) # positivity constraint also on vgg features!
+
         return X
+
+    @staticmethod
+    def remove_negatives_(X):
+        return np.maximum(0, X)
 
     @staticmethod
     def remove_nans_(X: Array) -> Array:
@@ -219,7 +226,6 @@ class Sampler:
         n_tri = len(unique_triplets)
         while n_tri < self.n_samples:
             n_iter += 1
-        
             print(f'{n_iter} samples drawn, {n_tri}/{self.n_samples} added', end='\r')
             sample = self.random_combination(items, 3)
             unique_triplets.add(sample)
@@ -258,11 +264,13 @@ if __name__ == "__main__":
     # parse arguments
     args = parseargs()
 
-    args.in_path = '/home/florian/THINGS/vgg_bn_features_12/features.npy'
-    args.out_path = '/home/florian/THINGS/triplets_12_20mio'
+    args.in_path = '/LOCAL/fmahner/THINGS/vgg_bn_features_12/features.npy'
+    args.out_path = '/LOCAL/fmahner/THINGS/triplets_12_20mio_pos'
     args.k = 3
     args.n_samples = int(2e7)
-    
+    args.rnd_seed = 42
+    args.adaptive = False
+
 
     tripletizer = Sampler(
         in_path=args.in_path,
@@ -272,7 +280,11 @@ if __name__ == "__main__":
         rnd_seed=args.rnd_seed,
     )
     if args.k == 3:
-        similarity_judgements = tripletizer.sample_similarity_judgements()
+        if args.adaptive:
+            similarity_judgements = tripletizer.sample_adaptive_similarity_judgements()
+        else:
+            similarity_judgements = tripletizer.sample_similarity_judgements()
+
         tripletizer.save_similarity_judgements(similarity_judgements)
     else:
         assert isinstance(args.similarity, str), '\nSpecify similarity function.\n'
