@@ -3,7 +3,7 @@
 
 import torch
 
-import deep_embeddings.utils as utils
+from deep_embeddings.utils import utils
 import torch.nn as nn
 
 
@@ -38,8 +38,8 @@ class ExponentialPrior(nn.Module):
 
     def forward(self, X):
         # NOTE temporarily remove the - sign from the exponent! -> this then somewhat works????
-        # proba =  self.lmbda * torch.exp(self.lmbda * X)
-        proba =  self.lmbda * torch.exp(-self.lmbda * X)
+        proba =  self.lmbda * torch.exp(self.lmbda * X)
+        # proba =  self.lmbda * torch.exp(-self.lmbda * X)
 
         return proba
 

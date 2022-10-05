@@ -7,7 +7,7 @@ import glob
 
 import numpy as np
 import torch.nn.functional as F
-import deep_embeddings.utils as utils
+from deep_embeddings.utils import utils 
 
 from dataclasses import dataclass, field
 
@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 @dataclass
 class TrainingParams:
     lr: float = 0.001
-    gamma: float = 0.5  # balances complexity and reconstruction loss
+    gamma: float = 0.2  # balances complexity and reconstruction loss
     n_epochs: int = 100
     mc_samples: int = 5
     stability_time: int = 300
@@ -115,7 +115,6 @@ class MLTrainer:
             checkpoint = torch.load(checkpoint_path[0])
             self.optim.load_state_dict(checkpoint["optim_state_dict"])
             self.model.load_state_dict(checkpoint["model_state_dict"])
-
             params = checkpoint["params"]
             self.params = params 
             self.params.n_epochs = checkpoint['epoch'] + self.params.n_epochs
@@ -259,12 +258,14 @@ class MLTrainer:
         self.model.train(True)
 
         # NOTE We can make this more explict other than to do this every 10 epochs, e.g. go for a convergence criterion!
-        if self.epoch % 5 == 0 and self.adapt==True:
+        if self.epoch % 10 == 0 and self.adapt==True:
             try:
-                self.batch_size = self.batch_size * 2 if self.batch_size < 40_000 else self.batch_size
+                self.batch_size = self.batch_size * 2 if self.batch_size < 10_000 else self.batch_size
                 print("take new batch size", self.batch_size)
-                dataset = self.train_loader.dataset
-                self.train_loader = torch.utils.data.DataLoader(dataset, self.batch_size, shuffle=True, num_workers=4)
+                train_dataset = self.train_loader.dataset
+                val_dataset = self.val_loader.dataset
+                self.train_loader = torch.utils.data.DataLoader(train_dataset, self.batch_size, shuffle=True, num_workers=4)
+                self.val_loader = torch.utils.data.DataLoader(val_dataset, self.batch_size, shuffle=False, num_workers=4)
                 train_loss = self.step_dataloader(self.train_loader)
 
             except RuntimeError:
@@ -272,10 +273,15 @@ class MLTrainer:
                 # self.adapt = False # we have reached the maximum batch size to fit into gpu memory!
                 print("Batch size too large!")
                 self.batch_size = self.batch_size // 2
-                self.train_loader = torch.utils.data.DataLoader(dataset, self.batch_size, shuffle=True, num_workers=4)
+                train_dataset = self.train_loader.dataset
+                val_dataset = self.val_loader.dataset
+                self.train_loader = torch.utils.data.DataLoader(train_dataset, self.batch_size, shuffle=True, num_workers=4)
+                self.val_loader = torch.utils.data.DataLoader(val_dataset, self.batch_size, shuffle=False, num_workers=4)
                 train_loss = self.step_dataloader(self.train_loader)
                 pass
 
+        else:
+            train_loss = self.step_dataloader(self.train_loader)
 
         return train_loss
 
@@ -322,9 +328,7 @@ class MLTrainer:
             self.init_model_from_checkpoint()
 
         self.model.to(self.device)
-
         self.batch_size = self.train_loader.batch_size
-        self.adapt = True
 
         for epoch in range(self.params.start_epoch, self.params.n_epochs + 1):
 

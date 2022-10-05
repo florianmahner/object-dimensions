@@ -94,6 +94,8 @@ class VI(nn.Module):
         _, pruned_loc, pruned_scale = self.prune_dimensions()
         pruned_loc = pruned_loc.detach().cpu().numpy()
         pruned_scale = pruned_scale.detach().cpu().numpy()
+        pruned_loc = np.maximum(0, pruned_loc) # we really zero out all negative values in the embedding!
+        pruned_scale = np.maximum(0, pruned_scale)
         pruned_loc = pruned_loc[:, np.argsort(-np.linalg.norm(pruned_loc, axis=0, ord=1))]
         pruned_scale = pruned_scale[:, np.argsort(-np.linalg.norm(pruned_loc, axis=0, ord=1))]
         params = dict(pruned_q_mu=pruned_loc, pruned_q_var=pruned_scale)
