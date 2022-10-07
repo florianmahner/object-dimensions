@@ -1,14 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+""" This script generate GPT3 features for all images from the THINGS image dataset where behavioral data
+has been colleted! For each of these images GPT3 features have been collected. This script correlates 
+these features with the learned embedding and find the descriptions that best describe each dimension """
+
 import os
 import pickle
+import argparse
 
 import pandas as pd
 import numpy as np
 from collections import defaultdict
 
 from deep_embeddings.utils.utils import load_sparse_codes
+
+parser = argparse.ArgumentParser(description='Label dimensions of sparse codes using GPT3')
+parser.add_argument('--embedding_path', default='./embedding.txt', type=str, help='Path to the embedding txt file')
+parser.add_argument('--vgg_path', default='./vgg_features', type=str, help='Path to all vgg features')
 
 
 def remove_rare_features(features, descriptions, freq):
@@ -44,30 +53,43 @@ def label_dimensions(dimensions, features, descriptions, top_k):
 def save_dim_labels_(out_path, dim_labels):
     if not os.path.exists(out_path):
         os.makedirs(out_path)
-    with open(os.path.join(out_path, 'dimensions_labelled.txt'), 'wb') as f:
-        f.write(pickle.dumps(dim_labels))
+
+    # Write dict to pickle file
+    with open(os.path.join(out_path, 'dimensions_labelled.pkl'), 'wb') as f:
+        pickle.dump(dim_labels, f)
+
     dim_labelled = pd.DataFrame.from_dict(dict(dim_labels))
     dim_labelled.to_csv(os.path.join(out_path, 'dimensions_labelled.csv'), sep=',', index=False)
 
-# load feature norm matrix
-feature_norms = pd.read_csv('./feature_object_matrix.csv')
-feature_norms.rename(columns={ feature_norms.columns[0]: "features" }, inplace = True)
-descriptions = feature_norms['features'].to_numpy()
-feature_norms = feature_norms.drop(columns=['features'])
 
-item_names = pd.read_csv('./item_names.tsv', sep='\t', encoding='utf-8')
+if __name__ == '__main__':
+    args = parser.parse_args()
 
-path_dnn = '/LOCAL/fmahner/DeepEmbeddings/learned_embeddings/weights_vgg_12_512bs/params/pruned_q_mu_epoch_500.txt'
-act_path = '/LOCAL/fmahner/THINGS/vgg_bn_features_12'
+    args.embedding_path = '/LOCAL/fmahner/DeepEmbeddings/learned_embeddings/weights_vgg_12_512bs/params/pruned_q_mu_epoch_500.txt'
+    args.vgg_path = '/LOCAL/fmahner/THINGS/vgg_bn_features_12'
 
-w_dnn = load_sparse_codes(path_dnn, with_dim=False)
-filenames = np.loadtxt(os.path.join(act_path, 'file_names.txt'), dtype=str)
+    # load feature norm matrix
+    feature_norms = pd.read_csv('./feature_object_matrix.csv')
+    feature_norms.rename(columns={ feature_norms.columns[0]: "features" }, inplace = True)
+    descriptions = feature_norms['features'].to_numpy()
+    feature_norms = feature_norms.drop(columns=['features'])
 
-ref_indices = np.array([i for i, f in enumerate(filenames) if "b.jpg" in f])
+    item_names = pd.read_csv('./item_names.tsv', sep='\t', encoding='utf-8')
 
-w_dnn = w_dnn[ref_indices, :]
+    w_dnn = load_sparse_codes(args.embedding_path, with_dim=False)
+    file_path = os.path.join(args.vgg_path, 'file_names.txt')
 
-feature_norms, descriptions = remove_rare_features(feature_norms,  descriptions, 30)
-dim_labels = label_dimensions(w_dnn, feature_norms, descriptions, 15)
-save_dim_labels_('./gpt3_labels', dim_labels)
+    if not os.path.isfile(file_path):
+        raise ValueError('VGG path does not contain file_names.txt')
+
+    else:
+        filenames = np.loadtxt(file_path, dtype=str)
+    
+    # Find reference images, i.e. indices from behavior!
+    behavior_indices = np.array([i for i, f in enumerate(filenames) if "b.jpg" in f])
+    w_dnn = w_dnn[behavior_indices, :]
+
+    feature_norms, descriptions = remove_rare_features(feature_norms,  descriptions, 30)
+    dim_labels = label_dimensions(w_dnn, feature_norms, descriptions, 15)
+    save_dim_labels_('./gpt3_labels', dim_labels)
 
