@@ -21,9 +21,13 @@ def cosine_similarity(embedding_i, embedding_j):
     else:
         return np.dot(embedding_i, embedding_j) / (np.linalg.norm(embedding_j) * np.linalg.norm(embedding_j))
 
+    
 def compute_positive_rsm(F):
     rsm = relu_correlation_matrix(F)
     return 1 - rsm
+
+def relu_embedding(W):
+    return np.maximum(0, W)
 
 def remove_zeros(W, eps=.1):
     w_max = np.max(W, axis=1)
@@ -32,14 +36,26 @@ def remove_zeros(W, eps=.1):
 
 def get_weights(path):
     W = np.loadtxt(os.path.join(path))
-    return remove_zeros(W)
+    W = relu_embedding(W)
+    W = remove_zeros(W)
+    return W
 
-def load_sparse_codes(path):
+def load_sparse_codes(path, with_dim=False):
+    ''' TODO Maybe return transpose depending on the size of the dims?'''
+    
     W = get_weights(path)
-    l1_norms = np.linalg.norm(W, ord=1, axis=1)
-    sorted_dims = np.argsort(l1_norms)[::-1]
-    W = W[sorted_dims]
-    return W, sorted_dims
+    sorted_dims = np.argsort(-np.linalg.norm(W, axis=0, ord=1))
+    W = W[:, sorted_dims]
+
+    d1, d2 = W.shape
+    # We transpose so that the matrix is always of shape (n_images, n_dims)
+    if d1 < d2:
+        W = W.T
+
+    if with_dim:
+        return W, sorted_dims
+    else:
+        return W
 
 def fill_diag(rsm):
     """ Fill main diagonal of the RSM with ones """
