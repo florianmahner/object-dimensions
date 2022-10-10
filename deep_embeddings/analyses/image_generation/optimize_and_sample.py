@@ -1,43 +1,69 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import argparse
 import random
 import torch
-import numpy as np
 import os
 
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
 import torch.nn as nn 
+import numpy as np
 import matplotlib.gridspec as gridspec
 
 from pytorch_pretrained_biggan import BigGAN, truncated_noise_sample
 from latent_predictor import LatentPredictor
 from torch.utils.data import DataLoader
 
-class Config:
-    model_name = 'vgg16_bn'
-    module_name = 'classifier.3'
-    regression_path = "../sparse_codes/sparse_code_predictions"
+parser = argparse.ArgumentParser()
+parser.add_argument("--model_name", type=str, default="vgg16_bn", help="Model to load from THINGSvision")
+parser.add_argument("--module_name", type=str, default="classifier.3", help="Layer of the model to load from THINGSvision")
+parser.add_argument("--regression_path", type=str, default="../sparse_codes/sparse_code_predictions", help="Path to the latent predictor")
+parser.add_argument("--latent_path", type=str, default="./latent_samples", help="Path to the latent samples")
+parser.add_argument("--n_samples", type=int, default=2_000_000, help="Number of latent samples to generate")
+parser.add_argument("--window_size", type=int, default=50, help="Window size of trainer to check convergence of latent dimenisonality")
+parser.add_argument("--batch_size", type=int, default=8, help="Batch size for sampling")
+parser.add_argument("--truncation", type=float, default=0.4, help="Truncation value for noise sample")
+parser.add_argument("--top_k", type=int, default=16, help="Top k values to sample from")
+parser.add_argument("--sample_latents", action="store_true", help="Sample latents")
+parser.add_argument("--max_iter", type=int, default=200, help="Number of optimizing iterations")
+parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
+parser.add_argument("--rnd_seed", type=int, default=42, help="Random seed")
+parser.add_argument("--dim", type=int, default=1, help="Dimension to optimize for")
+parser.add_argument("--alpha", type=float, default=1.0, help="Weight of the absolute value in a dimension to optimize for")
+parser.add_argument("--beta", type=float, default=1.0, help="Weight for the softmax loss in the dimension optimization")
+parser.add_argument("--device", type=str, default="cuda:0", help="Device to use")
 
-    device = 'cuda:0'
+def global_shift(img:torch.Tensor):
+    shifted_img = img.clone()
+    shifted_img -= img.min()
+    shifted_img /= shifted_img.max()
+    return shifted_img
 
-    # training stuff
-    max_iter = 200 # number of optimizing iterationd
-    lr = 0.001 # learning rate
-    rnd_seed = 42
+def sample_latents(model_name, module_name, regression_path, n_samples, batch_size, truncation, top_k, latent_path, device):
+    device = torch.device(device)
+    predictor = LatentPredictor(model_name, module_name, device, regression_path)
 
-    dim = 6 # specify a dim to do optimization for!
+    gan = BigGAN.from_pretrained('biggan-deep-256')
+    generator = gan.generator
 
-    latent_path = "./latent_samples"
+    sampler = Sampler(n_samples=n_samples, n_dims=predictor.embedding_dim, batch_size=batch_size, truncation=truncation, 
+                      top_k=top_k, out_path=latent_path, device=device)
+    sampler.sample(generator, predictor)
 
-    # sampling stuff
-    n_samples = 100_000
-    batch_size = 32
-    truncation = 0.4 # truncation values for noise sample
-    top_k = 16
+def optimize_latents(model_name, module_name, regression_path, latent_path, dim, lr, max_iter, truncation, alpha, beta, window_size, device):
+    device = torch.device(device)
+    predictor = LatentPredictor(model_name, module_name, device, regression_path)
 
-    sample_latents = False
+    gan = BigGAN.from_pretrained('biggan-deep-256')
+    generator = gan.generator
+
+    trainer = Optimizer(lr=lr, max_iter=max_iter, dim=dim , latent_size=256, 
+                        in_path=latent_path, truncation=truncation, device=device, 
+                        alpha=alpha, beta=beta, window_size=window_size)
+    
+    trainer.optimize_latents(generator, predictor)
 
 
 class Sampler(object):
@@ -65,24 +91,23 @@ class Sampler(object):
         dim_vector = torch.from_numpy(dim_vector)
 
         sampled_latents = torch.cat((noise_vector, dim_vector), dim=1)
-        dl = DataLoader(sampled_latents, batch_size=self.batch_size)
+        dataloader = DataLoader(sampled_latents, batch_size=self.batch_size)
 
         generator.to(self.device)
         comparator.to(self.device)
 
         if torch.cuda.device_count() > 1:
             print("Let's use", torch.cuda.device_count(), "GPUs!")
-            generator = torch.nn.DataParallel(generator, device_ids=[1,0,2])
-            comparator = torch.nn.DataParallel(comparator, device_ids=[1,0,2])
+            generator = torch.nn.DataParallel(generator, device_ids=[0,1,2])
+            comparator = torch.nn.DataParallel(comparator, device_ids=[0,1,2])
 
         generator.eval()
         comparator.eval()
 
         sampled_codes = torch.zeros(self.n_samples, self.n_dims).to(self.device)
-        sampled_latents = sampled_latents.to(self.device)
-        n_iter = len(dl)
+        n_iter = len(dataloader)
         with torch.no_grad():
-            for i, batch in enumerate(dl):
+            for i, batch in enumerate(dataloader):
                 batch = batch.to(self.device) # shape (batch_size, 256)
                 images = generator(batch, self.truncation)
                 _, codes = comparator(images)
@@ -103,9 +128,11 @@ class Sampler(object):
             os.makedirs(out_path)
 
         for k, latent in enumerate(topk_latents):
+            latent = latent.cpu().numpy()
             torch.save(latent, os.path.join(out_path, f'sampled_latent_{k:02d}.pt'))
 
         with torch.no_grad():    
+            topk_latents = topk_latents.to(self.device)
             images = generator(topk_latents, self.truncation)
                 
         self._save_images(images, out_path)
@@ -117,6 +144,7 @@ class Sampler(object):
         
         images = images.cpu()
         for k, img in enumerate(images):
+
             img = global_shift(img)
             img = img.permute(1, 2, 0).numpy()
             plt.imshow(img)
@@ -125,11 +153,9 @@ class Sampler(object):
             plt.clf()
             plt.close()
 
-
-
-class Trainer(nn.Module):
+class Optimizer(nn.Module):
     def __init__(self, lr, max_iter, dim, latent_size, in_path, truncation,
-                device, alpha=0.15, beta=2.):
+                device, alpha=0.15, beta=2., window_size=50):
         super().__init__()
         self.lr = lr
         self.min_iter = 200
@@ -141,10 +167,9 @@ class Trainer(nn.Module):
         self.device = device
         self.alpha = alpha
         self.beta = beta
-        self.window_size = 50
+        self.window_size = window_size
         self.threshold = 2e-4
         
-
     def optimize_latents(self, generator, comparator):
         sampled_latents = self._load_latents()
         optimized_latents = torch.zeros(len(sampled_latents), self.latent_size)
@@ -162,8 +187,11 @@ class Trainer(nn.Module):
         self._save_images(optimized_images)
 
     def train(self, sampled_latent, generator, comparator):
-        latent = nn.Parameter(sampled_latent, requires_grad=True).to(self.device)
+        sampled_latent = torch.from_numpy(sampled_latent)
+        latent = nn.Parameter(sampled_latent, requires_grad=True)
         optim = torch.optim.Adam([latent], lr=self.lr)
+        latent = latent.to(self.device)
+
         # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, 'min', verbose=True)
         losses = []
         for i in range(self.max_iter):
@@ -173,6 +201,7 @@ class Trainer(nn.Module):
             log_code = F.log_softmax(codes, dim=1).squeeze(0)[self.dim] # Get the value of that image within the dimension we want to optimize for
             
             # Increase absolute dimension value aka dimension size reward (if we don't add this loss term, abs dimension value won't increase)
+            # TODO Alpha and Beta are hyperparameters  -> How and why do we set them like this?
             abs_loss = -self.alpha * codes.squeeze(0)[self.dim] 
             nll = -self.beta * log_code #push probability mass in softmax towards dimension for which optimization is perfomed (argmax -> self.dim)
             loss = (abs_loss + nll)
@@ -232,47 +261,22 @@ class Trainer(nn.Module):
         fig.savefig(fname, dpi=150)
         plt.close(fig)
 
-def global_shift(img:torch.Tensor):
-    shifted_img = img.clone()
-    shifted_img -= img.min()
-    shifted_img /= shifted_img.max()
-    return shifted_img
-
-
-def sample_latents(cfg):
-    device = torch.device(cfg.device)
-    predictor = LatentPredictor(cfg.model_name, cfg.module_name, device, cfg.regression_path)
-
-    gan = BigGAN.from_pretrained('biggan-deep-256')
-    generator = gan.generator
-
-    sampler = Sampler(n_samples=cfg.n_samples, n_dims=predictor.embedding_dim, batch_size=cfg.batch_size, truncation=cfg.truncation, 
-                      top_k=cfg.top_k, out_path=cfg.latent_path, device=device)
-    sampler.sample(generator, predictor)
-
-
-def optimize_latents(cfg):
-    device = torch.device(cfg.device)
-    predictor = LatentPredictor(cfg.model_name, cfg.module_name, device, cfg.regression_path)
-
-    gan = BigGAN.from_pretrained('biggan-deep-256')
-    generator = gan.generator
-
-    trainer = Trainer(lr=cfg.lr, max_iter=cfg.max_iter, dim=cfg.dim , latent_size=256, 
-                      in_path=cfg.latent_path, truncation=cfg.truncation, device=device)
-    
-    trainer.optimize_latents(generator, predictor)
 
 if __name__ == '__main__':
-    cfg = Config()
+    args = parser.parse_args()
 
-    np.random.seed(cfg.rnd_seed)
-    random.seed(cfg.rnd_seed)
-    torch.manual_seed(cfg.rnd_seed)
+    np.random.seed(args.rnd_seed)
+    random.seed(args.rnd_seed)
+    torch.manual_seed(args.rnd_seed)
 
-    # TODO dont make this an if else statement!
-    if cfg.sample_latents:
-        sample_latents(cfg)
+    # We can either sample latents again or optimize previously stored ones
+    if args.sample_latents:
+        print("Sampling latents...\n")
+        sample_latents(args.model_name, args.module_name, 
+                       args.regression_path, args.n_samples, 
+                       args.batch_size, args.tuncation, args.top_k, args.latent_path, args.device)
 
-    else:
-        optimize_latents(cfg)
+    for dim in args.dim:
+        print("Optimizing dimension: {}".format(dim))
+        optimize_latents(args.model_name, args.module_name, args.regression_path, args.latent_path, dim, args.lr,
+                        args.max_iter, args.truncation, args.alpha, args.beta, args.window_size, args.device)
