@@ -18,6 +18,7 @@ class LatentPredictor(nn.Module):
         super().__init__()
         extractor = Extractor(model_name=model_name, pretrained=True, device=device, source='torchvision')
         model = extractor.model
+        model = model.eval()
         self.feature_extractor = model.features
         self.classifier = model.classifier
         self.classifier_trunc = model.classifier[:int(module_name[-1])+1] # we only compute up to the classifying layer that we want to use 
@@ -68,3 +69,27 @@ class LatentPredictor(nn.Module):
         latent_codes = F.relu(latent_codes)
         
         return probas, latent_codes
+
+    @torch.no_grad()
+    def predict_codes_from_features(self, features):
+        latent_codes = self.regression(features)
+        latent_codes = F.relu(latent_codes)
+        
+        return latent_codes.squeeze()
+
+    @torch.no_grad()
+    def extract_features_from_img(self, img):
+        features = self.feature_extractor(img)
+        features = self.pooling(features).reshape(img.shape[0], -1)
+        logits = self.classifier_trunc(features)
+        probas = F.softmax(logits, dim=1)
+
+        return logits, probas
+
+    @torch.no_grad()
+    def predict_codes_from_img(self, img):
+        logits, _ = self.extract_features_from_img(img)
+        latent_codes = self.predict_codes_from_features(logits)
+        latent_codes = F.relu(latent_codes)
+
+        return latent_codes

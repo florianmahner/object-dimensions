@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+__all__ = ["sample_latents", "optimize_latents"]
+
 import argparse
 import random
 import torch
@@ -17,20 +19,19 @@ from latent_predictor import LatentPredictor
 from torch.utils.data import DataLoader
 
 parser = argparse.ArgumentParser()
+parser.add_argument("--embedding_path", type=str, default="./weights/params/pruned_q_mu_epoch_300.txt", help="Path to weights directory")
 parser.add_argument("--model_name", type=str, default="vgg16_bn", help="Model to load from THINGSvision")
 parser.add_argument("--module_name", type=str, default="classifier.3", help="Layer of the model to load from THINGSvision")
-parser.add_argument("--regression_path", type=str, default="../sparse_codes/sparse_code_predictions", help="Path to the latent predictor")
-parser.add_argument("--latent_path", type=str, default="./latent_samples", help="Path to the latent samples")
 parser.add_argument("--n_samples", type=int, default=2_000_000, help="Number of latent samples to generate")
 parser.add_argument("--window_size", type=int, default=50, help="Window size of trainer to check convergence of latent dimenisonality")
 parser.add_argument("--batch_size", type=int, default=8, help="Batch size for sampling")
 parser.add_argument("--truncation", type=float, default=0.4, help="Truncation value for noise sample")
 parser.add_argument("--top_k", type=int, default=16, help="Top k values to sample from")
-parser.add_argument("--sample_latents", action="store_true", help="Sample latents")
+parser.add_argument("--sample_latents", type=str, default="False", choices=("True", "False"), help="Sample latents")
 parser.add_argument("--max_iter", type=int, default=200, help="Number of optimizing iterations")
 parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
 parser.add_argument("--rnd_seed", type=int, default=42, help="Random seed")
-parser.add_argument("--dim", type=int, default=1, help="Dimension to optimize for")
+parser.add_argument("--dim", type=int, default=(1,2), nargs="+", help="Dimension to optimize for")
 parser.add_argument("--alpha", type=float, default=1.0, help="Weight of the absolute value in a dimension to optimize for")
 parser.add_argument("--beta", type=float, default=1.0, help="Weight for the softmax loss in the dimension optimization")
 parser.add_argument("--device", type=str, default="cuda:0", help="Device to use")
@@ -41,23 +42,35 @@ def global_shift(img:torch.Tensor):
     shifted_img /= shifted_img.max()
     return shifted_img
 
-def sample_latents(model_name, module_name, regression_path, n_samples, batch_size, truncation, top_k, latent_path, device):
+def sample_latents(model_name, module_name, embedding_path, n_samples, batch_size, truncation, top_k, device):
     device = torch.device(device)
+    base_path = os.path.dirname(os.path.dirname(embedding_path))
+    regression_path = os.path.join(base_path, "analyses", "sparse_codes")
+    out_path = os.path.join(base_path, "analyses", "per_dim")
+
+    assert os.path.exists(regression_path), f"Regression path {regression_path} does not exist. Run sparse code predictions \
+                                              first before optimizing latents."
+
     predictor = LatentPredictor(model_name, module_name, device, regression_path)
 
     gan = BigGAN.from_pretrained('biggan-deep-256')
     generator = gan.generator
 
     sampler = Sampler(n_samples=n_samples, n_dims=predictor.embedding_dim, batch_size=batch_size, truncation=truncation, 
-                      top_k=top_k, out_path=latent_path, device=device)
+                      top_k=top_k, out_path=out_path, device=device)
     sampler.sample(generator, predictor)
 
-def optimize_latents(model_name, module_name, regression_path, latent_path, dim, lr, max_iter, truncation, alpha, beta, window_size, device):
+def optimize_latents(model_name, module_name, embedding_path, dim, lr, max_iter, truncation, alpha, beta, window_size, device):
+    base_path = os.path.dirname(os.path.dirname(embedding_path))
+    regression_path = os.path.join(base_path, "analyses", "sparse_codes")
+    latent_path = os.path.join(base_path, "analyses", "latent_samples")
+
     device = torch.device(device)
     predictor = LatentPredictor(model_name, module_name, device, regression_path)
 
     gan = BigGAN.from_pretrained('biggan-deep-256')
     generator = gan.generator
+
 
     trainer = Optimizer(lr=lr, max_iter=max_iter, dim=dim , latent_size=256, 
                         in_path=latent_path, truncation=truncation, device=device, 
@@ -272,11 +285,10 @@ if __name__ == '__main__':
     # We can either sample latents again or optimize previously stored ones
     if args.sample_latents:
         print("Sampling latents...\n")
-        sample_latents(args.model_name, args.module_name, 
-                       args.regression_path, args.n_samples, 
-                       args.batch_size, args.tuncation, args.top_k, args.latent_path, args.device)
+        sample_latents(args.model_name, args.module_name,  args.embedding_path, args.n_samples, 
+                       args.batch_size, args.truncation, args.top_k, args.device)
 
     for dim in args.dim:
         print("Optimizing dimension: {}".format(dim))
-        optimize_latents(args.model_name, args.module_name, args.regression_path, args.latent_path, dim, args.lr,
+        optimize_latents(args.model_name, args.module_name, dim, args.lr,
                         args.max_iter, args.truncation, args.alpha, args.beta, args.window_size, args.device)

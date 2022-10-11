@@ -16,9 +16,8 @@ from thingsvision.utils.data.dataset import ImageDataset
 parser = argparse.ArgumentParser(description='Visualize embedding')
 parser.add_argument('--embedding_path', type=str, default='./weights', help='path to weights directory') # TODO remove default
 parser.add_argument('--n_images', type=int, default=12, choices=[6,12], help='number of images per category')
-parser.add_argument('--results_path', type=str, default='./results', help='plotting directory to save the figure')
 parser.add_argument('--modality', type=str, default="deep", choices=("behavior", "deep"), help='if behavior images or not')
-parser.add_argument('--per_dim', action='store_true', help="Plots per dimension if true")
+parser.add_argument('--per_dim', type=str, choices=("True", "False"), help="Plots per dimension if true")
 
 
 def load_data(n_images, modality="deep"):
@@ -38,10 +37,10 @@ def load_data(n_images, modality="deep"):
 
 
 def plot_per_dim(args):
-
-    path = os.path.join(args.results_path, "images_per_dim")
-    if not os.path.exists(path):
-        os.makedirs(path)
+    base_path = os.path.dirname(os.path.dirname(args.embedding_path))
+    results_path = os.path.join(base_path, "analyses", "per_dim")
+    if not os.path.exists(results_path):
+        os.makedirs(results_path)
 
     W = load_sparse_codes(args.embedding_path)
     _, _, images = load_data(args.n_images, args.modality)
@@ -63,7 +62,11 @@ def plot_per_dim(args):
             ax.set_yticks([])
     
         # fig.suptitle("Dimension: {}".format(dim))
-        fname = os.path.join(path, f'dim_{dim}.png')
+        out_path = os.path.join(results_path, f'{dim:02d}')
+        if not os.path.exists(out_path):
+            os.makedirs(out_path)
+
+        fname = os.path.join(out_path, f'dim_{dim}_topk.png')
         fig.savefig(fname, dpi=300)
         plt.close(fig)
         print(f'Done plotting for dim {dim}')
@@ -96,17 +99,18 @@ def plot_dimensions(args):
             break
 
     plt.tight_layout()
+
+    # Save figure in predefined embedding path directory
+    base_path = os.path.dirname(os.path.dirname(args.embedding_path))
     filename = os.path.basename(args.embedding_path)
     epoch = filename.split('_')[-1].split('.')[0]
-    fname = os.path.join(args.results_path, f"all_dimensions_epoch_{epoch}.png")
-
+    fname = os.path.join(base_path, f"all_dimensions_epoch_{epoch}.png")
     fig.savefig(fname, dpi=50)
 
 
 if __name__ == '__main__':
     args = parser.parse_args()
-
-    if args.per_dim:    
+    if args.per_dim == "True":    
         plot_per_dim(args)
     else:
         plot_dimensions(args)
