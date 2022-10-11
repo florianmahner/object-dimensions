@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from deep_embeddings.pruning import DimensionPruning
+from deep_embeddings.core.pruning import DimensionPruning
 
                 
 class QLogVar(nn.Module):

@@ -1,15 +1,17 @@
 #!/bin/bash
 
+
 # Train the model
-echo "Start training the model"
-# cd ..
+echo "Start gamma analysis with fixed batch size"
+cd ..
 
 # General parameters
 # log_path=""./learned_embeddings/weights_vgg_12_1024bs_20mio_pos_gamma04_spike_0125_slab_05_pi_06"
-log_path="./results/16396_bs_50mio_pos_gamma02_default_sslab"
+log_path="./results/gamma_analysis/"
 modality="deep" 
-load_model=True
+load_model=False
 fresh=False
+tensorboard=True
 
 # Model parameters
 init_dim=100
@@ -18,27 +20,30 @@ modality="deep"
 stability_time=2000
 rnd_seed=42
 batch_size=16396
-n_epochs=6000
-gamma=0.2
+n_epochs=2000
 params_interval=200
-checkpoint_interval=500  # we dont save the model in principle!
-tensorboard=True
+checkpoint_interval=300  # we dont save the model in principle!
 
 
 # Data paths
 feature_path='./data/vgg_bn_features_12/features.npy'
-triplet_path='./data/triplets/triplets_12_50mio_pos/'
+triplet_path='./data/triplets_12_20mio_pos/'
 
 
-python main.py \
-    --feature_path $feature_path \
-    --triplet_path $triplet_path \
+for gamma in `seq 0.2 0.025 0.5`
+do 
+    log_path_gamma=$log_path"_gamma_"$gamma
+
+    echo "Start training the model with gamma = $gamma in $log_path_gamma"
+
+    python main.py \
+    --log_path $log_path_gamma \ 
     --modality $modality \
     --load_model $load_model \
     --fresh False \
     --tensorboard $tensorboard \
     --init_dim $init_dim \
-    --prior $prior \
+    --prior $prior \  
     --stability_time $stability_time \
     --rnd_seed $rnd_seed \
     --batch_size $batch_size \
@@ -46,4 +51,8 @@ python main.py \
     --gamma $gamma \
     --params_interval $params_interval \
     --checkpoint_interval $checkpoint_interval \
-    --log_path $log_path 
+    --feature_path $feature_path \
+    --triplet_path $triplet_path & # & sign puts the process in the background!
+    
+done
+

@@ -1,6 +1,10 @@
 
-./learned_embeddings
-./visualization/*.png
+results
+data
+plots
+.vscode
+scripts/*.ipynb
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

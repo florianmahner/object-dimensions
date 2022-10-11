@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import argparse
-import os
-import h5py
-import random
-import math
-import re
-import scipy.io
-import numpy as np
 import itertools
+import scipy.io
+import argparse
+import random
+import h5py
+import os
+import re
+
+import numpy as np
+
 from collections import Counter
 from typing import Any, Tuple
 from dataclasses import dataclass
@@ -17,27 +18,14 @@ from dataclasses import dataclass
 Array = Any
 os.environ["PYTHONIOENCODING"] = "UTF-8"
 
-
-def parseargs():
-    parser = argparse.ArgumentParser()
-    def aa(*args, **kwargs):
-        parser.add_argument(*args, **kwargs)
-    aa("--in_path", type=str,
-        help="path/to/design/matrix")
-    aa("--out_path", type=str,
-        help="path/to/similarity/judgments")
-    aa("--n_samples", type=int, 
-        help="number of similarity judgements")
-    aa("--k", type=int, default=3, choices=[2, 3],
-        help='whether to sample pairs or triplets')
-    aa("--similarity", type=str, choices=['cosine', 'dot'],
-        help='similarity function')
-    aa("--rnd_seed", type=int, default=42, 
-        help="random seed")
-    aa("--adaptive", type=bool, default=False, 
-        help="if adaptive sampling or not")
-    args = parser.parse_args()
-    return args
+parser = argparse.ArgumentParser("Main tripletization script")
+parser.add_argument("--in_path", type=str, help="Path to VGG features")
+parser.add_argument("--out_path", type=str, help="Path to store Triplets")
+parser.add_argument("--n_samples", type=int, help="Number of triplets to sample")
+parser.add_argument("--k", type=int, default=3, choices=[2, 3], help="Whether to sample pairs or triplets")
+parser.add_argument("--similarity", type=str, choices=["cosine", "dot"], help="Similarity function")
+parser.add_argument("--rnd_seed", type=int, default=42, help="Random seed")
+parser.add_argument("--adaptive", type=bool, default=False, help="If adaptive sampling or not")
 
 
 @dataclass
@@ -262,13 +250,13 @@ class Sampler:
 
 if __name__ == "__main__":
     # parse arguments
-    args = parseargs()
+    args = parser.parse_args()
 
-    args.in_path = '/LOCAL/fmahner/THINGS/vgg_bn_features_12/features.npy'
-    args.out_path = '/LOCAL/fmahner/THINGS/triplets_12_20mio_pos'
+    args.in_path = '/LOCAL/fmahner/DeepEmbeddings/data/vgg_bn_features_12/features.npy'
+    args.out_path = '/LOCAL/fmahner/DeepEmbeddings/data/triplets/triplets_12_20mio_pos_seed_0'
     args.k = 3
     args.n_samples = int(2e7)
-    args.rnd_seed = 42
+    args.rnd_seed = 0
     args.adaptive = False
 
 

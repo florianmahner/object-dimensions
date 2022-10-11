@@ -20,7 +20,6 @@ def cosine_similarity(embedding_i, embedding_j):
         return torch.nn.functional.cosine_similarity(embedding_i, embedding_j)
     else:
         return np.dot(embedding_i, embedding_j) / (np.linalg.norm(embedding_j) * np.linalg.norm(embedding_j))
-
     
 def compute_positive_rsm(F):
     rsm = relu_correlation_matrix(F)
@@ -40,9 +39,21 @@ def get_weights(path):
     W = remove_zeros(W)
     return W
 
-def load_sparse_codes(path, with_dim=False):
-    ''' TODO Maybe return transpose depending on the size of the dims?'''
-    
+def load_deepnet_activations(activation_path, center=False):
+    if activation_path.endswith('npy'):
+        with open(activation_path, 'rb') as f:
+            act = np.load(f)
+    else:
+        act = np.loadtxt(activation_path)
+    if center:
+        center_activations(act)
+    return act
+
+
+def center_activations(act):
+    return act - act.mean(axis=0)
+
+def load_sparse_codes(path, with_dim=False):    
     W = get_weights(path)
     sorted_dims = np.argsort(-np.linalg.norm(W, axis=0, ord=1))
     W = W[:, sorted_dims]
