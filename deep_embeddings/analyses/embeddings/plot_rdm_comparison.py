@@ -45,12 +45,15 @@ def kmeans_sklearn(img, k):
 
 def get_rdm(embedding, method="correlation"):
     embedding = np.maximum(0, embedding)
-    method = "correlation"
     rsm = compute_rdm(embedding, method)
     rsm = fill_diag(rsm)
     rsm = rankdata(rsm).reshape(rsm.shape)
 
     return rsm
+
+def normalise_rdm(rdm):
+    rdm = rdm / np.max(rdm)
+    return rdm
 
  
 
@@ -60,9 +63,9 @@ def get_rdm(embedding, method="correlation"):
 """ Compute RDMs for two embeddings and plot them. We have not clustered based on the category / class names yet. This would give
 an even nicer looking embedding! """
 
-embedding_1 = "../../../learned_embeddings/spose_embedding_66d_sorted.txt"
-embedding_2 = "../../../learned_embeddings/weights_things_behavior_8196bs_adaptive_half/params/pruned_q_mu_epoch_5000.txt"
-# embedding_2 = "../../../learned_embeddings/weights_vgg_12_512bs/params/pruned_q_mu_epoch_1000.txt"
+embedding_1 = "../../../results/spose_embedding_66d_sorted.txt"
+embedding_2 = "../../../results/weights_things_behavior_8196bs_adaptive_half/params/pruned_q_mu_epoch_5000.txt"
+# embedding_2 = "../../../results/weights_vgg_12_512bs/params/pruned_q_mu_epoch_1000.txt"
 
 embedding_1 = np.loadtxt(embedding_1)
 embedding_2 = np.loadtxt(embedding_2)
@@ -83,20 +86,23 @@ print(f'\nCorrelation between RSMs: {rho:.3f}\n')
 
 #%%
 
-method = "correlation"
 
 rsm_1 = get_rdm(embedding_1, method)
 rsm_2 = get_rdm(embedding_2, method)
 
-rsm_1_km = kmeans(rsm_1, 10)
-rsm_2_km = kmeans(rsm_2, 10)
+
+rsm_1_km = kmeans(rsm_1, 20)
+rsm_2_km = kmeans(rsm_2, 20)
+
+rsm_1_km = normalise_rdm(rsm_1_km)
+rsm_2_km = normalise_rdm(rsm_1_km)
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
 
 
-ax1.imshow(rsm_1_km)
+ax1.imshow(rsm_1_km, cmap='viridis_r')
 ax1.set_title("Behavior")
-ax2.imshow(rsm_2_km)
+ax2.imshow(rsm_2_km, cmap='viridis_r')
 ax2.set_title("Deep CNN")
 
 plt.tight_layout()
