@@ -9,31 +9,14 @@ import matplotlib.pyplot as plt
 import skimage.io as io
 import numpy as np
 
-from deep_embeddings.utils.utils import load_sparse_codes
-from thingsvision.utils.data.dataset import ImageDataset
-
+from deep_embeddings.utils.utils import load_sparse_codes, load_image_data, filter_embedding_by_behavior
 
 parser = argparse.ArgumentParser(description='Visualize embedding')
 parser.add_argument('--embedding_path', type=str, default='./weights', help='path to weights directory') # TODO remove default
 parser.add_argument('--n_images', type=int, default=12, choices=[6,12], help='number of images per category')
 parser.add_argument('--modality', type=str, default="deep", choices=("behavior", "deep"), help='if behavior images or not')
+parser.add_argument('--filter_images',  type=str, default="False", choices=("True", "False"), help="If to filter the learned embedding by the behavior images")
 parser.add_argument('--per_dim', type=str, choices=("True", "False"), help="Plots per dimension if true")
-
-
-def load_data(n_images, modality="deep"):
-    if modality == "behavior":
-        dataset = ImageDataset(root=f'./data/reference_images', out_path='', backend='pt')
-        idx2obj = None # NOTE maybe for behavior these cannot be extracted!
-        obj2idx = None
-
-    else:
-        dataset = ImageDataset(root=f'./data/image_data/images{n_images}', out_path='', backend='pt')
-        idx2obj = dataset.idx_to_cls
-        obj2idx = dataset.cls_to_idx
-
-    images = dataset.images
-
-    return idx2obj, obj2idx, images
 
 
 def plot_per_dim(args):
@@ -43,12 +26,12 @@ def plot_per_dim(args):
         os.makedirs(results_path)
 
     W = load_sparse_codes(args.embedding_path)
-    _, _, images = load_data(args.n_images, args.modality)
+    _, _, images = load_image_data(args.n_images, args.modality)
     print('Shape of weight Matrix', W.shape)
     W = W.T
 
     top_k = 16
-    top_j = 60 # NOTE this is the number of dimensions to plot
+    top_j = W.shape[1]
 
     for dim, w_j in enumerate(W):
         fig = plt.figure(figsize=(4,4))
@@ -75,8 +58,12 @@ def plot_per_dim(args):
             break    
 
 def plot_dimensions(args):
-    _, _, images = load_data(args.n_images, args.modality)
-    W = load_sparse_codes(args.embedding_path)
+    _, _, images = load_image_data(args.n_images, args.modality)
+    W = load_sparse_codes(args.embedding_path)    
+    if args.filter_images == "True":
+        print("Select only behavior images to visualize the embedding")
+        W, images = filter_embedding_by_behavior(W, images)
+
     print('Shape of weight Matrix', W.shape)
     W = W.T
 
@@ -104,12 +91,22 @@ def plot_dimensions(args):
     base_path = os.path.dirname(os.path.dirname(args.embedding_path))
     filename = os.path.basename(args.embedding_path)
     epoch = filename.split('_')[-1].split('.')[0]
-    fname = os.path.join(base_path, f"all_dimensions_epoch_{epoch}.png")
-    fig.savefig(fname, dpi=50)
+    out_path = os.path.join(base_path, "analyses")
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
+    fname = os.path.join(out_path, "all_dimensions{}_epoch_{}.png")
 
+    if args.filter_images == "True":
+        fname = fname.format("_filtered", epoch)
+    else:
+        fname = fname.format("", epoch)
+    fig.savefig(fname, dpi=50)
 
 if __name__ == '__main__':
     args = parser.parse_args()
+    if args.filter_images == "True" and args.modality == 'behavior':
+        raise ValueError("Cannot filter behavior images for behavior images")
+
     if args.per_dim == "True":    
         plot_per_dim(args)
     else:
