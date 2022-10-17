@@ -15,7 +15,6 @@ from collections import defaultdict
 from abc import ABC, abstractmethod
 from copy import deepcopy
 
-# TODO Have to still check with the step counter when logging per epoch vs per batch!
 
 class Logger(ABC):
     @property
@@ -57,34 +56,39 @@ class Logger(ABC):
 
 class DeepEmbeddingLogger:
     # TODO Make subscriptable, so that I can do logger['abc'] and logger['des']
-    def __init__(self, model, cfg):
-        self.log_path = cfg.log_path
-        self.logger = DefaultLogger(cfg.log_path, cfg.fresh)
+    def __init__(self, log_path, model, args):
+        self.log_path = log_path
+        self.logger = DefaultLogger(log_path, args.fresh)
         self.logger.add_logger(
             "checkpoint",
-            CheckpointLogger(cfg.log_path),
+            CheckpointLogger(log_path),
             callbacks=["model", "optim", "epoch", "logger", "params"],
-            update_interval=cfg.checkpoint_interval,
+            update_interval=args.checkpoint_interval,
         )
         self.logger.add_logger(
             "params",
-            ParameterLogger(cfg.log_path, model, ["module.sorted_pruned_params"]),
-            update_interval=cfg.params_interval,
+            ParameterLogger(log_path, model, ["module.sorted_pruned_params"]),
+            update_interval=args.params_interval,
         )
-        if cfg.tensorboard:
+        if args.tensorboard:
             self.logger.add_logger(
                 "tensorboard",
-                TensorboardLogger(cfg.log_path),
+                TensorboardLogger(log_path),
                 callbacks=["train_loss", "train_ll", "train_complexity", "val_loss", "dim", "val_acc", "train_acc"],
                 update_interval=1,
             )
 
         self.logger.add_logger(
             "file",
-            FileLogger(cfg.log_path),
+            FileLogger(log_path),
             callbacks=["train_loss", "val_loss", "train_acc", "val_acc", "dim"],
             update_interval=1,
         )
+        # self.logger.add_logger(
+        #     "history",
+        #     TrainingHistoryLogger(cfg.log_path),
+        #     callbacks=["train_loss", "val_loss", "train_acc", "val_acc", "dim", "gamma", "epoch", "params"],
+        # )
 
     def log(self, *args, **kwargs):
         self.logger.log(*args, **kwargs)
@@ -121,11 +125,10 @@ class DefaultLogger(Logger):
         self.callbacks[logger_key] = callbacks
 
     def log(self, *args, **kwargs):
-        # NOTE parameter loggers take the longest time, since they log to disk
-        import time
         self.step_ctr += 1
         for name, (logger, update_interval) in self.extensions.items():
-            if self.step_ctr % update_interval != 0:
+
+            if self.step_ctr % update_interval != 0 and kwargs["final"] == False:
                 continue
 
             # iterate over all callbacks for that logger
@@ -311,6 +314,8 @@ class TensorboardLogger(Logger):
         for k, v in kwargs.items():
             if v is None:
                 continue
+            if isinstance(v, list):
+                v = v[-1]
             if isinstance(v, torch.Tensor):
                 v = v.item()
             assert isinstance(v, (float, int))
@@ -325,13 +330,16 @@ class TensorboardLogger(Logger):
         self.flush()
 
 
-class DimensionLogger(Logger):
-    # TODO Implement this class that plots the topk dimensions each k iterations / epochs to visualize the emebdding!
 
+class TrainingHistoryLogger(Logger):
     def __init__(self, log_path):
-        self.log_path = os.path.join(log_path, "dimensions")
+        self._log_path = os.path.join(log_path, "training_params")
         self._make_dir()
-        
-    def log(*args, **kwargs):
-        from deep_embeddings.analyses.visualization import plot_dimensions
-        pass
+
+    @property
+    def log_path(self):
+        return self._log_path
+
+    def log(self, *args, **kwargs):
+        # Save the dictionary into a .npz file
+        np.savez(os.path.join(self.log_path, "training_results.npz"), **kwargs)

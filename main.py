@@ -31,6 +31,10 @@ parser.add_argument("--rnd_seed", type=int, default=42, help="Random seed")
 parser.add_argument("--gamma", type=float, default=0.5, help="Gamma parameter to balance KL div and reconstruction loss")
 parser.add_argument("--params_interval", type=int, default=100, help="Interval to save learned embeddings")
 parser.add_argument("--checkpoint_interval", type=int, default=100, help="Interval to save model checkpoints")
+parser.add_argument("--spike", type=float, default=0.25, help="Spike parameter for spike and slab prior")
+parser.add_argument("--slab", type=float, default=1.0, help="Slab parameter for spike and slab prior")
+parser.add_argument("--pi", type=float, default=0.5, help="Pi parameter for spike and slab prior")
+parser.add_argument("--identifier", type=str, default="", help="Identifier for the experiment")
 
 
 def build_triplet_dataset(triplet_path, device):
@@ -80,8 +84,20 @@ def train(args):
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
+    # Create a nested out path giving the config arguments
+    n_mio_samples = int((len(train_dataset) + len(val_dataset)) / 1e6)
+    n_samples_iden = str(n_mio_samples) + "mio"
+
+    # Join all arguments to create a unique log path
+    log_path = os.path.join(args.log_path, args.identifier,  n_samples_iden, 
+                            args.modality, str(args.init_dim), str(args.batch_size), str(args.gamma), 
+                            str(args.spike), str(args.slab), str(args.pi), str(args.rnd_seed))
+
     # Build loggers and 
-    logger = DeepEmbeddingLogger(model, args)
+    logger = DeepEmbeddingLogger(log_path, model, args)
+
+    # Print the number of millions in sample size as string
+    print("Training on {} million triplets".format(len(train_dataset) / 1e6))
 
     trainer = MLTrainer(model, prior, train_loader, val_loader, logger, device)
     trainer.parse_from_config(args)

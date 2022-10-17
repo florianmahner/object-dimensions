@@ -29,12 +29,11 @@ class TrainingParams:
     n_steps_same_dim: int = 0
 
     # store training performance
-    complexity_loss: float = np.inf
-    log_likelihoods: float = np.inf
+    complexity_loss: float = field(default_factory=list)
+    log_likelihoods: float = field(default_factory=list)
     train_loss: list = field(default_factory=list)
     val_loss: list = field(default_factory=list)
     dim_over_time: list = field(default_factory=list)
-    triplet_choices: list = field(default_factory=list)
 
     def update(self, **kwargs):
         for k, v in kwargs.items():
@@ -106,20 +105,19 @@ class MLTrainer:
         
         # Find file with .tar ending in directory
         checkpoint_path = os.path.join(self.log_path, "checkpoints/*.tar")
-        checkpoint_path = glob.glob(checkpoint_path)
+        checkpoints = glob.glob(checkpoint_path)
 
-        if not checkpoint_path:
+        if not checkpoints:
             print("No checkpoint found in {}. Cannot resume training, start fresh instead".format(self.log_path))
             
         else:
-            checkpoint = torch.load(checkpoint_path[0])
+            checkpoint = torch.load(checkpoints[0])
             self.optim.load_state_dict(checkpoint["optim_state_dict"])
             self.model.load_state_dict(checkpoint["model_state_dict"])
             params = checkpoint["params"]
             self.params = params 
             self.params.n_epochs = checkpoint['epoch'] + self.params.n_epochs
             self.params.start_epoch = checkpoint['epoch'] + 1
-            
             self.logger = checkpoint["logger"]  # only if exists!
 
     def step_triplet_batch(self, indices):
@@ -164,12 +162,9 @@ class MLTrainer:
         
         return log_likelihood, log_q, log_p, triplet_accuracy
 
-
-    # NOTE pruned dim is for pairiwise -> need to do this later!
-    def step_dataloader(self, dataloader, pruned_dim=None):
+    def step_dataloader(self, dataloader):
         n_pairwise = len(dataloader.dataset)
         n_batches = len(dataloader)
-        batch_size = len(dataloader.dataset[0])
 
         complex_losses = torch.zeros(n_batches)
         ll_losses = torch.zeros(n_batches)
@@ -179,26 +174,13 @@ class MLTrainer:
 
         for k, indices in enumerate(dataloader):
 
-            beta = 1.0  # NOTE TODO no temp scaling right now!
-
             # only for trainin batches, not val batches
             if self.model.training:
-                # log_likelihood, log_q, log_p = self.step_pairwise_batch(indices)
-
                 log_likelihood, log_q, log_p, accuracy = self.step_triplet_batch(indices)
-
-                # temperature scaling!
-                log_likelihood /= beta
-
-                # NOTE short hack to adapt the complexity loss as a function of the batch size!
-                # complexity_loss = ((batch_size//2) / n_pairwise) * (log_q.sum() - log_p.sum())
                 complexity_loss = (1 / n_pairwise) * (log_q.sum() - log_p.sum())
 
-                # balance the log likelihood and complexity loss by gamma
-                log_likelihood = self.params.gamma * log_likelihood
-                complexity_loss = (1 - self.params.gamma) * complexity_loss
-
-                loss = log_likelihood + complexity_loss
+                # Balance the log likelihood and complexity loss by gamma
+                loss = (self.params.gamma * log_likelihood) + ((1 - self.params.gamma) * complexity_loss)
 
                 # faster alternative to optim.zero_grad()
                 for param in self.model.parameters():
@@ -218,11 +200,9 @@ class MLTrainer:
                     (self.params.mc_samples, self.init_dim)
                 )
                 for s in range(self.params.mc_samples):
-                    # log_likelihood, log_q, log_p = self.step_batch(indices)
                     log_likelihood, log_q, log_p, accuracy = self.step_triplet_batch(indices)
-                    log_likelihood /= beta
-                    log_likelihood = self.params.gamma * log_likelihood
                     complexity_loss = (1 / n_pairwise) * (log_q.sum() - log_p.sum())
+                    # NOTE For the val loss, we are not allowed to reweight using gamma!
                     sampled_likelihoods[s] = log_likelihood.item()
 
                 # validation loss
@@ -244,11 +224,8 @@ class MLTrainer:
         if self.model.training:
             self.params.update(
                 complexity_loss=complex_losses.mean().item(),
-                log_likelihoods=ll_losses.mean().item(),
-                train_losses=losses,
+                log_likelihoods=ll_losses.mean().item()
             )
-        else:
-            self.params.update(val_loss=losses)
 
         epoch_accuracy = torch.mean(triplet_accuracies).item()
 
@@ -293,6 +270,7 @@ class MLTrainer:
         return val_loss
 
     def evaluate_val_loss_convergence(self):
+        """ Do we maybe need to analyse converge in term of the validation loss? """
         # NOTE still need to implement this to have an analysis of convergence!
         if self.params.best_val_loss > self.params.val_loss[-1]:
             self.params.update(best_val_loss=self.params.val_loss[-1])
@@ -305,7 +283,7 @@ class MLTrainer:
 
         return False
 
-    def evaluate_convergence(self, epoch):
+    def evaluate_convergence(self):
         # we only check the convergence of the dimensionality after a certain number of epochs
         signal, _, _ = self.model.module.prune_dimensions()
         dimensions = len(signal)
@@ -314,7 +292,7 @@ class MLTrainer:
 
         stability = self.params.dim_over_time[-self.params.stability_time :]
 
-        if epoch < self.params.stability_time:
+        if self.epoch < self.params.stability_time:
             return False
 
         # if only one dimension is present, the model is stable
@@ -330,15 +308,22 @@ class MLTrainer:
         self.model.to(self.device)
         self.batch_size = self.train_loader.batch_size
 
-        for epoch in range(self.params.start_epoch, self.params.n_epochs + 1):
-
-            self.epoch = epoch
-
+        for self.epoch in range(self.params.start_epoch, self.params.n_epochs + 1):
+    
             train_loss, train_acc = self.train_one_epoch()
             val_loss, val_acc = self.evaluate_one_epoch()
 
+            self.params.update(
+                train_loss=train_loss,
+                val_loss=val_loss,
+                train_acc=train_acc,
+                val_acc=val_acc,
+                epoch=self.epoch,
+            )
+
+        
             # evaluate the convergence first!
-            convergence = self.evaluate_convergence(epoch)
+            convergence = self.evaluate_convergence()
             # convergence = self.evaluate_val_loss_convergence()
 
             # we log and store intermediate weights concurrently
@@ -350,21 +335,23 @@ class MLTrainer:
                 val_loss=val_loss,
                 val_acc=val_acc,
                 model=self.model,
-                epoch=epoch,
+                gamma=self.params.gamma,    
+                epoch=self.epoch,
                 logger=self.logger,
                 optim=self.optim,
                 train_loader=self.train_loader,
                 val_loader=self.val_loader,
                 dim=self.params.smallest_dim,
                 params=self.params,
-                print_prepend="Epoch {}".format(epoch),
+                print_prepend="Epoch {}".format(self.epoch),
+                final=False
             )
 
-            # TODO add final logging step before it ends!
-            if convergence or (epoch == self.params.n_epochs + 1):
-                print(f"Stopped training after {epoch} epochs. Model has converged or max number of epochs have been reached!")
+            if convergence or (self.epoch == self.params.n_epochs):
+                print(f"Stopped training after {self.epoch} epochs. Model has converged or max number of epochs have been reached!")
+                log_params["final"] = True # we also log all things that dont have an update interval
                 self.logger.log(**log_params)
-                self.store_final_embeddings(epoch)
+                self.store_final_embeddings()
                 break
 
             self.logger.log(**log_params)

@@ -9,17 +9,20 @@ searchlight=false
 gpt3=false
 
 # General parameters
-# embedding_path="./results/weights_vgg_12_2048bs_20mio_pos_gamma04/params/pruned_q_mu_epoch_3000.txt"
-embedding_path="./results/weights_vgg_12_1024bs_20mio_pos_gamma04_spike_0125_slab_05_pi_06/params/pruned_q_mu_epoch_1200.txt"
-dnn_path="./data/vgg_bn_features_12/features.npy"
+# embedding_path="./results/16396_bs_20mio_pos2_gamma04_default_sslab/params/pruned_q_mu_epoch_6000.txt"
+embedding_path="./results/16396_bs_50mio_pos_gamma02_default_sslab/params/pruned_q_mu_epoch_5200.txt"
+dnn_path="./data/vgg_bn_features_12"
 rnd_seed=42
 device="gpu"
 
 # Visualization parameters
 per_dim=False
+filter_images=True
 
 # Sparse codes parameters
 k_folds=4
+
+feature_norm_path="./data/feature_norms/feature_object_matrix.csv"
 
 # Big GAN parameters
 model_name="vgg16_bn"
@@ -39,12 +42,13 @@ beta=1.0
 # TODO Implement this
 
 if $vis_embedding; then
-    echo "Plot the topk predictions from the embedding"
+    echo "Visualize the image maximally activating embedding dimensions"
     python deep_embeddings/analyses/visualization/visualize_embedding.py \
         --embedding_path=$embedding_path \
         --modality=deep \
         --n_images=12 \
-        --per_dim=$per_dim
+        --per_dim=$per_dim \
+        --filter_images=$filter_images
 fi
 
 if $sparse_codes; then
@@ -62,8 +66,8 @@ if $gpt3; then
     echo "Label dimensions using GPT3"
     python deep_embeddings/analyses/gpt3/extract_feature_norms.py \
         --embedding_path $embedding_path \
-        --dnn_path $dnn_path 
-        --feature_norm_path "./data/feature_norms/feature_object_matrix.csv"
+        --dnn_path $dnn_path \
+        --feature_norm_path $feature_norm_path
 fi
 
 if $big_gan; then

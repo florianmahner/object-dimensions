@@ -4,15 +4,41 @@
 import torch
 import os
 import math
-import scipy.stats
 
+import pandas as pd
+import scipy.stats
 import numpy as np
+
+from numba import njit, jit, prange
 from scipy.spatial.distance import pdist, squareform
 from thingsvision import Extractor
+from thingsvision.utils.data.dataset import ImageDataset
 
 def load_model(model_name, device):
     model = Extractor(model_name, device=device, pretrained=True, source='torchvision')
     return model
+
+def load_image_data(n_images, modality="deep"):
+    if modality == "behavior":
+        dataset = ImageDataset(root=f'./data/reference_images', out_path='', backend='pt')
+        idx2obj = None # NOTE maybe for behavior these cannot be extracted!
+        obj2idx = None
+
+    else:
+        dataset = ImageDataset(root=f'./data/image_data/images{n_images}', out_path='', backend='pt')
+        idx2obj = dataset.idx_to_cls
+        obj2idx = dataset.cls_to_idx
+
+    images = dataset.images
+
+    return idx2obj, obj2idx, images
+
+def filter_embedding_by_behavior(embedding, image_paths):
+    behavior_indices = np.array([i for i, img in enumerate(image_paths) if '01b' in img])
+    image_paths = np.array(image_paths)[behavior_indices]
+    embedding = embedding[behavior_indices]
+
+    return embedding, image_paths
 
 # Determine the cosine similarity between two vectors in pytorch
 def cosine_similarity(embedding_i, embedding_j):
@@ -97,6 +123,7 @@ def compute_rdm(X, method="correlation"):
 
     return rdm
 
+
 def correlation_matrix(F, a_min= -1., a_max= 1.):
     ''' Compute dissimilarity matrix based on correlation distance (on the matrix-level). '''
     F_c = F - F.mean(axis=1)[:, np.newaxis]
@@ -112,6 +139,7 @@ def correlate_rsms(rsm_a, rsm_b, correlation = 'pearson'):
     triu_inds = np.triu_indices(len(rsm_a), k=1)
     corr_func = getattr(scipy.stats, ''.join((correlation, 'r')))
     rho = corr_func(rsm_a[triu_inds], rsm_b[triu_inds])[0]
+
     
     return rho
 
@@ -131,3 +159,31 @@ def normal_pdf(X, loc, scale):
 
 def log_normal_pdf(X, loc, scale):
     return torch.distributions.Normal(loc, scale).log_prob(X)
+
+
+@njit(parallel=True, fastmath=True)
+def matmul(A, B):
+    i, k = A.shape
+    k, j = B.shape
+    C = np.zeros((i, j))
+    for i in prange(i):
+        for j in prange(j):
+            for k in prange(k):
+                C[i, j] += A[i, k] * B[k, j]
+    return C
+
+@njit(parallel=True, fastmath=True)
+def rsm_pred(W:np.ndarray) -> np.ndarray:
+    """convert weight matrix corresponding to the mean of each dim distribution for an object into a RSM"""
+    n = W.shape[0]
+    S = matmul(W, W.T)
+    S_e = np.exp(S) #exponentiate all elements in the inner product matrix S
+    rsm = np.zeros((n, n))
+    for i in prange(n):
+        for j in prange(i+1, n):
+            for k in prange(n):
+                if (k != i and k != j):
+                    rsm[i, j] += S_e[i, j] / (S_e[i, j] + S_e[i, k] + S_e[j, k])
+    rsm /= n - 2
+    rsm += rsm.T #make similarity matrix symmetric
+    return rsm
