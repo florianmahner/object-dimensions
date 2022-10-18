@@ -30,20 +30,19 @@ class Sampler(object):
         self.rnd_seed = rnd_seed
 
     def load_domain(self):
-        if not re.search(r"(mat|txt|csv|npy|hdf5)$", self.in_path):
-            raise Exception(
-                "\nCannot tripletize input data other than .mat, .txt, .csv, .npy, or .hdf5 formats\n"
-            )
+        if not re.search(r"(npy)$", self.in_path):
+            raise FileNotFoundError("Input file must be a .npy file")
         if not os.path.exists(self.out_path):
             print(f"\n....Creating output directory: {self.out_path}\n")
             os.makedirs(self.out_path)
 
         random.seed(self.rnd_seed)
         np.random.seed(self.rnd_seed)
-
         X = np.load(self.in_path)
         X = self.remove_nans_(X)
         X = self.remove_negatives_(X) # positivity constraint also on vgg features!
+
+        return X
 
     @staticmethod
     def remove_negatives_(X):
@@ -120,9 +119,8 @@ class Sampler(object):
 
     def sample_adaptive_similarity_judgements(self):
         """Create similarity judgements."""
-        X = self.load_domain(self.in_path)
+        X = self.load_domain()
         M = X.shape[0]
-
         # This is a matrix of N x N (i.e. image_features x image_features). 
         # i.e. The dot product between the corresponding network representations
         S = X @ X.T 
@@ -172,7 +170,7 @@ class Sampler(object):
 
     def sample_similarity_judgements(self):
         """Create similarity judgements."""
-        X = self.load_domain(self.in_path)
+        X = self.load_domain()
         M = X.shape[0]
 
         # This is a matrix of N x N (i.e. image_features x image_features). 
@@ -184,11 +182,9 @@ class Sampler(object):
         n_iter = 0
         n_tri = len(unique_triplets)
         while n_tri < self.n_samples:
-            n_iter += 1
             print(f'{n_iter} samples drawn, {n_tri}/{self.n_samples} added', end='\r')
             sample = self.random_combination(items, 3)
             unique_triplets.add(sample)
-
             n_tri = len(unique_triplets)
 
         triplets = np.zeros((self.n_samples, self.k), dtype=int)

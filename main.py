@@ -14,8 +14,9 @@ from deep_embeddings import MLTrainer
 from deep_embeddings import DeepEmbeddingLogger
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--feature_path",type=str, help="Path to the feature file")
 parser.add_argument("--triplet_path", type=str, help="Path to the triplet file")
+parser.add_argument("--data_path", type=str, default="./data/vgg16bn")
+parser.add_argument("--model_name", type=str, default="vgg16_bn", help="Name of the model")
 parser.add_argument("--log_path", type=str, default="./results", help="Path to store all training outputs and model checkpoints")
 parser.add_argument("--modality", type=str, default="deep", choices=("deep", "behavior"), help="Modality to train on")
 parser.add_argument("--load_model", default=False, choices=("True", "False"), help="Load a pretrained model from log path")
@@ -53,7 +54,8 @@ def train(args):
     torch.manual_seed(args.rnd_seed)
     np.random.seed(args.rnd_seed)
 
-    features = np.load(args.feature_path)
+    feature_path = os.path.join(args.data_path, "features.npy")
+    features = np.load(feature_path)
     n_objects = features.shape[0]
 
     if args.modality == "behavior":
@@ -89,7 +91,8 @@ def train(args):
     n_samples_iden = str(n_mio_samples) + "mio"
 
     # Join all arguments to create a unique log path
-    log_path = os.path.join(args.log_path, args.identifier,  n_samples_iden, 
+    model_type = os.path.basename(args.data_path)
+    log_path = os.path.join(args.log_path, args.identifier, model_type,  n_samples_iden, 
                             args.modality, str(args.init_dim), str(args.batch_size), str(args.gamma), 
                             str(args.spike), str(args.slab), str(args.pi), str(args.rnd_seed))
 

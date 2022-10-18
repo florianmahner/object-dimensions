@@ -8,19 +8,19 @@ echo "Start training the model"
 # log_path=""./learned_embeddings/weights_vgg_12_1024bs_20mio_pos_gamma04_spike_0125_slab_05_pi_06"
 # log_path="./results/16396_bs_20mio_pos2_gamma04_default_sslab"
 log_path="./results"
-identifier="gamma_analysis"
+identifier="lol"
 
 modality="deep" 
 load_model=False
 fresh=False
 
 # Data paths
-feature_path='./data/vgg_bn_features_12/features.npy'
-triplet_path='./data/triplets/triplets_12_1mio_pos_seed_0/'
+data_path='./data/models/vgg16_bn'
+triplet_path='./data/models/vgg16_bn/triplets_1mio/'
 
 # Model parameters
 init_dim=100
-prior='sslab'
+prior='exp'
 modality="deep"
 stability_time=1000
 rnd_seed=42
@@ -32,7 +32,7 @@ checkpoint_interval=500  # we dont save the model in principle!
 tensorboard=False
 
 python main.py \
-    --feature_path $feature_path \
+    --data_path $data_path \
     --triplet_path $triplet_path \
     --modality $modality \
     --load_model $load_model \
