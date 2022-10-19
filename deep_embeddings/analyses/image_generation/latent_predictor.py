@@ -23,6 +23,7 @@ class LatentPredictor(nn.Module):
         self.classifier = model.classifier
         self.classifier_trunc = model.classifier[:int(module_name[-1])+1] # we only compute up to the classifying layer that we want to use 
         self.pooling = model.avgpool
+        self.transforms = extractor.get_transformations() # Image transformations of the model!
 
         # Find the number of regression weights, we have one regression weight per dimension.
         self.embedding_dim = len(glob.glob(os.path.join(regression_path, '*.joblib')))
@@ -56,13 +57,18 @@ class LatentPredictor(nn.Module):
     def forward(self, x):
         """ Forward pass of the model give an image. First extracts VGG feature representations and then predicts the sparse codes from these
         using the learned regression weights. """
+
+        # assert x.dtype == torch.uint8, "Image data must be uint8 in range (0,255)"
+
+        # First do the transformations as has been done for the feature extractions
+        # x = self.transforms(x)
+
         features = self.feature_extractor(x)
         features = self.pooling(features).reshape(x.shape[0], -1)
 
         # gives class probabilities on imagenet for that image?
         logits = self.classifier_trunc(features)
         probas = F.softmax(logits, dim=1)
-        
         
         behavior_features = self.classifier_trunc(features)
         latent_codes = self.regression(behavior_features)
