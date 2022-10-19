@@ -58,10 +58,10 @@ class LatentPredictor(nn.Module):
         """ Forward pass of the model give an image. First extracts VGG feature representations and then predicts the sparse codes from these
         using the learned regression weights. """
 
-        # assert x.dtype == torch.uint8, "Image data must be uint8 in range (0,255)"
+        assert x.dtype == torch.uint8, "Image data must be uint8 in range (0,255)"
 
         # First do the transformations as has been done for the feature extractions
-        # x = self.transforms(x)
+        x = self.transforms(x)
 
         features = self.feature_extractor(x)
         features = self.pooling(features).reshape(x.shape[0], -1)
