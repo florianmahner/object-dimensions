@@ -8,7 +8,7 @@ import torch.nn as nn
 
 
 class WeibullPrior(nn.Module):
-    def __init__(self, lmbda=1., k=0.5):
+    def __init__(self, lmbda=1., k=1.5):
         super().__init__()
         self.register_buffer('lmbda', torch.tensor(lmbda)) 
         self.register_buffer('k', torch.tensor(k))
@@ -31,15 +31,14 @@ class WeibullPrior(nn.Module):
 
      
 class ExponentialPrior(nn.Module):
-    def __init__(self, n_objects, lmbda=0.5):
+    def __init__(self, lmbda=0.5):
         super().__init__()
         self.register_buffer('lmbda', torch.tensor(lmbda)) 
-        self.n_objects = n_objects
 
     def forward(self, X):
         # NOTE temporarily remove the - sign from the exponent! -> this then somewhat works????
-        proba =  self.lmbda * torch.exp(self.lmbda * X)
-        # proba =  self.lmbda * torch.exp(-self.lmbda * X)
+        # proba = self.lmbda * torch.exp(self.lmbda * X)
+        proba =  self.lmbda * torch.exp(-self.lmbda * X)
 
         return proba
 

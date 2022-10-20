@@ -86,7 +86,7 @@ class DeepEmbeddingLogger:
         )
         # self.logger.add_logger(
         #     "history",
-        #     TrainingHistoryLogger(cfg.log_path),
+        #     TrainingHistoryLogger(args.log_path),
         #     callbacks=["train_loss", "val_loss", "train_acc", "val_acc", "dim", "gamma", "epoch", "params"],
         # )
 
@@ -128,7 +128,7 @@ class DefaultLogger(Logger):
         self.step_ctr += 1
         for name, (logger, update_interval) in self.extensions.items():
 
-            if self.step_ctr % update_interval != 0 and kwargs["final"] == False:
+            if self.step_ctr % update_interval != 0:
                 continue
 
             # iterate over all callbacks for that logger
@@ -328,18 +328,3 @@ class TensorboardLogger(Logger):
         # NOTE Need to include args here too, even though that seems weird. Required by abstract method!
         self.update(step, **kwargs)
         self.flush()
-
-
-
-class TrainingHistoryLogger(Logger):
-    def __init__(self, log_path):
-        self._log_path = os.path.join(log_path, "training_params")
-        self._make_dir()
-
-    @property
-    def log_path(self):
-        return self._log_path
-
-    def log(self, *args, **kwargs):
-        # Save the dictionary into a .npz file
-        np.savez(os.path.join(self.log_path, "training_results.npz"), **kwargs)

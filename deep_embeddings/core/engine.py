@@ -8,34 +8,25 @@ import glob
 import numpy as np
 import torch.nn.functional as F
 from deep_embeddings.utils import utils 
+from deep_embeddings.core.priors import ExponentialPrior
 
-from dataclasses import dataclass, field
 
+class Params:
+    """Write a class that holds that stores the training configuration of my machine learning pipeline 
+    and updates the results depending on the type of the update (e.g. list, array) and stores this as a dict"""
 
-@dataclass
-class TrainingParams:
-    lr: float = 0.001
-    gamma: float = 0.2  # balances complexity and reconstruction loss
-    n_epochs: int = 100
-    mc_samples: int = 5
-    stability_time: int = 300
-    prune_dim: bool = True
-    load_model: bool = False
-
-    best_train_loss: float = np.inf
-    best_val_loss: float = np.inf
-    start_epoch: int = 1
-    smallest_dim: int = np.inf
-    n_steps_same_dim: int = 0
-
-    # store training performance
-    complexity_loss: float = field(default_factory=list)
-    log_likelihoods: float = field(default_factory=list)
-    train_loss: list = field(default_factory=list)
-    val_loss: list = field(default_factory=list)
-    dim_over_time: list = field(default_factory=list)
-
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+        for key in ("train_complexity", "train_ll", "train_loss", "val_ll", "train_acc", "val_acc", "dim_over_time"):
+            setattr(self, key, [])
+        self.start_epoch = 1
+        
+    def __getitem__(self, key):
+        return self.__dict__[key]
+    
     def update(self, **kwargs):
+        """ Update the parameters of the model depending on type. 
+        If the type is a list, append the value to the list, else set new value as attribute """
         for k, v in kwargs.items():
             if k not in self.__dict__:
                 continue
@@ -44,13 +35,18 @@ class TrainingParams:
                 setattr(self, k, v)
             elif isinstance(attr, list) and isinstance(v, (int, float)):
                 getattr(self, k).extend([v])
-            else:
+            elif isinstance(attr, list) and isinstance(v, list):
                 getattr(self, k).extend(v)
+            else:
+                setattr(self, k, v)
+
+    def save(self, path):
+        """ Save the parameters of the model as a dictionary """
+        np.savez(path, **self.__dict__)
 
 
 class MLTrainer:
-    "Trainer class to run the model"
-
+    """ Trainer class that runs the entire optimzation of learing the embedding, storing and saving checkpoints etc. """
     def __init__(
         self,
         model,
@@ -64,41 +60,37 @@ class MLTrainer:
         mc_samples=5,
         lr=0.001,
         gamma=0.5,
-        stability_time=200,
-        prune_dim=False,
+        stability_time=200, 
+        seed=42
     ):
         self.model = model
         self.train_loader = train_loader
         self.val_loader = val_loader
-
         self.logger = logger
-        self.params = TrainingParams(
-            lr, gamma, n_epochs, mc_samples, stability_time, prune_dim, load_model
-        )
+
+        self.params = Params(lr=lr, 
+                             init_dim=model.module.init_dim,
+                             gamma=gamma, 
+                             n_epochs=n_epochs, 
+                             mc_samples=mc_samples, 
+                             stability_time=stability_time, 
+                             load_model=load_model)
+
         self.log_path = logger.log_path
-
-        self.init_dim = self.model.module.init_dim # NOTE changed this to dataparallel!
         self._build_optimizer()
-
         self.prior = prior
         self.device = device
         self.model.to(self.device)
         self.prior.to(self.device)
 
-        # TODO Change this again at some point into another branch!
-        self.adapt = False
-
-    def parse_from_config(self, cfg):
-        attrs = ["n_epochs", "mc_samples", "lr", "gamma", "stability_time", "prune_dim", "load_model"]
+    def parse_from_args(self, args):
+        attrs = ["n_epochs", "mc_samples", "lr", "gamma", "stability_time", "load_model",]
         for attr in attrs:
-            if hasattr(cfg, attr):
-                setattr(self.params, attr, getattr(cfg, attr))
+            if hasattr(args, attr):
+                setattr(self.params, attr, getattr(args, attr))
 
     def _build_optimizer(self):
         self.optim = torch.optim.Adam(self.model.parameters(), lr=self.params.lr)
-
-    def update_training_params(self, **kwargs):
-        self.params.update(**kwargs)
 
     def init_model_from_checkpoint(self):
         print("Load model and optimizer from state dict to resume training")
@@ -109,7 +101,6 @@ class MLTrainer:
 
         if not checkpoints:
             print("No checkpoint found in {}. Cannot resume training, start fresh instead".format(self.log_path))
-            
         else:
             checkpoint = torch.load(checkpoints[0])
             self.optim.load_state_dict(checkpoint["optim_state_dict"])
@@ -121,7 +112,7 @@ class MLTrainer:
             self.logger = checkpoint["logger"]  # only if exists!
 
     def step_triplet_batch(self, indices):
-        # maybe do this somewhere else to improve speed
+        """ Step the model for a single batch of data and extract embedding triplets"""
         indices = indices.type("torch.LongTensor")
         indices = indices.to(self.device)
         indices = indices.unbind(1)
@@ -158,6 +149,9 @@ class MLTrainer:
         log_q = utils.normal_pdf(embedding, loc, scale).log()
 
         # gaussian prior log probability of the prior distribution
+        if isinstance(self.prior, ExponentialPrior):
+            embedding = F.relu(embedding)
+
         log_p = self.prior(embedding).log()
         
         return log_likelihood, log_q, log_p, triplet_accuracy
@@ -179,8 +173,14 @@ class MLTrainer:
                 log_likelihood, log_q, log_p, accuracy = self.step_triplet_batch(indices)
                 complexity_loss = (1 / n_pairwise) * (log_q.sum() - log_p.sum())
 
+                # Balance the loss with the gamma hyperparameter!
+                log_likelihood = self.params.gamma * log_likelihood
+                complexity_loss = (1 - self.params.gamma) * complexity_loss
+
+                loss = log_likelihood + complexity_loss
+
                 # Balance the log likelihood and complexity loss by gamma
-                loss = (self.params.gamma * log_likelihood) + ((1 - self.params.gamma) * complexity_loss)
+                # loss = (self.params.gamma * log_likelihood) + ((1 - self.params.gamma) * complexity_loss)
 
                 # faster alternative to optim.zero_grad()
                 for param in self.model.parameters():
@@ -197,12 +197,13 @@ class MLTrainer:
             # we do mc sampling of the variational posterior for validation batches
             else:
                 sampled_likelihoods = torch.zeros(
-                    (self.params.mc_samples, self.init_dim)
+                    (self.params.mc_samples, self.params.init_dim)
                 )
                 for s in range(self.params.mc_samples):
                     log_likelihood, log_q, log_p, accuracy = self.step_triplet_batch(indices)
                     complexity_loss = (1 / n_pairwise) * (log_q.sum() - log_p.sum())
-                    # NOTE For the val loss, we are not allowed to reweight using gamma!
+                    # NOTE For the val loss, we are not allowed to reweight using gamma, 
+                    # since we want to compare different models on the same scale!
                     sampled_likelihoods[s] = log_likelihood.item()
 
                 # validation loss
@@ -219,52 +220,26 @@ class MLTrainer:
             losses[k] += loss.item()
             triplet_accuracies[k] += accuracy.item()
 
-        losses = losses.mean().item()
+        loss = losses.mean().item()
 
         if self.model.training:
             self.params.update(
-                complexity_loss=complex_losses.mean().item(),
-                log_likelihoods=ll_losses.mean().item()
+                train_complexity=complex_losses.mean().item(),
+                train_ll=ll_losses.mean().item()
             )
 
         epoch_accuracy = torch.mean(triplet_accuracies).item()
 
-        return losses, epoch_accuracy
+        return loss, epoch_accuracy
 
     def train_one_epoch(self):
         self.model.train(True)
-
-        # NOTE We can make this more explict other than to do this every 10 epochs, e.g. go for a convergence criterion!
-        if self.epoch % 10 == 0 and self.adapt==True:
-            try:
-                self.batch_size = self.batch_size * 2 if self.batch_size < 10_000 else self.batch_size
-                print("take new batch size", self.batch_size)
-                train_dataset = self.train_loader.dataset
-                val_dataset = self.val_loader.dataset
-                self.train_loader = torch.utils.data.DataLoader(train_dataset, self.batch_size, shuffle=True, num_workers=4)
-                self.val_loader = torch.utils.data.DataLoader(val_dataset, self.batch_size, shuffle=False, num_workers=4)
-                train_loss = self.step_dataloader(self.train_loader)
-
-            except RuntimeError:
-                # NOTE This except statement is way to large, e.g. I can fit a batch size of >8mio before this is triggered!
-                # self.adapt = False # we have reached the maximum batch size to fit into gpu memory!
-                print("Batch size too large!")
-                self.batch_size = self.batch_size // 2
-                train_dataset = self.train_loader.dataset
-                val_dataset = self.val_loader.dataset
-                self.train_loader = torch.utils.data.DataLoader(train_dataset, self.batch_size, shuffle=True, num_workers=4)
-                self.val_loader = torch.utils.data.DataLoader(val_dataset, self.batch_size, shuffle=False, num_workers=4)
-                train_loss = self.step_dataloader(self.train_loader)
-                pass
-
-        else:
-            train_loss = self.step_dataloader(self.train_loader)
+        train_loss = self.step_dataloader(self.train_loader)
 
         return train_loss
 
     @torch.no_grad()
     def evaluate_one_epoch(self):
-        # NOTE we dont need to adapt the batch size
         self.model.eval()
         val_loss = self.step_dataloader(self.val_loader)
         return val_loss
@@ -284,11 +259,11 @@ class MLTrainer:
         return False
 
     def evaluate_convergence(self):
-        # we only check the convergence of the dimensionality after a certain number of epochs
+        """ We evaluate convergence as the representational stability of the number of dimensions across a certain time 
+        frame of epochs """
         signal, _, _ = self.model.module.prune_dimensions()
         dimensions = len(signal)
-        smallest_dim = min(dimensions, self.params.smallest_dim)
-        self.params.update(dim_over_time=dimensions, smallest_dim=smallest_dim)
+        self.params.update(dim_over_time=dimensions)
 
         stability = self.params.dim_over_time[-self.params.stability_time :]
 
@@ -308,57 +283,60 @@ class MLTrainer:
         self.model.to(self.device)
         self.batch_size = self.train_loader.batch_size
 
-        for self.epoch in range(self.params.start_epoch, self.params.n_epochs + 1):
-    
-            train_loss, train_acc = self.train_one_epoch()
-            val_loss, val_acc = self.evaluate_one_epoch()
-
-            self.params.update(
-                train_loss=train_loss,
-                val_loss=val_loss,
-                train_acc=train_acc,
-                val_acc=val_acc,
-                epoch=self.epoch,
-            )
-
+        try: 
+            for self.epoch in range(self.params.start_epoch, self.params.n_epochs + 1):
         
-            # evaluate the convergence first!
-            convergence = self.evaluate_convergence()
-            # convergence = self.evaluate_val_loss_convergence()
+                # Train loss is combined log likelihood and complexity. The val loss is only the log likelihood 
+                # average over multiple monte carlo samples!
+                train_loss, train_acc = self.train_one_epoch()
+                val_loss, val_acc = self.evaluate_one_epoch()
+                convergence = self.evaluate_convergence()
 
-            # we log and store intermediate weights concurrently
-            log_params = dict(
-                train_loss=train_loss,
-                train_acc=train_acc, 
-                train_ll=self.params.log_likelihoods,
-                train_complexity=self.params.complexity_loss,
-                val_loss=val_loss,
-                val_acc=val_acc,
-                model=self.model,
-                gamma=self.params.gamma,    
-                epoch=self.epoch,
-                logger=self.logger,
-                optim=self.optim,
-                train_loader=self.train_loader,
-                val_loader=self.val_loader,
-                dim=self.params.smallest_dim,
-                params=self.params,
-                print_prepend="Epoch {}".format(self.epoch),
-                final=False
-            )
+                # Update our training params
+                self.params.update(
+                    train_loss=train_loss,
+                    val_loss=val_loss,
+                    train_acc=train_acc,
+                    val_acc=val_acc,
+                    epoch=self.epoch,
+                )
 
-            if convergence or (self.epoch == self.params.n_epochs):
-                print(f"Stopped training after {self.epoch} epochs. Model has converged or max number of epochs have been reached!")
-                log_params["final"] = True # we also log all things that dont have an update interval
+                # Update our log params
+                log_params = dict(
+                    train_loss=train_loss,
+                    train_acc=train_acc, 
+                    train_ll=self.params.train_ll,
+                    train_complexity=self.params.train_complexity,
+                    val_loss=val_loss,
+                    val_acc=val_acc,
+                    model=self.model,
+                    gamma=self.params.gamma,    
+                    epoch=self.epoch,
+                    logger=self.logger,
+                    optim=self.optim,
+                    train_loader=self.train_loader,
+                    val_loader=self.val_loader,
+                    dim=min(self.params.dim_over_time),
+                    params=self.params,
+                    print_prepend="Epoch {}".format(self.epoch),
+                )
+
+                if convergence or (self.epoch == self.params.n_epochs):
+                    print(f"Stopped training after {self.epoch} epochs. Model has converged or max number of epochs have been reached!")
+                    log_params["final"] = True # we also log all things that dont have an update interval
+                    self.logger.log(**log_params)
+                    self.store_final_embeddings(**log_params)
+                    break
+
                 self.logger.log(**log_params)
-                self.store_final_embeddings()
-                break
 
+        except KeyboardInterrupt:
+            print("Training interrupted by user. Saving model and exiting.")
             self.logger.log(**log_params)
+            self.store_final_embeddings(**log_params)
 
-    def store_final_embeddings(self):
+    def store_final_embeddings(self, **kwargs):
         params = self.model.module.sorted_pruned_params()
-        f_path = os.path.join(self.log_path, "final_pruned_params.npz")
-
-        with open(f_path, "wb") as f:
-            np.savez(f, **params)
+        f_path = os.path.join(self.log_path, "parameters.npz")
+        self.params.update(pruned_q_mu=params["pruned_q_mu"], pruned_q_var=params["pruned_q_var"])
+        self.params.save(f_path)

@@ -74,7 +74,6 @@ class VI(nn.Module):
     def prune_dimensions(self, alpha=0.05):
         q_mu = self.q_mu()
         q_var = self.q_logvar().exp()
-
         importance = self.pruner(q_mu, q_var, alpha)
         signal = torch.where(importance > self.non_zero_weights)[0] # we have a certain minimum number of dimensions that we maintain!
         pruned_loc = q_mu[:, signal]

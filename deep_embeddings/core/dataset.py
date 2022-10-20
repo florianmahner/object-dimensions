@@ -2,6 +2,18 @@
 # -*- coding: utf-8 -*-
 
 import torch
+import os
+import numpy as np
+
+def build_triplet_dataset(triplet_path, device):
+    train = np.load(os.path.join(triplet_path, "train_90.npy"))
+    test = np.load(os.path.join(triplet_path, "test_10.npy"))
+
+    # maybe need to do train/val split here beforehand and test=test?
+    train_dataset = TripletDataset(train, device=device)
+    val_dataset = TripletDataset(test, device=device)
+
+    return train_dataset, val_dataset
 
 class TripletDataset(torch.utils.data.Dataset):
     ''' Sample triplet indices from the list combinations'''
