@@ -11,9 +11,9 @@ from deep_embeddings.utils import utils
 from deep_embeddings.core.priors import ExponentialPrior
 
 
-class Params:
-    """Write a class that holds that stores the training configuration of my machine learning pipeline 
-    and updates the results depending on the type of the update (e.g. list, array) and stores this as a dict"""
+class Params(object):
+    """ The class stores the training configuration of the training pipeline 
+    and updates the results depending on the type of the keyword arguments in the update (e.g. list, array)"""
 
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
@@ -45,7 +45,7 @@ class Params:
         np.savez(path, **self.__dict__)
 
 
-class MLTrainer:
+class EmbeddingTrainer(object):
     """ Trainer class that runs the entire optimzation of learing the embedding, storing and saving checkpoints etc. """
     def __init__(
         self,
