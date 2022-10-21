@@ -1,6 +1,8 @@
 
 results
-data
+data/feature_norms
+data/image_data
+data/models
 plots
 .vscode
 scripts/*.ipynb
