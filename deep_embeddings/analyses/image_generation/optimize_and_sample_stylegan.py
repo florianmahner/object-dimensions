@@ -9,6 +9,7 @@ import argparse
 import random
 import torch
 import os
+import glob
 
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
@@ -28,6 +29,7 @@ from deep_embeddings.utils.utils import img_to_uint8
 
 from deep_embeddings.analyses.image_generation.latent_predictor import LatentPredictor
 from torch.utils.data import DataLoader
+from PIL import Image
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--embedding_path", type=str, default="./weights/params/pruned_q_mu_epoch_300.txt", help="Path to weights directory")
@@ -38,7 +40,8 @@ parser.add_argument("--window_size", type=int, default=50, help="Window size of 
 parser.add_argument("--batch_size", type=int, default=8, help="Batch size for sampling")
 parser.add_argument("--truncation", type=float, default=0.4, help="Truncation value for noise sample")
 parser.add_argument("--top_k", type=int, default=16, help="Top k values to sample from")
-parser.add_argument("--sample_latents", type=str, default="False", choices=("True", "False"), help="Sample latents")
+parser.add_argument("--sample_dataset", type=str, default="True", choices=("True", "False"), help="Sample entire dataset")
+parser.add_argument("--find_topk", type=str, default="False", choices=("True", "False"), help="Find top k latent dimensions")
 parser.add_argument("--max_iter", type=int, default=200, help="Number of optimizing iterations")
 parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
 parser.add_argument("--rnd_seed", type=int, default=42, help="Random seed")
@@ -47,41 +50,25 @@ parser.add_argument("--alpha", type=float, default=1.0, help="Weight of the abso
 parser.add_argument("--beta", type=float, default=1.0, help="Weight for the softmax loss in the dimension optimization")
 parser.add_argument("--device", type=str, default="cuda:0", help="Device to use")
 
-def global_shift(img):
-    shifted_img = img.clone()
-    shifted_img -= img.min()
-    shifted_img /= shifted_img.max()
-    return shifted_img
 
 transforms = torchvision.transforms.Compose([
     torchvision.transforms.Resize(size=256),
     torchvision.transforms.CenterCrop(size=(224, 224)),
-    torchvision.transforms.ToTensor()])
+    torchvision.transforms.PILToTensor()])
 
 
 def load_style_gan():
     # Load the generator from style gan xl
-
-    network_pkl = "https://s3.eu-central-1.amazonaws.com/avg-projects/stylegan_xl/models/imagenet256.pkl"
+    network_pkl = "https://s3.eu-central-1.amazonaws.com/avg-projects/stylegan_xl/models/imagenet512.pkl"
     print('Loading networks from "%s"...' % network_pkl)
 
     with util.open_url(network_pkl) as f:
         generator = legacy.load_network_pkl(f)['G_ema']
         generator = generator.eval().requires_grad_(False)
 
-    # Construct an inverse rotation/translation matrix and pass to the generator.  The
-    # generator expects this matrix as an inverse to avoid potentially failing numerical
-    # operations in the network.
-    translate = (0,0)
-    rotate = 0
-    if hasattr(generator.synthesis, 'input'):
-        m = make_transform(translate, rotate)
-        m = np.linalg.inv(m)
-        generator.synthesis.input.transform.copy_(torch.from_numpy(m))
-
     return generator
 
-def sample_latents(model_name, module_name, embedding_path, n_samples, batch_size, truncation, top_k, device):
+def find_topk_latents(model_name, module_name, embedding_path, n_samples, batch_size, truncation, top_k, device):
     device = torch.device(device)
     base_path = os.path.dirname(os.path.dirname(embedding_path))
     regression_path = os.path.join(base_path, "analyses", "sparse_codes")
@@ -91,12 +78,10 @@ def sample_latents(model_name, module_name, embedding_path, n_samples, batch_siz
         raise FileNotFoundError(f"Regression path {regression_path} does not exist. Run sparse code predictions \
                                               first before optimizing latents.")
 
-    predictor = LatentPredictor(model_name, module_name, device, regression_path)
-    generator = load_style_gan()
-
-    sampler = Sampler(n_samples=n_samples, n_dims=predictor.embedding_dim, batch_size=batch_size, truncation=truncation, 
+    latent_predictor = LatentPredictor(model_name, module_name, device, regression_path)
+    predictor = SparseCodesPredictor(n_samples=n_samples, n_dims=latent_predictor.embedding_dim, batch_size=batch_size, truncation=truncation, 
                       top_k=top_k, out_path=out_path, device=device)
-    sampler.sample(generator, predictor)
+    predictor.predict_latent(latent_predictor)
 
 def optimize_latents(model_name, module_name, embedding_path, dim, lr, max_iter, truncation, alpha, beta, window_size, device):
     base_path = os.path.dirname(os.path.dirname(embedding_path))
@@ -115,7 +100,99 @@ def optimize_latents(model_name, module_name, embedding_path, dim, lr, max_iter,
     trainer.optimize_latents(generator, predictor)
 
 
-class Sampler(object):
+class StyleGanGenerator(object):
+    """ Generator class for StyleGan that create a latent and image dataset pair and saves to disk """
+
+    def __init__(self, out_path, n_samples, truncation, batch_size, device):
+        self.n_samples = n_samples
+        self.out_path = out_path
+        self.truncation = truncation
+        self.device = device
+        self.batch_size = batch_size
+
+        self.generator = load_style_gan()
+        self.generator = self.generator.to(self.device)
+
+    def sample_latents(self):
+        # Construct an inverse rotation/translation matrix and pass to the generator.  The
+        # generator expects this matrix as an inverse to avoid potentially failing numerical
+        # operations in the network.
+        translate = (0,0)
+        rotate = 0
+        if hasattr(self.generator.synthesis, 'input'):
+            m = make_transform(translate, rotate)
+            m = np.linalg.inv(m)
+            self.generator.synthesis.input.transform.copy_(torch.from_numpy(m))
+
+        sampled_latents = torch.zeros((self.n_samples, 37, 512))
+        seeds = np.random.randint(0, 2**32 - 1, size=self.n_samples)
+        for i in range(self.n_samples):
+            print(f"Generating latent w_space vector: {i+1}/{self.n_samples} ...", end="\r")
+            w_latent = gen_utils.get_w_from_seed(self.generator, 1, self.device, self.truncation, seed=seeds[i], 
+                                                        centroids_path=None, class_idx=None)
+
+            sampled_latents[i] = w_latent
+
+        return sampled_latents
+
+    def sample_dataset(self, sampled_latents=None):
+        """ Saves all images and latents to disc """
+        if not os.path.exists(self.out_path):
+            print(f"Creating directory {self.out_path}")
+            os.makedirs(os.path.join(self.out_path, "images"))
+            os.makedirs(os.path.join(self.out_path, "latents"))
+
+        if not sampled_latents:
+            sampled_latents = self.sample_latents()
+
+        dataloader = DataLoader(sampled_latents, batch_size=self.batch_size)
+        print('Generating images and sparse code predictions ...\n')
+
+        n_iter = len(dataloader)
+        n_samples = 0
+        with torch.no_grad():
+            for i, batch in enumerate(dataloader):
+                print("Process Batch {}/{}".format(i+1, n_iter), end="\r")
+                batch = batch.to(self.device) 
+                images = gen_utils.w_to_img(self.generator, batch, to_np=True)
+
+                for latent, img in zip(batch, images):
+                    img = Image.fromarray(img, mode="RGB")
+                    img.save(os.path.join(self.out_path, "images", f"{n_samples}.jpg"))
+                    latent = latent.cpu().numpy()
+                    np.save(os.path.join(self.out_path, "latents", f"{n_samples}.npy"), latent)
+                    n_samples += 1
+
+
+class StyleGanDataset(torch.utils.data.Dataset):
+    def __init__(self, base_path="./data/stylegan_dataset", transform=None):
+        self.latent_paths = glob.glob(os.path.join(base_path, "latents", "*.npy"))
+        self.image_paths = glob.glob(os.path.join(base_path, "images", "*.jpg"))
+
+        self.latent_paths.sort()
+        self.image_paths.sort()
+
+        self.latents = [np.load(latent_path) for latent_path in self.latent_paths]
+
+        assert len(self.latent_paths) == len(self.image_paths), "Latent and image paths do not match"
+        self.transform = transform
+        
+    def __len__(self):
+        return len(self.latent_paths)
+
+    def __getitem__(self, idx):
+        # latent = self.latents[idx]
+        latent = np.load(self.latent_paths[idx])
+        image = Image.open(self.image_paths[idx])
+        image = image.convert("RGB")
+        
+        if self.transform:
+            image = self.transform(image)
+
+        return image, latent
+
+
+class SparseCodesPredictor(object):
     """ Generate n latent samples a priori for optimization of latent embeddings 
     We generate n images for this using the pretrained style gan and then select the topk images that maximally 
     activate each of the embedding dimension. We then optimize for these topk latents! """
@@ -128,74 +205,59 @@ class Sampler(object):
         self.truncation = truncation
         self.out_path = out_path
         self.device = device
+        self.dataset = StyleGanDataset(base_path="./data/stylegan_dataset", transform=transforms)
 
         if not os.path.exists(self.out_path):
             print('Creating directories...\n')
             os.makedirs(self.out_path)
 
-    def sample(self, generator, comparator):        
-        generator = generator.to(self.device)
-        sampled_latents = gen_utils.get_w_from_seed(generator, self.n_samples, self.device, self.truncation, seed=0, 
-                                                    centroids_path=None, class_idx=None)
-
-        dataloader = DataLoader(sampled_latents, batch_size=self.batch_size)
-
-        generator.to(self.device)
+    def predict_latent(self, comparator):  
+        """ Sample latent using StyleGAN Xl batch wise and generate sparse code predictions for all images.
+        Store the top k latents and images for each dimension to disk. """
         comparator.to(self.device)
 
-        if torch.cuda.device_count() > 1:
-            print("Let's use", torch.cuda.device_count(), "GPUs!")
-            generator = torch.nn.DataParallel(generator, device_ids=[0,1,2])
-            comparator = torch.nn.DataParallel(comparator, device_ids=[0,1,2])
-
-        generator.eval()
-        comparator.eval()
-
-        sampled_codes = torch.zeros(self.n_samples, self.n_dims).to(self.device)
+        dataloader = DataLoader(self.dataset, batch_size=self.batch_size, shuffle=False)
+        sampled_codes = torch.zeros((self.n_samples, self.n_dims))
         n_iter = len(dataloader)
-        with torch.no_grad():
-            for i, batch in enumerate(dataloader):
-                batch = batch.to(self.device) 
-                images = gen_utils.w_to_img(generator, batch, to_np=False)
+        for i, (img, _) in enumerate(dataloader):
+            img = img.to(self.device)
+            _, codes = comparator(img)
+            sampled_codes[i*self.batch_size:(i+1)*self.batch_size] = codes
+            print(f'Iteration: {(i+1):02d} / {n_iter}', end='\r')
 
-                _, codes = comparator(images)
-                sampled_codes[i*self.batch_size:(i+1)*self.batch_size] += codes
-                print(f'Iteration: {(i+1):02d} / {n_iter}', end='\r')
+        self._save_topk(sampled_codes)
 
-        self._save_topk(generator, sampled_codes, sampled_latents)
-
-    def _save_topk(self, generator, sampled_codes, sampled_latents):
+    def _save_topk(self, sampled_codes):
         for j, code in enumerate(sampled_codes.T):
             print(f"Save topk for dim {j:02d}", end="\r")
             topk_indices = torch.argsort(code, descending=True)[:self.top_k]
-            topk_latents = sampled_latents[topk_indices]
-            self._save_latents(generator, topk_latents, j)
 
-    def _save_latents(self, generator, topk_latents, j):
-        out_path = os.path.join(self.out_path, f'{j:02d}', 'sampled_latents')
-        if not os.path.exists(out_path):
-            os.makedirs(out_path)
+            topk_images, topk_latents = [], []
+            for index in topk_indices:
+                img, latent = self.dataset[index]
+                topk_images.append(img)
+                topk_latents.append(latent)            
 
+            out_path = os.path.join(self.out_path, f'{j:02d}', 'sampled_latents')
+            if not os.path.exists(out_path):
+                os.makedirs(out_path)
+
+            self._save_latents(out_path, topk_latents, j)
+            self._save_images(out_path, topk_images, j)
+
+    def _save_latents(self, out_path, topk_latents, j):
+        """ Save topk latents for each dimension to disk"""
         for k, latent in enumerate(topk_latents):
-            latent = latent.cpu().numpy()
-            torch.save(latent, os.path.join(out_path, f'sampled_latent_{k:02d}.pt'))
+            np.save(os.path.join(out_path, f'sampled_latent_{k:02d}.npy'), latent)
 
-        with torch.no_grad():    
-            topk_latents = topk_latents.to(self.device)
-            images = gen_utils.w_to_img(generator, topk_latents, to_np=False)
-                
-        self._save_images(images, out_path, j)
-
-    def _save_images(self, images, out_path, dim):
+    def _save_images(self, out_path, images, dim):
+        """ Save topk images for each dimension to disk """
         fig = plt.figure(figsize=(4,4))
         gs1 = gridspec.GridSpec(4,4)
         gs1.update(wspace=0.002, hspace=0.002) # set the spacing between axes.
-        images = images.cpu()
-
         for k, img in enumerate(images):
             ax = plt.subplot(gs1[k])
-            img = global_shift(img)
-            img = img.permute(1, 2, 0).numpy()
+            img = img.permute(1,2,0).numpy()
             ax.imshow(img)
             ax.set_xticks([])
             ax.set_yticks([])
@@ -247,105 +309,31 @@ class Optimizer(nn.Module):
         sampled_latent = torch.from_numpy(sampled_latent)
         latent = nn.Parameter(sampled_latent, requires_grad=True)
         optim = torch.optim.Adam([latent], lr=self.lr)
-
-        # latent = nn.Linear(sampled_latent.shape[0], sampled_latent.shape[1], bias=False)
-        # latent.weight.data = sampled_latent
-        # latent.bias.data = torch.zeros(sampled_latent.shape[1])
-        # latent.bias.requires_grad = False
-
         latent = latent.to(self.device)
-
-
-    
-        # optim = torch.optim.Adam(latent.parameters(), lr=self.lr)
-
-
-
         
         # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, 'min', verbose=True)
         losses = []
-        self.max_iter = 10
-        img = torch.zeros((1, 3, 256, 256)).to(self.device) + 0.5
-        img = img.requires_grad_(True)
-        
-        # from torchviz import make_dot
-        # make_dot(latent).render("latent", format="png")
-
-
-        for i in range(self.max_iter):        
-            
-            # img = gen_utils.w_to_img(generator, latent.weight, to_np=False, noise_mode='none')
-
-
-            
-            img = img * latent.sum()
-
-
-
-            # if len(latent.shape) == 2:
-            #     latent = latent.unsqueeze(0)  # An individual dlatent => [1, G.mapping.num_ws, G.mapping.w_dim]
-
-            # with torch.no_grad():
-            #     synth_image = generator.synthesis(latent, noise_mode='none')
-            #     synth_image = (synth_image + 1) * 255/2  # [-1.0, 1.0] -> [0.0, 255.0]
-
-            # img = synth_image
-
-            # breakpoint()
-        
-            # img = img_to_uint8(img)
-
-            img /= 255
-            img += 255
-            img = img.type(torch.uint8)
-            
-    
+        for i in range(self.max_iter):                
+            img = gen_utils.w_to_img(generator, latent, to_np=False)
+            img = img.clamp(0, 255) 
+            img = img_to_uint8(img)
             _, codes = comparator(img) # Extract features
-
-            img = img.type(torch.float32) / 255
-
-            
-
-
             codes = codes.squeeze(0)
-
-        
-
             log_code = F.log_softmax(codes, dim=0)[self.dim] # Get the value of that image within the dimension we want to optimize for
 
-
-
-            
-            
             # Increase absolute dimension value aka dimension size reward (if we don't add this loss term, abs dimension value won't increase)
             # TODO Alpha and Beta are hyperparameters  -> How and why do we set them like this?
-            # abs_loss = -self.alpha * codes[self.dim] 
-
-            # nll = -self.beta * log_code #push probability mass in softmax towards dimension for which optimization is perfomed (argmax -> self.dim)
-            # loss = (abs_loss + nll)
-            # loss = abs_loss
-
-            abs_loss = log_code
-
-            # latent += torch.rand_like(latent) * 1e-6 # Add noise to latent vector to avoid local minima
-
+            abs_loss = -self.alpha * codes[self.dim] 
+            nll = -self.beta * log_code #push probability mass in softmax towards dimension for which optimization is perfomed (argmax -> self.dim)
+            loss = (abs_loss + nll)
+    
             optim.zero_grad()
-            # loss.backward()
-
-            breakpoint()
-
-            abs_loss.backward()
+            loss.backward()
             optim.step()
 
-            # losses.append(loss.item())
-
-            print(abs_loss.item(), latent.mean())
-            # scheduler.step(loss)
+            losses.append(loss.item())
+            print(f'Iteration: {(i+1):02d}, Abs loss: {abs_loss:.3f}, NLL: {nll:.3f}', end='\r')
             
-            # print(f'Iteration: {(i+1):02d}, Abs loss: {abs_loss:.3f}, NLL: {nll:.3f}', end='\r')
-            print(f'Iteration: {(i+1):02d}, Abs loss: {abs_loss:.3f}', end='\r')
-            
-
             if (i+1) % self.window_size == 0 and (i+1) > self.min_iter:
                 window = losses[(i+1-self.window_size):i+1]
                 print('Checking convergence criterion...\n')
@@ -353,8 +341,6 @@ class Optimizer(nn.Module):
                     print(f'Latent code converged. Stopping optimization after {i+1} iterations.\n')
                     break
 
-
-        breakpoint()
         return latent.data.detach()
 
     def _load_latents(self):
@@ -386,7 +372,7 @@ class Optimizer(nn.Module):
         gs1.update(wspace=0.002, hspace=0.002) # set the spacing between axes.
         for k, img in enumerate(images):
             ax = plt.subplot(gs1[k])
-            img = global_shift(img)
+            img = img_to_uint8(img)
             img = img.permute(1, 2, 0).numpy()
             ax.imshow(img)
             ax.set_xticks([])
@@ -404,13 +390,19 @@ if __name__ == '__main__':
     random.seed(args.rnd_seed)
     torch.manual_seed(args.rnd_seed)
 
+    if args.sample_dataset == "True":
+        generator = StyleGanGenerator(out_path="./data/stylegan_dataset", n_samples=args.n_samples, truncation=args.truncation, 
+                                           batch_size=args.batch_size, device=args.device)
+        generator.sample_dataset()    
+
+
     # We can either sample latents again or optimize previously stored ones
-    if args.sample_latents == "True":
+    if args.find_topk == "True":
         print("Sampling latents...\n")
-        sample_latents(args.model_name, args.module_name,  args.embedding_path, args.n_samples, 
+        find_topk_latents(args.model_name, args.module_name,  args.embedding_path, args.n_samples, 
                        args.batch_size, args.truncation, args.top_k, args.device)
 
-    for dim in args.dim:
-        print("Optimizing dimension: {}".format(dim))
-        optimize_latents(args.model_name, args.module_name, args.embedding_path, dim, args.lr,
-                        args.max_iter, args.truncation, args.alpha, args.beta, args.window_size, args.device)
+    # for dim in args.dim:
+    #     print("Optimizing dimension: {}".format(dim))
+    #     optimize_latents(args.model_name, args.module_name, args.embedding_path, dim, args.lr,
+    #                     args.max_iter, args.truncation, args.alpha, args.beta, args.window_size, args.device)
