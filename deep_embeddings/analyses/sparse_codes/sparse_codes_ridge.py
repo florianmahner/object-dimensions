@@ -12,19 +12,22 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from deep_embeddings.utils import utils
 
-from sklearn.linear_model import RidgeCV
+from sklearn.linear_model import Ridge
+from sklearn.model_selection import KFold, GridSearchCV
+from sklearn.metrics import r2_score
+
 
 os.environ['OMP_NUM_THREADS'] = '32'
 
 parser = argparse.ArgumentParser(description='Run ridge regression on DNN features and embedding matrix.')
-parser.add_argument("--dnn_path", type=str, default="./data/vgg_bn_features_12/features.npy", help='Path to DNN features.')
+parser.add_argument("--dnn_path", type=str, default="./data/vgg_bn_features_12", help='Path to DNN features.')
 parser.add_argument("--embedding_path", type=str, default="./embedding/weights/params/pruned_params_epoch_1000.txt", help='Path to embedding matrix.')
 parser.add_argument("--k_folds", type=int, default=4, help='Number of folds for cross-validation.')
 parser.add_argument("--rnd_seed", type=int, default=42, help='Random seed for cross-validation.')
 
 
 def plot_predictions(r2_scores, results_path):
-    fig, ax  = plt.subplots(1)
+    fig, ax  = plt.subplots(1, 1)
     sns.lineplot(x=range(len(r2_scores)), y=r2_scores, ax=ax)
     ax.set_xlabel('Dimension')
     ax.set_ylabel('R2 score')
@@ -53,33 +56,48 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
     assert X.shape[0] == Y.shape[0], '\nNumber of objects in embedding and DNN feature matrix must be the same.\n'
 
     r2_scores = []
-    alphas = []
     for dim, y in enumerate(Y.T):
-        # ridge_cv = RidgeCV(scoring='r2', cv=k_folds, alphas=np.arange(0.4, 2.0, 0.2))
-        ridge_cv = RidgeCV(scoring='r2', cv=k_folds, alphas=[1.0])
-        y = y.reshape(-1,1)
-        ridge_cv.fit(X, y)
-        r2 = ridge_cv.score(X, y)
-        r2_scores.append(r2)
-        alpha = ridge_cv.alpha_
-        alphas.append(alpha)
-        print(f'R2score {r2}, Best alpha: {alpha}')
-        joblib.dump(ridge_cv, os.path.join(results_pajth, f'predictor_{dim:02d}.joblib'))
+
+        cv_outer = KFold(n_splits=k_folds, shuffle=True, random_state=1)
+        outer_alphas = []
+        outer_r2_scores = []
+
+        # This is the outer loop, where we split the data into k_folds
+        for train_idx, test_idx in cv_outer.split(X):
+            X_train, X_test = X[train_idx], X[test_idx]
+            y_train, y_test = y[train_idx], y[test_idx]
+            cv_inner = KFold(n_splits=k_folds, shuffle=True, random_state=1)
+
+            model = Ridge(random_state=1)
+            space = dict()
+            space['alpha'] = np.arange(5.8,6.2,0.2)
+
+            # Evluate the model on the inner loop
+            search = GridSearchCV(model, space, scoring='r2', cv=cv_inner, refit=True, n_jobs=num_workers)
+            result = search.fit(X_train, y_train)
+
+            # Extract best params and estimators
+            best_model = result.best_estimator_
+            best_alpha = best_model.alpha  
+            y_pred = best_model.predict(X_test)
+            r2 = r2_score(y_test, y_pred)
+            outer_alphas.append(best_alpha)
+            outer_r2_scores.append(r2)
+
+
+        r2_scores.append(np.mean(outer_r2_scores))
+        print(f'Best alpha for dimension {dim}: {np.mean(outer_alphas)}')
+        print(f'R2 score for dimension {dim}: {np.mean(r2_scores)}\n')
+        joblib.dump(best_model, os.path.join(results_path, f'predictor_{dim:02d}.joblib'))
 
     with open(os.path.join(results_path, 'r2_scores.npy'), 'wb') as f:
         np.save(f, r2_scores)
 
     plot_predictions(r2_scores, results_path)
-    
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
-
-    # args.dnn_path = '/LOCAL/fmahner/THINGS/vgg_bn_features_12/features.npy'
-    # args.embedding_path = '/LOCAL/fmahner/DeepEmbeddings/learned_embeddings/weights_vgg_12_512bs/params/pruned_q_mu_epoch_500.txt'
-    # args.k_folds = 4
-    # args.rnd_seed = 42
-
     np.random.seed(args.rnd_seed)
     random.seed(args.rnd_seed)
     run_ridge_regression(dnn_path=args.dnn_path, embedding_path=args.embedding_path, k_folds=args.k_folds)
