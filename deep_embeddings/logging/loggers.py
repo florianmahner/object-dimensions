@@ -56,39 +56,34 @@ class Logger(ABC):
 
 class DeepEmbeddingLogger:
     # TODO Make subscriptable, so that I can do logger['abc'] and logger['des']
-    def __init__(self, log_path, model, args):
+    def __init__(self, log_path, model, fresh=False, tensorboard=False, 
+                 params_interval=100, checkpoint_interval=500):
         self.log_path = log_path
-        self.logger = DefaultLogger(log_path, args.fresh)
-        self.logger.add_logger(
-            "checkpoint",
-            CheckpointLogger(log_path),
-            callbacks=["model", "optim", "epoch", "logger", "params"],
-            update_interval=args.checkpoint_interval,
-        )
-        self.logger.add_logger(
-            "params",
-            ParameterLogger(log_path, model, ["module.sorted_pruned_params"]),
-            update_interval=args.params_interval,
-        )
-        if args.tensorboard:
-            self.logger.add_logger(
-                "tensorboard",
-                TensorboardLogger(log_path),
-                callbacks=["train_loss", "train_ll", "train_complexity", "val_loss", "dim", "val_acc", "train_acc"],
-                update_interval=1,
-            )
-
+        self.logger = DefaultLogger(log_path, fresh)
         self.logger.add_logger(
             "file",
             FileLogger(log_path),
             callbacks=["train_loss", "val_loss", "train_acc", "val_acc", "dim"],
             update_interval=1,
         )
-        # self.logger.add_logger(
-        #     "history",
-        #     TrainingHistoryLogger(args.log_path),
-        #     callbacks=["train_loss", "val_loss", "train_acc", "val_acc", "dim", "gamma", "epoch", "params"],
-        # )
+        self.logger.add_logger(
+            "checkpoint",
+            CheckpointLogger(log_path),
+            callbacks=["model", "optim", "epoch", "logger", "params"],
+            update_interval=checkpoint_interval,
+        )
+        self.logger.add_logger(
+            "params",
+            ParameterLogger(log_path, model, ["module.sorted_pruned_params"]),
+            update_interval=params_interval,
+        )
+        if tensorboard:
+            self.logger.add_logger(
+                "tensorboard",
+                TensorboardLogger(log_path),
+                callbacks=["train_loss", "train_ll", "train_complexity", "val_loss", "dim", "val_acc", "train_acc"],
+                update_interval=1,
+            )
 
     def log(self, *args, **kwargs):
         self.logger.log(*args, **kwargs)
@@ -159,31 +154,26 @@ class FileLogger(Logger):
         return self._log_path
 
     def _init_loggers(self):
-        logging.basicConfig(level=logging.INFO)
-        # If previous logger exists, we first need to delete the old root logger
-        fileh = logging.FileHandler(self.log_path, "w")
-        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-        fileh.setFormatter(formatter)
-        log = logging.getLogger()  # root logger
-        stdlog = logging.StreamHandler(sys.stdout)
-        log.removeHandler(stdlog)  # prevents multiple console prints
-        for handler in log.handlers[:]:  # remove all old handlers
-            log.removeHandler(handler)
-            log.addHandler(stdlog)  # also print to stout
-            log.addHandler(fileh)  # set the new handler
-
+        self.logger = logging.getLogger()  # root logger
+        self.logger.setLevel(logging.INFO)
+        formatter = logging.Formatter(
+            "%(asctime)s - %(levelname)s - %(message)s"
+        )
+        filename = self.log_path
+        file_handler = logging.FileHandler(filename)
+        file_handler.setLevel(logging.INFO)
+        file_handler.setFormatter(formatter)
+        self.logger.addHandler(file_handler)
+  
     def log(self, step=None, print_prepend=None, *args, **kwargs):
-        # TODO Add print fmt too -> e.g. max number of floating points!
-        logging.info("")
+        self.logger.info("")
         print_prepend = print_prepend + " - " if print_prepend else ""
         for a in args:
             a = a.replace("_", " ").capitalize()
-            logging.info(print_prepend + a)
+            self.logger.info(print_prepend + a)
         for k, v in kwargs.items():
             k = k.replace("_", " ").capitalize()
-            logging.info(f"{print_prepend}{k}: {v}")
-        
-
+            self.logger.info(f"{print_prepend}{k}: {v}")
 
 class CheckpointLogger(Logger):
     """Logs models and optimizer each checkpoint"""
