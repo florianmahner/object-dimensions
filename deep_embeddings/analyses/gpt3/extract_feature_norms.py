@@ -12,82 +12,116 @@ import argparse
 import pandas as pd
 import numpy as np
 from collections import defaultdict
+from copy import deepcopy
 
-from deep_embeddings.utils.utils import load_sparse_codes
+from deep_embeddings.utils.utils import load_sparse_codes, filter_embedding_by_behavior
 
 parser = argparse.ArgumentParser(description='Label dimensions of sparse codes using GPT3')
 parser.add_argument('--embedding_path', default='./embedding.txt', type=str, help='Path to the embedding txt file')
 parser.add_argument('--dnn_path', default='./vgg_features', type=str, help='Path to all vgg features')
+parser.add_argument('--feature_norm_path', default='./data/feature_norms', type=str, help='Path to GPT3 norms')
 
 
-def remove_rare_features(features, descriptions, freq):
-    reduced_indices = np.where(features.sum(1) > freq)[0]
-    features = features.iloc[reduced_indices, :]
-    # descriptions = [descriptions[r] for r in reduced_indices]
-    descriptions = descriptions[reduced_indices]
-    return features, descriptions
+def normalize_object_dimension_weights(object_dimension_embeddings):
+    # Normalize object dimension weights 
+    dim_sums = object_dimension_embeddings.sum(axis=0)
+    normalized_object_dimension_embeddings = object_dimension_embeddings.div(dim_sums)
 
-def cosine(x, y):
-    return (x @ y) / (np.linalg.norm(x) * np.linalg.norm(y))
+    return normalized_object_dimension_embeddings
 
-def pearsonr(x, y):
-    x_c = x - x.mean()
-    y_c = y - y.mean()
-    return cosine(x_c, y_c)
+def compute_feature_weights_for_dims(object_feature_embeddings, object_dimension_embeddings, dims):
+    # Compute feature weight for each dimension 
+    weighted_features_for_all_dims = pd.DataFrame()
+    for dim in dims:
+        print(f'Run dimension: {dim}')
+        df = deepcopy(object_feature_embeddings)
+        dimension_values = object_dimension_embeddings.loc[:, dim]
 
-def correlate_features(w, features):
-    return [pearsonr(w, feature) for feature in features]
+        df_weighted_by_dim = df.mul(dimension_values, axis=0)
+        df_summed_over_objects = df_weighted_by_dim.sum(axis=0).to_frame().sort_index()
 
-def label_dimensions(dimensions, features, descriptions, top_k):
-    dim_labels = defaultdict(list)
-    features = features.to_numpy() 
-    for i, w_i in enumerate(dimensions.T):
-        sorted_objects = np.argsort(-w_i)
-        features = features[:, sorted_objects]
-        w_i = w_i[sorted_objects]
-        corrs = correlate_features(w_i, features)
-        topk_features = np.argsort(corrs)[::-1][:top_k]
-        dim_labels[i].extend(descriptions[topk_features].tolist())
-    return dim_labels
+        df_renamed = df_summed_over_objects.rename(columns={df_summed_over_objects.columns[0]: dim})
+        weighted_features_for_all_dims = pd.concat([weighted_features_for_all_dims, df_renamed], axis=1)
 
-def save_dim_labels_(out_path, dim_labels):
-    if not os.path.exists(out_path):
-        os.makedirs(out_path)
+    return weighted_features_for_all_dims
 
-    # Write dict to pickle file
-    with open(os.path.join(out_path, 'dimensions_labelled.pkl'), 'wb') as f:
-        pickle.dump(dim_labels, f)
+def normalize_feature_weights_across_dims(weighted_features_for_all_dims, dims):
+    # Normalize feature weights across dimensions by substracting mean value based on all other dimensions
+    normed_features = pd.DataFrame()
+    for dim in dims:
+        features_for_all_other_dims = weighted_features_for_all_dims.drop(dim, axis=1)
+        mean_per_feature = features_for_all_other_dims.mean(axis=1)
 
-    dim_labelled = pd.DataFrame.from_dict(dict(dim_labels))
-    dim_labelled.to_csv(os.path.join(out_path, 'dimensions_labelled.csv'), sep=',', index=False)
+        dim_values = weighted_features_for_all_dims.loc[:, dim]
+        dim_values_normed = dim_values.subtract(mean_per_feature).to_frame()
+
+        dim_values_normed = dim_values_normed.rename(columns={dim_values_normed.columns[0]: dim})
+        normed_features = pd.concat([normed_features, dim_values_normed], axis=1)
+
+    return normed_features
+
+def calc_top_feature_per_dim(object_dimension_embeddings, object_feature_embeddings, dims):
+    '''
+    Calculate the top feature for each dimension by weighting the feature frequency with the object dimension weights.
+    :param object_feature_embeddings: is a objectXfeature matrix with either frequency or a normalized count like tfidf
+    :param object_feature_embeddings: is a objectXdimension matrix with dimension weights for each object
+    :param dims: is a list of dimension names
+    '''
+    object_dimension_embeddings = normalize_object_dimension_weights(object_dimension_embeddings)
+    weighted_features_for_all_dims = compute_feature_weights_for_dims(object_feature_embeddings, object_dimension_embeddings, dims)
+    normed_features = normalize_feature_weights_across_dims(weighted_features_for_all_dims, dims)
+
+    return normed_features
+
+def matrix_to_top_list(df, topk=6):
+    df_list = pd.DataFrame()
+    for dim in df.columns:
+        dim_values = df.loc[:, [dim]].reset_index()
+        dim_values = dim_values.rename(columns={dim_values.columns[0]: 'feature', dim_values.columns[1]: 'weight'})
+        top = dim_values.sort_values(by='weight', ascending=False)[:topk]
+        top['dimension'] = dim
+        df_list = pd.concat([df_list, top])
+
+    return df_list
+
 
 def generate_gpt3_norms(embedding_path, dnn_path, feature_norm_path='./data/feature_norms/feature_object_matrix.csv'):
     feature_norms = pd.read_csv(feature_norm_path)
-    feature_norms.rename(columns={ feature_norms.columns[0]: "features" }, inplace = True)
-    descriptions = feature_norms['features'].to_numpy()
-    feature_norms = feature_norms.drop(columns=['features'])
-    # item_names = pd.read_csv('./data/feature_norms/item_names.tsv', sep='\t', encoding='utf-8')
-
+    feature_norms = feature_norms.T
     embedding = load_sparse_codes(embedding_path)
-    file_path = os.path.join(dnn_path, 'file_names.txt')
 
+    if not os.path.exists(dnn_path):
+        raise ValueError(f'Path to DNN features does not exist: {dnn_path}')
+    
+    file_path = os.path.join(dnn_path, 'filenames.txt')
     if not os.path.isfile(file_path):
-        raise ValueError('VGG path does not contain file_names.txt')
+        raise ValueError('VGG path does not contain filenames.txt')
     else:
         filenames = np.loadtxt(file_path, dtype=str)
     
-    # Find reference images, i.e. indices from behavior!
-    behavior_indices = np.array([i for i, f in enumerate(filenames) if "b.jpg" in f])
-    embedding = embedding[behavior_indices, :]
+    # Find reference images in THINGS database, i.e. indices from behavior, i.e. images ending with ".b"
+    embedding, filenames = filter_embedding_by_behavior(embedding, filenames)
 
-    feature_norms, descriptions = remove_rare_features(feature_norms,  descriptions, 30)
-    dim_labels = label_dimensions(embedding, feature_norms, descriptions, 15)
+    objects = [os.path.basename(f).split(".")[0][:-4] for f in filenames]
+    embedding_pd = pd.DataFrame(embedding, index=objects)
 
+    descriptions = calc_top_feature_per_dim(embedding_pd, feature_norms, list(range(embedding.shape[1])))
+    topk_descriptions = matrix_to_top_list(descriptions, topk=8)
+
+    topk_indices = topk_descriptions['feature'].tolist()
+    
+
+    # Get the first row of the feature norms pd dataframe
+    text = feature_norms.iloc[0, :].tolist()
+    features = [text[t] for t in topk_indices]
+    topk_descriptions['description'] = features
+
+    # Save to file
     base_path = os.path.dirname(os.path.dirname(embedding_path))
-    out_path = os.path.join(base_path, 'analyses', 'gpt3_labels')
+    out_path = os.path.join(base_path, 'analyses', 'gpt3_labels', 'dimensions_labelled.csv')
+    topk_descriptions.to_csv(out_path, index=False)
 
-    save_dim_labels_(out_path, dim_labels)
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    generate_gpt3_norms(args.embedding_path, args.dnn_path)
+    generate_gpt3_norms(args.embedding_path, args.dnn_path, args.feature_norm_path)
