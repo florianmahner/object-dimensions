@@ -7,7 +7,7 @@ from functools import partial
 
 
 class DimensionPruning(nn.Module):
-    """We prune dimensions based on the importance of each dimension, which is determined by the set of pvalues obtained from the
+    r"""We prune dimensions based on the importance of each dimension, which is determined by the set of pvalues obtained from the
     cdf of the normal distribution given the mean and variance of the embedding, corrected for multiple comparisons by calculting
     the FDR given the Benjamin-Hochberg procedure."""
 
@@ -16,20 +16,23 @@ class DimensionPruning(nn.Module):
         if not isinstance(cdf_loc, torch.Tensor):
             cdf_loc = torch.tensor(cdf_loc)
         self.register_buffer("cdf_loc", cdf_loc)
-        # empirical cumulative distribution function factor for the benjamin hochberg correction
+        
+        # Empirical cumulative distribution function factor for the benjamin hochberg correction
         self.register_buffer("ecdf_factor", self._ecdf_torch(n_objects)) 
-        print(n_objects, self.cdf_loc)
 
-    def __call__(self, q_mu, q_var, alpha=0.05):
+    def __call__(self, q_mu,q_var, alpha=0.05):
         pvals = self.compute_pvals_torch(q_mu, q_var)
         rejections = self.adjust_pvals_mutliple_comparisons_torch(pvals, alpha)
-        importance = self.get_importance_torch(rejections)
+        importance = self.get_importance_torch(rejections) 
         return importance
 
     def pval_torch(self, q_mu, q_var, j):
         # the cdf describes the probability that a random sample X of n objects at dimension j
-        # will be less than or equal to 0 (in our case) for a given mean (mu) and standard deviation (sigma):
-        return torch.distributions.Normal(q_mu[:, j], q_var[:, j]).cdf(self.cdf_loc)
+        # will be less than or equal to 0 in our case) for a given mean (mu) and standard deviation (sigma):
+        mu = q_mu[:, j]
+        var = q_var[:, j]
+        pvals = torch.distributions.LogNormal(mu, var).cdf(self.cdf_loc)
+        return pvals
         
     def compute_pvals_torch(self, q_mu, q_var):
         # we compute the cdf probabilities >0 for all dimensions
@@ -37,7 +40,6 @@ class DimensionPruning(nn.Module):
         n_dim = q_mu.shape[1]
         range_dim = torch.arange(n_dim)
         pvals = fn(range_dim)
-
         return pvals.T
 
     def adjust_pvals_mutliple_comparisons_torch(self, p_vals, alpha=0.05):
@@ -66,8 +68,9 @@ class DimensionPruning(nn.Module):
         else:
             pvals_sorted = pvals
 
+        # This asks if we reject the null hypothesis for all p-values corrected for
         reject = pvals_sorted <= self.ecdf_factor * alpha
-
+        
         if reject.any():
             rejectmax = max(torch.nonzero(reject)[0])
             reject[:rejectmax] = True

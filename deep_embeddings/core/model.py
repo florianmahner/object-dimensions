@@ -3,43 +3,54 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 
-from deep_embeddings.core.pruning import DimensionPruning
+from deep_embeddings.core.pruning_lognormal import DimensionPruning
 
                 
 class QLogVar(nn.Module):
     ''' Log variance of the variational distribution q '''
-    def __init__(self, n_objects, init_dim=100, bias=True):
+    def __init__(self, n_objects, init_dim):
         super().__init__()
-        self.q_logvar = nn.Linear(n_objects, init_dim, bias=bias)
+        self.q_logvar = nn.Parameter(
+            torch.FloatTensor(n_objects, init_dim)
+        )
 
     def forward(self):
-        return self.q_logvar.weight.T
+        return self.q_logvar
 
 
 class QMu(nn.Module):
     ''' Mean of the variational distribution q '''
-    def __init__(self, n_objects, init_dim=100, bias=True):
+    def __init__(self, n_objects, init_dim):
         super().__init__()
-        self.q_mu = nn.Linear(n_objects, init_dim, bias=bias)
-        nn.init.kaiming_normal_(self.q_mu.weight, mode='fan_out', nonlinearity='relu')
-
+        self.q_mu = nn.Parameter(
+            torch.FloatTensor(n_objects, init_dim)
+        )
     def forward(self):
-        return self.q_mu.weight.T
+        return self.q_mu
 
 
-class VI(nn.Module):
-    def __init__(self, n_objects, init_dim=100, init_weights=True):
+class Embedding(nn.Module):
+    r""" This is the representational embedding for objects. It is specified by a variational
+    distribution. The variational distribution is parameterized by a mean and a log-variance. 
+    The mean and log variance are linear transformations of the input data. Both are free parameters 
+    that are learned during training."""
+    def __init__(self, prior, n_objects, init_dim=100, non_zero_weights=5):
         super().__init__()
-        self.q_mu = QMu(n_objects, init_dim, bias=True) 
-        self.q_logvar = QLogVar(n_objects, init_dim, bias=True)
-        self.non_zero_weights = 5 # minimum number of non-zero weights
-        self.init_dim = init_dim
-        if init_weights:
-            self._initialize_weights()
+        self.prior = prior
+        cdf_loc = self.prior.mode
 
-        self.pruner = DimensionPruning(n_objects)
+        self.non_zero_weights = non_zero_weights
+        self.init_dim = init_dim
+
+        self.q_mu = QMu(n_objects, init_dim) 
+        self.q_logvar = QLogVar(n_objects, init_dim)
+
+        self._init_weights()
+        
+        self.pruner = DimensionPruning(n_objects, cdf_loc=cdf_loc)
 
     @staticmethod
     def reparameterize(loc, scale):
@@ -47,35 +58,32 @@ class VI(nn.Module):
         eps = scale.data.new(scale.size()).normal_()
         return eps.mul(scale).add(loc)
 
-    @staticmethod
-    def reparameterize_old(q_mu, q_var):
-        ''' Apply reparameterization trick '''             
-        # scale = torch.exp(0.5 * q_logvar) + 1e-5 NOTE i dont need this?!
-        eps = torch.randn_like(q_var)
-        X = q_mu + q_var * eps
+    def _init_weights(self):
+        """ Initialize weights for the embedding """
+        self.q_mu.q_mu.data.log_normal_(mean=self.prior.loc, std=self.prior.scale)
 
-        return X
-
-    def _initialize_weights(self):
-        # this is equivalent to - (1 / std(mu)) = -std(mu)^{-1}
-        eps = -(self.q_mu.q_mu.weight.data.std().log() * -1.0).exp()
-        nn.init.constant_(self.q_logvar.q_logvar.weight, eps)
+        # Intialise the log variance of a variational autoencoder 
+        # with the log variance of the prior
+        eps = -(self.q_mu.q_mu.std().log() * -1.0).exp()
+        self.q_logvar.q_logvar.data.fill_(eps)
+    
 
     def forward(self):
         q_mu = self.q_mu()
         q_var = self.q_logvar().exp() # we need to exponentiate the logvar
-        X = self.reparameterize(q_mu, q_var)
-
-        # TODO Maybe do F.relu(X)?, z = F.relu(X) -> we need original, not relu X for prior eval.
         
-        return X, q_mu, q_var
+        X = self.reparameterize(q_mu, q_var)
+        z = F.relu(X)
+    
+        return z, X, q_mu, q_var
 
     @torch.no_grad()
     def prune_dimensions(self, alpha=0.05):
         q_mu = self.q_mu()
         q_var = self.q_logvar().exp()
-        importance = self.pruner(q_mu, q_var, alpha)
-        signal = torch.where(importance > self.non_zero_weights)[0] # we have a certain minimum number of dimensions that we maintain!
+        importance = self.pruner(q_mu, q_var, alpha=alpha)
+        signal = torch.where(importance > self.non_zero_weights)[0] 
+
         pruned_loc = q_mu[:, signal]
         pruned_scale = q_var[:, signal]
 
@@ -93,9 +101,9 @@ class VI(nn.Module):
         _, pruned_loc, pruned_scale = self.prune_dimensions()
         pruned_loc = pruned_loc.detach().cpu().numpy()
         pruned_scale = pruned_scale.detach().cpu().numpy()
-        pruned_loc = np.maximum(0, pruned_loc) # we really zero out all negative values in the embedding!
-        pruned_scale = np.maximum(0, pruned_scale)
-        pruned_loc = pruned_loc[:, np.argsort(-np.linalg.norm(pruned_loc, axis=0, ord=1))]
-        pruned_scale = pruned_scale[:, np.argsort(-np.linalg.norm(pruned_loc, axis=0, ord=1))]
+        argsort_loc = np.argsort(-np.linalg.norm(pruned_loc, axis=0, ord=1))
+        pruned_loc = pruned_loc[:, argsort_loc]
+        pruned_scale = pruned_scale[:, argsort_loc]
         params = dict(pruned_q_mu=pruned_loc, pruned_q_var=pruned_scale)
+        
         return params

@@ -8,7 +8,6 @@ import glob
 import numpy as np
 import torch.nn.functional as F
 from deep_embeddings.utils import utils 
-from deep_embeddings.core.priors import ExponentialPrior
 
 
 class Params(object):
@@ -17,7 +16,7 @@ class Params(object):
 
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
-        for key in ("train_complexity", "train_ll", "train_loss", "val_ll", "train_acc", "val_acc", "dim_over_time"):
+        for key in ("train_complexity", "train_nll", "train_loss", "val_loss", "train_acc", "val_acc", "dim_over_time"):
             setattr(self, key, [])
         self.start_epoch = 1
         
@@ -61,7 +60,6 @@ class EmbeddingTrainer(object):
         lr=0.001,
         gamma=0.5,
         stability_time=200, 
-        seed=42
     ):
         self.model = model
         self.train_loader = train_loader
@@ -69,7 +67,7 @@ class EmbeddingTrainer(object):
         self.logger = logger
 
         self.params = Params(lr=lr, 
-                             init_dim=model.module.init_dim,
+                             init_dim=model.init_dim,
                              gamma=gamma, 
                              n_epochs=n_epochs, 
                              mc_samples=mc_samples, 
@@ -81,10 +79,9 @@ class EmbeddingTrainer(object):
         self.prior = prior
         self.device = device
         self.model.to(self.device)
-        self.prior.to(self.device)
 
     def parse_from_args(self, args):
-        attrs = ["n_epochs", "mc_samples", "lr", "gamma", "stability_time", "load_model",]
+        attrs = ["n_epochs", "mc_samples", "lr", "gamma", "stability_time", "load_model"]
         for attr in attrs:
             if hasattr(args, attr):
                 setattr(self.params, attr, getattr(args, attr))
@@ -106,6 +103,7 @@ class EmbeddingTrainer(object):
             self.optim.load_state_dict(checkpoint["optim_state_dict"])
             self.model.load_state_dict(checkpoint["model_state_dict"])
             params = checkpoint["params"]
+            params.stability_time += self.params.stability_time
             self.params = params 
             self.params.n_epochs = checkpoint['epoch'] + self.params.n_epochs
             self.params.start_epoch = checkpoint['epoch'] + 1
@@ -118,11 +116,11 @@ class EmbeddingTrainer(object):
         indices = indices.unbind(1)
 
         ind_i, ind_j, ind_k = indices
-        embedding, loc, scale = self.model()
+        embedding, _, loc, scale = self.model()
 
-        embedding_i = F.relu(embedding[ind_i])
-        embedding_j = F.relu(embedding[ind_j])
-        embedding_k = F.relu(embedding[ind_k])
+        embedding_i = embedding[ind_i]
+        embedding_j = embedding[ind_j]
+        embedding_k = embedding[ind_k]
 
         sim_ij = torch.sum(embedding_i * embedding_j, dim=1)
         sim_ik = torch.sum(embedding_i * embedding_k, dim=1)
@@ -142,26 +140,22 @@ class EmbeddingTrainer(object):
 
         # compute the cross entropy loss -> we dont need to one hot encode the batch
         # we just use the similarities at index 0, all other targets are 0 and redundant!
-        log_likelihood = torch.mean(-log_softmax_ij)
+        nll = torch.mean(-log_softmax_ij)
     
         # log probability of variational distribution
-        # log_q = utils.log_normal_pdf(embedding, loc, scale)
-        log_q = utils.normal_pdf(embedding, loc, scale).log()
+        log_q = torch.distributions.LogNormal(loc, scale)
+        log_p = torch.distributions.LogNormal(self.prior.loc, self.prior.scale)
 
-        # gaussian prior log probability of the prior distribution
-        if isinstance(self.prior, ExponentialPrior):
-            embedding = F.relu(embedding)
+        kl_div = torch.distributions.kl_divergence(log_q, log_p)
 
-        log_p = self.prior(embedding).log()
-        
-        return log_likelihood, log_q, log_p, triplet_accuracy
+        return nll, kl_div, triplet_accuracy
 
     def step_dataloader(self, dataloader):
-        n_pairwise = len(dataloader.dataset)
+        n_triplets = len(dataloader.dataset)
         n_batches = len(dataloader)
 
         complex_losses = torch.zeros(n_batches)
-        ll_losses = torch.zeros(n_batches)
+        nll_losses = torch.zeros(n_batches)
         losses = torch.zeros(n_batches)
 
         triplet_accuracies = torch.zeros(n_batches)
@@ -170,14 +164,14 @@ class EmbeddingTrainer(object):
 
             # only for trainin batches, not val batches
             if self.model.training:
-                log_likelihood, log_q, log_p, accuracy = self.step_triplet_batch(indices)
-                complexity_loss = (1 / n_pairwise) * (log_q.sum() - log_p.sum())
+                nll, kl_div, accuracy = self.step_triplet_batch(indices)
+                complexity_loss = kl_div.sum() / n_triplets
 
                 # Balance the loss with the gamma hyperparameter!
-                log_likelihood = self.params.gamma * log_likelihood
+                nll = self.params.gamma * nll
                 complexity_loss = (1 - self.params.gamma) * complexity_loss
 
-                loss = log_likelihood + complexity_loss
+                loss = nll + complexity_loss
 
                 # Balance the log likelihood and complexity loss by gamma
                 # loss = (self.params.gamma * log_likelihood) + ((1 - self.params.gamma) * complexity_loss)
@@ -190,7 +184,7 @@ class EmbeddingTrainer(object):
                 self.optim.step()
 
                 print(
-                    f"Train Batch {k}/{n_batches} Likelihood {log_likelihood.item()}, Complexity {complexity_loss.item()}",
+                    f"Train Batch {k}/{n_batches} NLL {nll.item()}, Complexity {complexity_loss.item()}",
                     end="\r",
                 )
 
@@ -200,23 +194,24 @@ class EmbeddingTrainer(object):
                     (self.params.mc_samples, self.params.init_dim)
                 )
                 for s in range(self.params.mc_samples):
-                    log_likelihood, log_q, log_p, accuracy = self.step_triplet_batch(indices)
-                    complexity_loss = (1 / n_pairwise) * (log_q.sum() - log_p.sum())
+                    nll, kl_div, accuracy = self.step_triplet_batch(indices)
+                    complexity_loss = kl_div.sum() / n_triplets
+
                     # NOTE For the val loss, we are not allowed to reweight using gamma, 
                     # since we want to compare different models on the same scale!
-                    sampled_likelihoods[s] = log_likelihood.item()
+                    sampled_likelihoods[s] = nll.item()
 
                 # validation loss
                 loss = torch.mean(sampled_likelihoods)
 
                 print(
-                    f"Val Batch {k}/{n_batches} Likelihood {loss}",
+                    f"Val Batch {k}/{n_batches} NLL {loss}",
                     end="\r",
                 )
 
             # def update loss history!
             complex_losses[k] += complexity_loss.item()
-            ll_losses[k] += log_likelihood.item()
+            nll_losses[k] += nll.item()
             losses[k] += loss.item()
             triplet_accuracies[k] += accuracy.item()
 
@@ -225,9 +220,9 @@ class EmbeddingTrainer(object):
         if self.model.training:
             self.params.update(
                 train_complexity=complex_losses.mean().item(),
-                train_ll=ll_losses.mean().item()
+                train_nll=nll_losses.mean().item()
             )
-
+        
         epoch_accuracy = torch.mean(triplet_accuracies).item()
 
         return loss, epoch_accuracy
@@ -235,7 +230,6 @@ class EmbeddingTrainer(object):
     def train_one_epoch(self):
         self.model.train(True)
         train_loss = self.step_dataloader(self.train_loader)
-
         return train_loss
 
     @torch.no_grad()
@@ -261,7 +255,7 @@ class EmbeddingTrainer(object):
     def evaluate_convergence(self):
         """ We evaluate convergence as the representational stability of the number of dimensions across a certain time 
         frame of epochs """
-        signal, _, _ = self.model.module.prune_dimensions()
+        signal, _, _ = self.model.prune_dimensions()
         dimensions = len(signal)
         self.params.update(dim_over_time=dimensions)
 
@@ -305,7 +299,7 @@ class EmbeddingTrainer(object):
                 log_params = dict(
                     train_loss=train_loss,
                     train_acc=train_acc, 
-                    train_ll=self.params.train_ll,
+                    train_nll=self.params.train_nll,
                     train_complexity=self.params.train_complexity,
                     val_loss=val_loss,
                     val_acc=val_acc,
@@ -316,7 +310,7 @@ class EmbeddingTrainer(object):
                     optim=self.optim,
                     train_loader=self.train_loader,
                     val_loader=self.val_loader,
-                    dim=min(self.params.dim_over_time),
+                    dim=self.params.dim_over_time[-1],
                     params=self.params,
                     print_prepend="Epoch {}".format(self.epoch),
                 )
@@ -336,7 +330,7 @@ class EmbeddingTrainer(object):
             self.store_final_embeddings(**log_params)
 
     def store_final_embeddings(self, **kwargs):
-        params = self.model.module.sorted_pruned_params()
+        params = self.model.sorted_pruned_params()
         f_path = os.path.join(self.log_path, "parameters.npz")
         self.params.update(pruned_q_mu=params["pruned_q_mu"], pruned_q_var=params["pruned_q_var"])
         self.params.save(f_path)
