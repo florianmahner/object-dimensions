@@ -61,8 +61,10 @@ class Embedding(nn.Module):
 
     def reparameterize(self, loc, scale):
         """Apply reparameterization trick."""
-        eps = scale.data.new(scale.size()).log_normal_(0, 1)
-        # eps = scale.data.new(scale.size()).normal_()
+
+        # eps = nn.init.trunc_normal_(scale.data.new(scale.size()), mean=0, std=0.01, a=0.0)
+        # eps = scale.data.new(scale.size()).log_normal_(0, 0.1)
+        eps = scale.data.new(scale.size()).normal_()
         return eps.mul(scale).add(loc)
 
     def _init_weights(self):
@@ -70,13 +72,13 @@ class Embedding(nn.Module):
 
         # Initialize the mean of the variational distribution with a truncated normal distribution
         # nn.init.trunc_normal_(self.q_mu.q_mu.data, mean=self.prior.loc, std=self.prior.scale, a=0.0)
-        # nn.init.trunc_normal_(self.q_mu.q_mu.data, mean=0, std=1, a=0.0)
+        nn.init.trunc_normal_(self.q_mu.q_mu.data, mean=0, std=1, a=0.0)
 
         # Around the cdf loc?
         # nn.init.kaiming_normal_(self.q_mu.q_mu.data, mode='fan_in', nonlinearity='leaky_relu') 
         # self.q_mu.q_mu.data = self.q_mu.q_mu.data + self.prior.mode
 
-        self.q_mu.q_mu.data.log_normal_(mean=self.prior.loc, std=self.prior.scale)
+        # self.q_mu.q_mu.data.log_normal_(mean=self.prior.loc, std=self.prior.scale)
 
     
         # self.q_mu.q_mu.data = self.q_mu.q_mu.data + self.prior.mode
@@ -84,12 +86,12 @@ class Embedding(nn.Module):
         # Intialise the log variance of a variational autoencoder 
         # with the log variance of the prior
         # nn.init.constant_(self.q_logvar.q_logvar.data, self.prior.scale.log())
-        # eps = -(self.q_mu.q_mu.std().log() * -1.0).exp()
-        # self.q_logvar.q_logvar.data.fill_(eps)
+        eps = -(self.q_mu.q_mu.std().log() * -1.0).exp()
+        self.q_logvar.q_logvar.data.fill_(eps)
 
 
         # Inverse log normal distribution 
-        self.q_logvar.q_logvar.data.normal_(mean=-2, std=0.1)
+        # self.q_logvar.q_logvar.data.normal_(mean=-2, std=0.001)
     
 
     def forward(self):
@@ -97,8 +99,11 @@ class Embedding(nn.Module):
         q_var = self.q_logvar().exp() # we need to exponentiate the logvar
         
         # This is a normal distribution
-        X = self.reparameterize(q_mu, q_var)
-        X = F.relu(X)
+        X = self.reparameterize(q_mu, q_var)        
+        
+        # X  = F.relu(X) + 1e-6
+        # print(X.max(), X.min())
+        # X = F.relu(X)
     
         return X, q_mu, q_var
 

@@ -13,23 +13,32 @@ from abc import ABC, abstractmethod
 class BasePrior(nn.Module, ABC):
     """ Define an abstract prior class """
     @abstractmethod
-    def pdf(self):
+    def log_pdf(self):
         """ Probability density function of the prior """
         pass
 
 
-class LogGaussianPrior(torch.distributions.LogNormal):
-    def __init__(self, loc=0., scale=0.5):
-        super().__init__(loc, scale)
-
-    def pdf(self, X):
+class LogGaussianPrior(BasePrior):
+    def __init__(self, n_objects, init_dim, loc=0., scale=0.5):
+        super().__init__()
+        
+        self.register_buffer("loc", torch.zeros(n_objects, init_dim) + loc) 
+        self.register_buffer("scale", torch.ones(n_objects, init_dim) * scale)
+        
+    def log_pdf(self, X, loc, scale):
         """ Calculate the probability density function of the log-normal distribution """
-        pdf = self.log_prob(X)
+        pdf = torch.distributions.LogNormal(loc, scale).log_prob(X)
 
-        return pdf.exp()
+        return pdf
 
+    @property
+    def mode(self):
+        """ Calculate the mode of the log-normal distribution """
+        return torch.exp(self.loc)
+    
     def forward(self, X):
-        return self.pdf(X)
+        return self.log_pdf(X, self.loc, self.scale)
+
 
 
 class SpikeSlabPrior(BasePrior):
@@ -46,8 +55,17 @@ class SpikeSlabPrior(BasePrior):
         
         return spike + slab
 
+    def log_pdf(self, X, loc, scale):
+        log_pdf = torch.distributions.Normal(loc, scale).log_prob(X)
+
+        return log_pdf
+
     def forward(self, X):
-        return self.pdf(X)
+        spike = self.pi * torch.distributions.Normal(self.loc, self.spike).log_prob(X)
+        slab = (1 - self.pi) * torch.distributions.Normal(self.loc, self.slab).log_prob(X)
+        
+        return spike + slab
+    
 
     @property
     def mode(self):

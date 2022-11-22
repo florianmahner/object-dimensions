@@ -8,7 +8,7 @@ import os
 import numpy as np
 
 from deep_embeddings import Embedding
-from deep_embeddings import LogGaussianPrior
+from deep_embeddings import LogGaussianPrior, SpikeSlabPrior
 from deep_embeddings import build_triplet_dataset
 from deep_embeddings import EmbeddingTrainer
 from deep_embeddings import DeepEmbeddingLogger
@@ -64,7 +64,10 @@ def train(triplet_path, data_path, model_name, module_name,
         n_objects = features.shape[0]
 
     
-    model_prior = LogGaussianPrior(loc=0, scale=scale)
+    # model_prior = LogGaussianPrior(n_objects, init_dim, loc=0, scale=scale)
+    model_prior = SpikeSlabPrior(n_objects, init_dim)
+
+    
     model = Embedding(model_prior, n_objects, init_dim, non_zero_weights)
     device = torch.device(f"cuda:{device_id}") if torch.cuda.is_available() else torch.device("cpu")
     model.to(device)

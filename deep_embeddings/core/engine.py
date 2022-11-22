@@ -143,20 +143,43 @@ class EmbeddingTrainer(object):
         nll = torch.mean(-log_softmax_ij)
     
         # # log probability of variational distribution
-        log_q = torch.distributions.LogNormal(loc, scale)
-        log_p = torch.distributions.LogNormal(self.prior.loc, self.prior.scale)
-        kl_div = torch.distributions.kl_divergence(log_q, log_p)
+        # log_q = torch.distributions.LogNormal(loc, scale)
+        # log_p = torch.distributions.LogNormal(self.prior.loc, self.prior.scale)
+        # kl_div = torch.distributions.kl_divergence(log_q, log_p)
 
 
         # log_q1 = torch.distributions.LogNormal(loc, scale).log_prob(embedding)
         # log_p1 = torch.distributions.LogNormal(self.prior.loc, self.prior.scale).log_prob(embedding)
+
+        log_q = self.prior.log_pdf(embedding, loc, scale)
+        log_p = self.prior(embedding)
+
+        
+        kl_div = (log_q.sum() - log_p.sum())
+
+        breakpoint()
+
+    
+
+
+
+        # kl_div = -(log_q1.sum() - log_p1.sum())
+
+        # kl_div = F.kl_div(log_p, log_q, reduction="none", log_target=True)
+
+
+
+    
+
+
+
 
         # embedding = embedding.log()
         # loc_gauss = loc.log() 
         # log_q = torch.distributions.Normal(loc, scale).log_prob(embedding)
         # log_p = torch.distributions.Normal(self.prior.loc.exp(), self.prior.scale.exp()).log_prob(embedding)
 
-        # kl_div = (log_q.sum() - log_p.sum())
+
 
 
         # kl_div = -torch.sum(log_q1 - log_p1)
@@ -164,7 +187,7 @@ class EmbeddingTrainer(object):
 
 
         # n_triplets = len(self.train_loader.dataset)
-        # kl_div = F.kl_div(log_q1, log_p1, reduction="batchmean", log_target=True)
+        
 
 
         return nll, kl_div, triplet_accuracy
@@ -184,7 +207,7 @@ class EmbeddingTrainer(object):
             if self.model.training:
                 nll, kl_div, accuracy = self.step_triplet_batch(indices)
 
-                # nll = nll - nll
+                nll = nll - nll
 
 
                 complexity_loss = kl_div.sum() / n_triplets
