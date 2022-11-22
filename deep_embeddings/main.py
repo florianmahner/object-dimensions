@@ -33,7 +33,7 @@ parser.add_argument("--rnd_seed", type=int, default=42, help="Random seed")
 parser.add_argument("--gamma", type=float, default=0.5, help="Gamma parameter to balance KL div and reconstruction loss")
 parser.add_argument("--params_interval", type=int, default=100, help="Interval to save learned embeddings")
 parser.add_argument("--checkpoint_interval", type=int, default=100, help="Interval to save model checkpoints")
-parser.add_argument("--mc_samples", type=int, default=1, help="Number of Monte Carlo samples to use for inference")
+parser.add_argument("--mc_samples", type=int, default=5, help="Number of Monte Carlo samples to use for inference")
 parser.add_argument("--scale", type=float, default=0.5, help="Scale parameter for log normal prior")
 parser.add_argument("--non_zero_weights", type=int, default=5, help="Number of non zero weights for each object")
 parser.add_argument("--device_id", type=int, default=0, help="GPU device id")
@@ -85,7 +85,7 @@ def train(triplet_path, data_path, model_name, module_name,
     # Join all arguments to create a unique log path
     log_path = os.path.join(log_path, identifier, model_name, n_mio_samples, 
                             modality, prior, str(init_dim), 
-                            str(batch_size), str(scale), str(rnd_seed))
+                            str(batch_size), str(gamma), str(scale), str(rnd_seed))
 
     # Build loggers and train the model!
     logger = DeepEmbeddingLogger(log_path, model, fresh, tensorboard, params_interval, checkpoint_interval)

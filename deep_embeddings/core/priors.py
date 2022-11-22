@@ -48,3 +48,7 @@ class SpikeSlabPrior(BasePrior):
 
     def forward(self, X):
         return self.pdf(X)
+
+    @property
+    def mode(self):
+        return torch.tensor(0)
