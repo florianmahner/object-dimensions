@@ -142,7 +142,7 @@ class EmbeddingTrainer(object):
         # we just use the similarities at index 0, all other targets are 0 and redundant!
         nll = torch.mean(-log_softmax_ij)
     
-        # log probability of variational distribution
+        # # log probability of variational distribution
         log_q = torch.distributions.LogNormal(loc, scale)
         log_p = torch.distributions.LogNormal(self.prior.loc, self.prior.scale)
         kl_div = torch.distributions.kl_divergence(log_q, log_p)
@@ -150,9 +150,17 @@ class EmbeddingTrainer(object):
 
         # log_q1 = torch.distributions.LogNormal(loc, scale).log_prob(embedding)
         # log_p1 = torch.distributions.LogNormal(self.prior.loc, self.prior.scale).log_prob(embedding)
+
+        # embedding = embedding.log()
+        # loc_gauss = loc.log() 
+        # log_q = torch.distributions.Normal(loc, scale).log_prob(embedding)
+        # log_p = torch.distributions.Normal(self.prior.loc.exp(), self.prior.scale.exp()).log_prob(embedding)
+
+        # kl_div = (log_q.sum() - log_p.sum())
+
+
         # kl_div = -torch.sum(log_q1 - log_p1)
-
-
+        # kl_div = log_q1.sum() - log_p1.sum()
 
 
         # n_triplets = len(self.train_loader.dataset)
@@ -176,7 +184,7 @@ class EmbeddingTrainer(object):
             if self.model.training:
                 nll, kl_div, accuracy = self.step_triplet_batch(indices)
 
-                nll = nll - nll
+                # nll = nll - nll
 
 
                 complexity_loss = kl_div.sum() / n_triplets
@@ -259,7 +267,10 @@ class EmbeddingTrainer(object):
         train_loss = self.step_dataloader(self.train_loader)
 
         abc = self.model()
-        print(abc[0].mean().detach().cpu().numpy())
+        print("Embedding Mean", abc[0].mean().detach().cpu().numpy())
+        print("Weights Mean", abc[1].mean().detach().cpu().numpy())
+        print("STD Mean", abc[2].mean().detach().cpu().numpy())
+
 
         return train_loss
 
