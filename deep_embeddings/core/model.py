@@ -52,18 +52,32 @@ class Embedding(nn.Module):
         
         self.pruner = DimensionPruning(n_objects, cdf_loc=cdf_loc)
 
-    @staticmethod
-    def reparameterize(loc, scale):
+    
+    def reparameterize(self, loc, scale):
         """Apply reparameterization trick."""
         eps = scale.data.new(scale.size()).normal_()
         return eps.mul(scale).add(loc)
 
+    # def reparameterize(self, loc, scale):
+    #     """Apply reparameterization trick."""
+    #     eps = scale.data.new(scale.size()).log_normal_(0, 1)
+    #     return eps.mul(scale).add(loc)
+
     def _init_weights(self):
         """ Initialize weights for the embedding """
-        self.q_mu.q_mu.data.log_normal_(mean=self.prior.loc, std=self.prior.scale)
+
+        # Initialize the mean of the variational distribution with a truncated normal distribution
+        # nn.init.trunc_normal_(self.q_mu.q_mu.data, mean=self.prior.loc, std=self.prior.scale, a=0.0)
+
+        nn.init.trunc_normal_(self.q_mu.q_mu.data, mean=0, std=1, a=0.0)
+
+
+        # nn.init.kaiming_normal_(self.q_mu.q_mu.data, mode='fan_in', nonlinearity='relu')
 
         # Intialise the log variance of a variational autoencoder 
         # with the log variance of the prior
+        # nn.init.constant_(self.q_logvar.q_logvar.data, self.prior.scale.log())
+
         eps = -(self.q_mu.q_mu.std().log() * -1.0).exp()
         self.q_logvar.q_logvar.data.fill_(eps)
     
@@ -73,9 +87,12 @@ class Embedding(nn.Module):
         q_var = self.q_logvar().exp() # we need to exponentiate the logvar
         
         X = self.reparameterize(q_mu, q_var)
-        z = F.relu(X)
+        # z = F.relu(X)
+        X = F.relu(X) + 1e-12
+
     
-        return z, X, q_mu, q_var
+    
+        return X, q_mu, q_var
 
     @torch.no_grad()
     def prune_dimensions(self, alpha=0.05):

@@ -16,7 +16,7 @@ class Params(object):
 
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
-        for key in ("train_complexity", "train_nll", "train_loss", "val_loss", "train_acc", "val_acc", "dim_over_time"):
+        for key in ("train_complexity", "train_nll", "train_loss", "val_loss", "train_acc", "val_nll", "val_complexity", "val_acc", "dim_over_time"):
             setattr(self, key, [])
         self.start_epoch = 1
         
@@ -116,7 +116,7 @@ class EmbeddingTrainer(object):
         indices = indices.unbind(1)
 
         ind_i, ind_j, ind_k = indices
-        embedding, _, loc, scale = self.model()
+        embedding, loc, scale = self.model()
 
         embedding_i = embedding[ind_i]
         embedding_j = embedding[ind_j]
@@ -145,8 +145,19 @@ class EmbeddingTrainer(object):
         # log probability of variational distribution
         log_q = torch.distributions.LogNormal(loc, scale)
         log_p = torch.distributions.LogNormal(self.prior.loc, self.prior.scale)
-
         kl_div = torch.distributions.kl_divergence(log_q, log_p)
+
+
+        # log_q1 = torch.distributions.LogNormal(loc, scale).log_prob(embedding)
+        # log_p1 = torch.distributions.LogNormal(self.prior.loc, self.prior.scale).log_prob(embedding)
+        # kl_div = -torch.sum(log_q1 - log_p1)
+
+
+
+
+        # n_triplets = len(self.train_loader.dataset)
+        # kl_div = F.kl_div(log_q1, log_p1, reduction="batchmean", log_target=True)
+
 
         return nll, kl_div, triplet_accuracy
 
@@ -162,19 +173,24 @@ class EmbeddingTrainer(object):
 
         for k, indices in enumerate(dataloader):
 
-            # only for trainin batches, not val batches
             if self.model.training:
                 nll, kl_div, accuracy = self.step_triplet_batch(indices)
+
+                nll = nll - nll
+
+
                 complexity_loss = kl_div.sum() / n_triplets
+
+                            
 
                 # Balance the loss with the gamma hyperparameter!
                 nll = self.params.gamma * nll
                 complexity_loss = (1 - self.params.gamma) * complexity_loss
-
                 loss = nll + complexity_loss
+            
 
                 # Balance the log likelihood and complexity loss by gamma
-                # loss = (self.params.gamma * log_likelihood) + ((1 - self.params.gamma) * complexity_loss)
+                # loss = (self.params.gamma * nll) + ((1 - self.params.gamma) * complexity_loss)
 
                 # faster alternative to optim.zero_grad()
                 for param in self.model.parameters():
@@ -193,6 +209,10 @@ class EmbeddingTrainer(object):
                 sampled_likelihoods = torch.zeros(
                     (self.params.mc_samples, self.params.init_dim)
                 )
+                sampled_complexities = torch.zeros(
+                    (self.params.mc_samples, self.params.init_dim)
+                )
+
                 for s in range(self.params.mc_samples):
                     nll, kl_div, accuracy = self.step_triplet_batch(indices)
                     complexity_loss = kl_div.sum() / n_triplets
@@ -200,12 +220,14 @@ class EmbeddingTrainer(object):
                     # NOTE For the val loss, we are not allowed to reweight using gamma, 
                     # since we want to compare different models on the same scale!
                     sampled_likelihoods[s] = nll.item()
+                    sampled_complexities[s] = complexity_loss.item()
 
                 # validation loss
-                loss = torch.mean(sampled_likelihoods)
+                loss = torch.mean(sampled_likelihoods) # + torch.mean(sampled_complexities)
+
 
                 print(
-                    f"Val Batch {k}/{n_batches} NLL {loss}",
+                    f"Val Batch {k}/{n_batches} NLL + Kl Div {loss}",
                     end="\r",
                 )
 
@@ -222,6 +244,11 @@ class EmbeddingTrainer(object):
                 train_complexity=complex_losses.mean().item(),
                 train_nll=nll_losses.mean().item()
             )
+        else:
+            self.params.update(
+                val_complexity=complex_losses.mean().item(),
+                val_nll=nll_losses.mean().item()
+            )
         
         epoch_accuracy = torch.mean(triplet_accuracies).item()
 
@@ -230,6 +257,10 @@ class EmbeddingTrainer(object):
     def train_one_epoch(self):
         self.model.train(True)
         train_loss = self.step_dataloader(self.train_loader)
+
+        abc = self.model()
+        print(abc[0].mean().detach().cpu().numpy())
+
         return train_loss
 
     @torch.no_grad()
@@ -302,6 +333,8 @@ class EmbeddingTrainer(object):
                     train_nll=self.params.train_nll,
                     train_complexity=self.params.train_complexity,
                     val_loss=val_loss,
+                    val_nll=self.params.val_nll,
+                    val_complexity=self.params.val_complexity,
                     val_acc=val_acc,
                     model=self.model,
                     gamma=self.params.gamma,    
