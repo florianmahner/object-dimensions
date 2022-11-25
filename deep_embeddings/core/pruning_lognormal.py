@@ -6,7 +6,7 @@ import torch.nn as nn
 from functools import partial
 
 
-class DimensionPruning(nn.Module):
+class LogNormalDimensionPruning(nn.Module):
     r"""We prune dimensions based on the importance of each dimension, which is determined by the set of pvalues obtained from the
     cdf of the normal distribution given the mean and variance of the embedding, corrected for multiple comparisons by calculting
     the FDR given the Benjamin-Hochberg procedure."""

@@ -2,12 +2,16 @@
 # -*- coding: utf-8 -*-
 
 import torch
+import math
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-from deep_embeddings.core.pruning_lognormal import DimensionPruning
 
+from deep_embeddings.core.pruning_lognormal import LogNormalDimensionPruning 
+from deep_embeddings.core.pruning import NormalDimensionPruning
+
+from deep_embeddings.core.priors import SpikeSlabPrior, LogGaussianPrior
                 
 class QLogVar(nn.Module):
     ''' Log variance of the variational distribution q '''
@@ -16,7 +20,6 @@ class QLogVar(nn.Module):
         self.q_logvar = nn.Parameter(
             torch.FloatTensor(n_objects, init_dim)
         )
-
     def forward(self):
         return self.q_logvar
 
@@ -49,62 +52,70 @@ class Embedding(nn.Module):
         self.q_logvar = QLogVar(n_objects, init_dim)
 
         self._init_weights()
-        
-        self.pruner = DimensionPruning(n_objects, cdf_loc=cdf_loc)
 
+        if isinstance(prior, LogGaussianPrior):
+            self.pruner = LogNormalDimensionPruning(n_objects, cdf_loc=cdf_loc)
 
-    
-    # def reparameterize(self, loc, scale):
-    #     """Apply reparameterization trick."""
-    #     eps = scale.data.new(scale.size()).normal_()
-    #     return eps.mul(scale).add(loc)
+        elif isinstance(prior, SpikeSlabPrior):
+            self.pruner = NormalDimensionPruning(n_objects, cdf_loc=cdf_loc)
+
+    @staticmethod
+    def reparameterize_sslab(loc, scale):
+        """Apply reparameterization trick."""
+        eps = scale.data.new(scale.size()).normal_()
+
+        return loc + scale * eps
 
     def reparameterize(self, loc, scale):
         """Apply reparameterization trick."""
+        
+        if isinstance(self.prior, LogGaussianPrior):
+            # eps = nn.init.trunc_normal_(scale.data.new(scale.size()), mean=0, std=1, a=0.0)
+            eps = scale.data.new(scale.size()).log_normal_(0, 1)
 
-        # eps = nn.init.trunc_normal_(scale.data.new(scale.size()), mean=0, std=0.01, a=0.0)
-        # eps = scale.data.new(scale.size()).log_normal_(0, 0.1)
-        eps = scale.data.new(scale.size()).normal_()
-        return eps.mul(scale).add(loc)
+        elif isinstance(self.prior, SpikeSlabPrior):
+            eps = scale.data.new(scale.size()).normal_()
+
+        return loc + scale * eps
 
     def _init_weights(self):
         """ Initialize weights for the embedding """
 
-        # Initialize the mean of the variational distribution with a truncated normal distribution
-        # nn.init.trunc_normal_(self.q_mu.q_mu.data, mean=self.prior.loc, std=self.prior.scale, a=0.0)
-        nn.init.trunc_normal_(self.q_mu.q_mu.data, mean=0, std=1, a=0.0)
+        if isinstance(self.prior, LogGaussianPrior):
+            # nn.init.trunc_normal_(self.q_mu.q_mu.data, mean=0, std=1, a=0.0)    
+            self.q_mu.q_mu.data.log_normal_(mean=self.prior.mean, std=self.prior.variance)
+            # self.q_mu.q_mu.data.log_normal_(mean=0, std=1)
+            eps2 = -(self.q_mu.q_mu.data.std().log() * -1.0).exp()
+            self.q_logvar.q_logvar.data.fill_(eps2)
 
-        # Around the cdf loc?
-        # nn.init.kaiming_normal_(self.q_mu.q_mu.data, mode='fan_in', nonlinearity='leaky_relu') 
-        # self.q_mu.q_mu.data = self.q_mu.q_mu.data + self.prior.mode
+            # nn.init.kaiming_normal_(self.q_mu.q_mu.data, mode="fan_out", nonlinearity="relu")
+            # eps = self.q_mu.q_mu.std().log()
+            # self.q_logvar.q_logvar.data.fill_(eps)
 
-        # self.q_mu.q_mu.data.log_normal_(mean=self.prior.loc, std=self.prior.scale)
+            # self.q_mu.q_mu.data = torch.abs(self.q_mu.q_mu.data)
+            # nn.init.uniform_(self.q_logvar.q_logvar.data, a=-2.5, b=-2.0)
+            # self.q_logvar.q_logvar.data.normal_(mean=-2.5, std=0.001)
+        
 
-    
-        # self.q_mu.q_mu.data = self.q_mu.q_mu.data + self.prior.mode
+        elif isinstance(self.prior, SpikeSlabPrior):
+            nn.init.kaiming_normal_(self.q_mu.q_mu.data, mode="fan_out", nonlinearity="relu")
+            eps = self.q_mu.q_mu.std().log()
+            self.q_logvar.q_logvar.data.fill_(eps)
 
-        # Intialise the log variance of a variational autoencoder 
-        # with the log variance of the prior
-        # nn.init.constant_(self.q_logvar.q_logvar.data, self.prior.scale.log())
-        eps = -(self.q_mu.q_mu.std().log() * -1.0).exp()
-        self.q_logvar.q_logvar.data.fill_(eps)
+            # eps2 = -(self.q_mu.q_mu.data.std().log() * -1.0).exp()
+            # self.q_logvar.q_logvar.data.fill_(eps2)
 
-
-        # Inverse log normal distribution 
-        # self.q_logvar.q_logvar.data.normal_(mean=-2, std=0.001)
-    
-
+            
     def forward(self):
         q_mu = self.q_mu()
         q_var = self.q_logvar().exp() # we need to exponentiate the logvar
         
         # This is a normal distribution
         X = self.reparameterize(q_mu, q_var)        
+
+        if isinstance(self.prior, LogGaussianPrior):
+            X = F.relu(X) + 1e-12
         
-        # X  = F.relu(X) + 1e-6
-        # print(X.max(), X.min())
-        # X = F.relu(X)
-    
         return X, q_mu, q_var
 
     @torch.no_grad()

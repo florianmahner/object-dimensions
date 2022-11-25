@@ -8,6 +8,7 @@ import glob
 import numpy as np
 import torch.nn.functional as F
 from deep_embeddings.utils import utils 
+from deep_embeddings.core.priors import SpikeSlabPrior, LogGaussianPrior
 
 
 class Params(object):
@@ -58,7 +59,7 @@ class EmbeddingTrainer(object):
         n_epochs=100,
         mc_samples=5,
         lr=0.001,
-        gamma=0.5,
+        beta=1.0,
         stability_time=200, 
     ):
         self.model = model
@@ -68,7 +69,7 @@ class EmbeddingTrainer(object):
 
         self.params = Params(lr=lr, 
                              init_dim=model.init_dim,
-                             gamma=gamma, 
+                             beta=beta, 
                              n_epochs=n_epochs, 
                              mc_samples=mc_samples, 
                              stability_time=stability_time, 
@@ -81,7 +82,7 @@ class EmbeddingTrainer(object):
         self.model.to(self.device)
 
     def parse_from_args(self, args):
-        attrs = ["n_epochs", "mc_samples", "lr", "gamma", "stability_time", "load_model"]
+        attrs = ["n_epochs", "mc_samples", "lr", "beta", "stability_time", "load_model"]
         for attr in attrs:
             if hasattr(args, attr):
                 setattr(self.params, attr, getattr(args, attr))
@@ -118,9 +119,9 @@ class EmbeddingTrainer(object):
         ind_i, ind_j, ind_k = indices
         embedding, loc, scale = self.model()
 
-        embedding_i = embedding[ind_i]
-        embedding_j = embedding[ind_j]
-        embedding_k = embedding[ind_k]
+        embedding_i = F.relu(embedding[ind_i])
+        embedding_j = F.relu(embedding[ind_j])
+        embedding_k = F.relu(embedding[ind_k])
 
         sim_ij = torch.sum(embedding_i * embedding_j, dim=1)
         sim_ik = torch.sum(embedding_i * embedding_k, dim=1)
@@ -141,59 +142,29 @@ class EmbeddingTrainer(object):
         # compute the cross entropy loss -> we dont need to one hot encode the batch
         # we just use the similarities at index 0, all other targets are 0 and redundant!
         nll = torch.mean(-log_softmax_ij)
-    
-        # # log probability of variational distribution
-        # log_q = torch.distributions.LogNormal(loc, scale)
-        # log_p = torch.distributions.LogNormal(self.prior.loc, self.prior.scale)
-        # kl_div = torch.distributions.kl_divergence(log_q, log_p)
 
 
-        # log_q1 = torch.distributions.LogNormal(loc, scale).log_prob(embedding)
-        # log_p1 = torch.distributions.LogNormal(self.prior.loc, self.prior.scale).log_prob(embedding)
+        if isinstance(self.prior, LogGaussianPrior):
+            # # log probability of variational distribution
+            log_q = torch.distributions.LogNormal(loc, scale)
+            log_p = torch.distributions.LogNormal(self.prior.loc, self.prior.scale)
+            kl_div = torch.distributions.kl_divergence(log_q, log_p)
 
-        log_q = self.prior.log_pdf(embedding, loc, scale)
-        log_p = self.prior(embedding)
+            # log_q1 = torch.distributions.LogNormal(loc, scale).log_prob(embedding)
+            # log_p1 = torch.distributions.LogNormal(self.prior.loc, self.prior.scale).log_prob(embedding)
+            # kl_div = (log_q1.sum() - log_p1.sum())
 
-        
-        kl_div = (log_q.sum() - log_p.sum())
-
-        breakpoint()
-
-    
-
-
-
-        # kl_div = -(log_q1.sum() - log_p1.sum())
-
-        # kl_div = F.kl_div(log_p, log_q, reduction="none", log_target=True)
-
-
-
-    
-
-
-
-
-        # embedding = embedding.log()
-        # loc_gauss = loc.log() 
-        # log_q = torch.distributions.Normal(loc, scale).log_prob(embedding)
-        # log_p = torch.distributions.Normal(self.prior.loc.exp(), self.prior.scale.exp()).log_prob(embedding)
-
-
-
-
-        # kl_div = -torch.sum(log_q1 - log_p1)
-        # kl_div = log_q1.sum() - log_p1.sum()
-
-
-        # n_triplets = len(self.train_loader.dataset)
-        
+            
+        elif isinstance(self.prior, SpikeSlabPrior):
+            log_q = self.prior.log_pdf(embedding, loc, scale)
+            log_p = self.prior(embedding)
+            kl_div = (log_q.sum() - log_p.sum())
 
 
         return nll, kl_div, triplet_accuracy
 
     def step_dataloader(self, dataloader):
-        n_triplets = len(dataloader.dataset)
+        n_triplets = len(self.train_loader.dataset)
         n_batches = len(dataloader)
 
         complex_losses = torch.zeros(n_batches)
@@ -206,23 +177,12 @@ class EmbeddingTrainer(object):
 
             if self.model.training:
                 nll, kl_div, accuracy = self.step_triplet_batch(indices)
-
-                nll = nll - nll
-
-
                 complexity_loss = kl_div.sum() / n_triplets
 
-                            
-
-                # Balance the loss with the gamma hyperparameter!
-                nll = self.params.gamma * nll
-                complexity_loss = (1 - self.params.gamma) * complexity_loss
+                # Balance the loss with the beta hyperparameter!
+                complexity_loss = self.params.beta * complexity_loss
                 loss = nll + complexity_loss
             
-
-                # Balance the log likelihood and complexity loss by gamma
-                # loss = (self.params.gamma * nll) + ((1 - self.params.gamma) * complexity_loss)
-
                 # faster alternative to optim.zero_grad()
                 for param in self.model.parameters():
                     param.grad = None
@@ -248,7 +208,7 @@ class EmbeddingTrainer(object):
                     nll, kl_div, accuracy = self.step_triplet_batch(indices)
                     complexity_loss = kl_div.sum() / n_triplets
 
-                    # NOTE For the val loss, we are not allowed to reweight using gamma, 
+                    # NOTE For the val loss, we are not allowed to reweight using the beta hyperparameter!, 
                     # since we want to compare different models on the same scale!
                     sampled_likelihoods[s] = nll.item()
                     sampled_complexities[s] = complexity_loss.item()
@@ -371,7 +331,7 @@ class EmbeddingTrainer(object):
                     val_complexity=self.params.val_complexity,
                     val_acc=val_acc,
                     model=self.model,
-                    gamma=self.params.gamma,    
+                    beta=self.params.beta,    
                     epoch=self.epoch,
                     logger=self.logger,
                     optim=self.optim,

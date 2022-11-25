@@ -14,13 +14,13 @@ def build_triplet_dataset(triplet_path, n_train=None, n_val=None):
         raise ValueError("No training or test files found in {}".format(triplet_path))
 
     for file in files:
-        if file.endswith(".npy") and "train" in file:
+        if file.endswith(".npy") and "train_90" in file:
             train = np.load(os.path.join(triplet_path, file))
-        elif file.endswith(".npy") and "test" in file:
+        elif file.endswith(".npy") and "test_10" in file:
             test = np.load(os.path.join(triplet_path, file))
-        elif file.endswith(".txt") and "train" in file:
+        elif file.endswith(".txt") and "train_90" in file:
             train = np.loadtxt(os.path.join(triplet_path, file))
-        elif file.endswith(".txt") and "test" in file:
+        elif file.endswith(".txt") and "test_10" in file:
             test = np.loadtxt(os.path.join(triplet_path, file))
             
     # maybe need to do train/val split here beforehand and test=test?

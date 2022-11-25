@@ -35,9 +35,20 @@ class LogGaussianPrior(BasePrior):
     def mode(self):
         """ Calculate the mode of the log-normal distribution """
         return torch.exp(self.loc)
+
+    @property
+    def mean(self):
+        """ Mean of the log-normal distribution """
+        return self.loc[0,0]
+
+    @property
+    def variance(self):
+        return self.scale[0,0]
     
     def forward(self, X):
         return self.log_pdf(X, self.loc, self.scale)
+
+    
 
 
 
