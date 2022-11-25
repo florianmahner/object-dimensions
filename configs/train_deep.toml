@@ -1,0 +1,27 @@
+# Path parameters
+log_path = "./results"
+identifier = ""
+
+# General parameters
+triplet_path = "./data/triplets/vgg16_bn/classifier.3/triplets_20mio"
+modality = "deep" 
+load_model = false
+fresh = false  
+tensorboard = true
+params_interval = 50
+checkpoint_interval = 500  # we dont save the model in principle!
+device_id = 1
+
+
+# Model parameters
+prior = "sslab"
+init_dim = 100
+n_epochs = 3000
+stability_time = 500
+rnd_seed = 0
+batch_size = 16384
+non_zero_weights = 5
+mc_samples = 5
+beta = 1.0
+scale = 0.25
+lr = 0.001
