@@ -37,7 +37,7 @@ tensorboard=True
 
 
 
-python main.py \
+python deep_embeddings/main.py \
     --data_path $data_path \
     --triplet_path $triplet_path \
     --modality $modality \

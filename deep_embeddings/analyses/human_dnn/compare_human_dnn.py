@@ -13,9 +13,9 @@ import seaborn as sns
 from skimage.transform import resize
 import skimage.io as io
 
-
 from deep_embeddings.utils.utils import load_sparse_codes, filter_embedding_by_behavior, rsm_pred, fill_diag, correlate_rsms, correlation_matrix
-from scipy.stats import rankdata
+from scipy.stats import rankdata, pearsonr
+
 
 parser = argparse.ArgumentParser(description='Compare human and DNN performance on the same task.')
 parser.add_argument('--human_embedding_path', type=str, help='Path to human embedding matrix.')
@@ -23,16 +23,6 @@ parser.add_argument('--dnn_embedding_path', type=str, help='Path to DNN embeddin
 parser.add_argument('--feature_path', type=str, help='Path to VGG feature matrix and filenames')
 
 # TODO Check if reference images are loaded in line with the concept file (i.e. that path indices match?)
-
-def pearsonr(u, v, a_min=-1., a_max=1.):
-    """ TODO Consider replacing everything with scipy! consistently!"""
-    u_c = u - np.mean(u)
-    v_c = v - np.mean(v)
-    num = u_c @ v_c
-    denom = np.linalg.norm(u_c) * np.linalg.norm(v_c)
-    rho = (num / denom).clip(min=a_min, max=a_max)
-
-    return rho
 
 def load_inds_and_item_names(folder='./data/misc'):
     item_names = pd.read_csv(os.path.join(folder, 'item_names.tsv'), encoding='utf-8', sep='\t').uniqueID.values
@@ -254,19 +244,12 @@ def compare_human_dnn(human_embedding_path, dnn_embedding_path, feature_path):
     # ref_images = load_ref_images(ref_images)
 
     # Get rsm matrices
-    rsm_dnn = fill_diag(correlation_matrix(weights_dnn))  
-    rsm_human = fill_diag(correlation_matrix(weights_human))
+    rsm_dnn = correlation_matrix(weights_dnn)
+    rsm_human = correlation_matrix(weights_human)
 
-    # rsm_dnn = fill_diag(rsm_pred(weights_dnn))
-    # rsm_human = fill_diag(rsm_pred(weights_human))
-
-    # Correlate embeddings
-    tril_inds = np.tril_indices(len(rsm_human), k=-1)
-    tril_human = rsm_human[tril_inds]
-    tril_dnn = rsm_dnn[tril_inds]
-    rho = pearsonr(tril_human, tril_dnn).round(3)
+    rho = correlate_rsms(rsm_dnn, rsm_human, "correlation")
+    corr = pearsonr(rsm_dnn.flatten(), rsm_human.flatten())[0].round(3)
     print("Correlation between human and DNN embeddings: {}".format(rho))
-    
 
     # Whether to perform mind-machine comparison with VGG 16 dimensions that allow for duplicate or unique latent dimensions
     duplicates = False
@@ -284,15 +267,13 @@ def compare_human_dnn(human_embedding_path, dnn_embedding_path, feature_path):
     ax.plot(range(len(mind_machine_corrs)), mind_machine_corrs, color='black', linewidth=2)
     ax.set_xlabel("Latent dimension")
     ax.set_ylabel("Correlation between human and DNN embeddings")
-    fig.savefig(os.path.join(plot_dir_comparison, "human_dnn_dimenion_correlation.jpg"))
+    fig.savefig(os.path.join(plot_dir_comparison, "human_dnn_dimension_correlation.jpg"))
 
         
     plot_density_scatters(plots_dir=plot_dir_comparison, ref_images=ref_images, rsm_mod1=rsm_human, rsm_mod2=rsm_dnn, 
                           mod1='Human Behavior', mod2='VGG 16', concepts=concepts, top_k=20)
-    # plot_most_dissim_pairs(plots_dir=plot_dir_comparison, ref_images=ref_images, tril_mod1=tril_human,
-                        #    tril_mod2=tril_dnn, mod1='Human Behavior', mod2='VGG 16', tril_inds=tril_inds, top_k=20)
-
-    
+    plot_most_dissim_pairs(plots_dir=plot_dir_comparison, ref_images=ref_images, tril_mod1=tril_human,
+                           tril_mod2=tril_dnn, mod1='Human Behavior', mod2='VGG 16', tril_inds=tril_inds, top_k=20)
 
 
 if __name__ == '__main__':

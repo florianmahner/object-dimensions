@@ -12,8 +12,8 @@ parser.add_argument('--img_root', type=str, default='./data/THINGS', help='Path 
 parser.add_argument('--extract', type=bool, default=True, help='Extract features from the dataset')
 parser.add_argument('--tripletize', type=bool, default=True, help='Tripletize the features')
 parser.add_argument('--adaptive', type=bool, default=False, help='Adaptively sample triplets')
-parser.add_argument('--n_samples', type=int, default=1e6, help='Number of samples to use for tripletization')
-parser.add_argument('--rnd_seed', type=int, default=42, help='Random seed for tripletization')
+parser.add_argument('--n_samples', type=int, default=int(2e7), help='Number of samples to use for tripletization')
+parser.add_argument('--rnd_seed', type=int, default=0, help='Random seed for tripletization')
 
 
 def run_pipeline(img_root, extract=False, tripletize=False, n_samples=2e6, rnd_seed=42, adaptive=False):
@@ -21,12 +21,14 @@ def run_pipeline(img_root, extract=False, tripletize=False, n_samples=2e6, rnd_s
     # model_names = ('vgg_16bn', 'stylegan_xl', 'OpenCLIP')
     # module_names = ('classifier.3', 'latent', 'visual')
 
-    model_names = ['alexnet', 'clip']
-    module_names = ['classifier.3', 'visual']
+    # model_names = ['resnet50', 'clip']
+    # module_names = ['avgpool', 'visual']
+
+    model_names = ['clip']
+    module_names = ['visual']
 
     for model_name, module_name in zip(model_names, module_names):
         print("Extracting features from model: {} and module: {}".format(model_name, module_name))
-
         out_path = os.path.join("./data", "models", model_name, module_name)
         if not os.path.exists(out_path):
             print(f"Creating output path: {out_path}")
@@ -34,8 +36,7 @@ def run_pipeline(img_root, extract=False, tripletize=False, n_samples=2e6, rnd_s
             os.makedirs(out_path)
 
         if extract:
-            extract_features(img_root, out_path, model_name, module_name, batch_size=1)
-
+            extract_features(img_root, out_path, model_name, module_name, batch_size=2)
     
         feature_path = os.path.join(out_path, "features.npy")
         n_mio_samples = str(int(n_samples // 1e6)) + "mio"
@@ -43,8 +44,9 @@ def run_pipeline(img_root, extract=False, tripletize=False, n_samples=2e6, rnd_s
 
         if tripletize:
             print("Start sampling triplets for the model...")
-            sampler = Sampler(feature_path, out_path, n_samples=n_samples, k=3, train_fraction=0.9, rnd_seed=42)
+            sampler = Sampler(feature_path, out_path, n_samples=n_samples, k=3, train_fraction=0.9, rnd_seed=rnd_seed)
             sampler.run_and_save_tripletization(adaptive)
+            print("... Done!")
 
 
 if __name__ == '__main__':
@@ -52,6 +54,9 @@ if __name__ == '__main__':
     # behavior_path = "./data/reference_images"
     # dataset_path = "./data/image_data/images12"
     args.img_root = "./data/image_data/images12"
+
+    args.extract = True
+
     run_pipeline(args.img_root, 
                  extract=args.extract, 
                  tripletize=args.tripletize, 

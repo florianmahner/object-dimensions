@@ -199,8 +199,8 @@ class Sampler(object):
         """Split triplet data into train and test splits."""
         N = similarity_judgements.shape[0]
         rnd_perm = np.random.permutation(N)
-        train_split = similarity_judgements[rnd_perm[: int(len(rnd_perm) * self.train_frac)]]
-        test_split = similarity_judgements[rnd_perm[int(len(rnd_perm) * self.train_frac):]]
+        train_split = similarity_judgements[rnd_perm[: int(len(rnd_perm) * self.train_fraction)]]
+        test_split = similarity_judgements[rnd_perm[int(len(rnd_perm) * self.train_fraction):]]
 
         return train_split, test_split
 

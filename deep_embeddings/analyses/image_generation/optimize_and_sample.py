@@ -101,6 +101,8 @@ class Sampler(object):
     def sample(self, generator, comparator):
         noise_vector = truncated_noise_sample(truncation=self.truncation, batch_size=self.n_samples)
         dim_vector = truncated_noise_sample(truncation=self.truncation, batch_size=self.n_samples)
+
+        breakpoint()
         noise_vector = torch.from_numpy(noise_vector)
         dim_vector = torch.from_numpy(dim_vector)
 

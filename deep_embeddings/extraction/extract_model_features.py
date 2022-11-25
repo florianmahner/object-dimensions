@@ -8,16 +8,13 @@ import torchvision
 import sys
 sys.path.append("./deep_embeddings/analyses/image_generation/stylegan_xl")
 
-
 from thingsvision.utils.storing import save_features
 from thingsvision import Extractor
 # from thingsvision.utils.data import ImageDataset, DataLoader
 from thingsvision.utils.data import DataLoader
 from thingsvision.core.extraction import center_features
 
-
 from deep_embeddings.utils.image_dataset import ImageDataset
-
 from deep_embeddings.analyses.image_generation.stylegan_xl import legacy
 from deep_embeddings.analyses.image_generation.stylegan_xl.dnnlib import util
 
@@ -28,6 +25,7 @@ parser.add_argument('--out_path', type=str, default='./data/vgg_features', help=
 parser.add_argument('--batch_size', type=int, default=64, help='Batch size for the dataloader to extract features')
 parser.add_argument('--model_name', type=str, default='vgg16_bn', help='Name of the pretrained model to use')
 parser.add_argument('--module_name', type=str, default='classifier.3', help='Name of the layer to extract features from')
+
 
 transforms = torchvision.transforms.Compose([
     torchvision.transforms.Resize(size=256),

@@ -6,13 +6,13 @@ device="cuda:0"
 
 model_name="vgg16_bn"
 module_name="classifier.3"
-n_samples=16
+n_samples=1000000
 window_size=50
-batch_size=4
+batch_size=2
 truncation=0.4
 top_k=16
-sample_latents=False
-max_iter=5
+sample_latents=True
+max_iter=200
 dim=(0)
 alpha=1.0
 beta=1.0

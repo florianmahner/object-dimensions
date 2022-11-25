@@ -18,6 +18,15 @@ def load_model(model_name, device):
     model = Extractor(model_name, device=device, pretrained=True, source='torchvision')
     return model
 
+def img_to_uint8(img):
+    img = ((img - img.min()) * (1/(img.max() - img.min()) * 255))
+    if isinstance(img, torch.Tensor):
+        img = img.type(torch.uint8)
+    else:
+        img = img.astype(np.uint8)
+
+    return img
+
 def load_image_data(n_images, modality="deep"):
     if modality == "behavior":
         dataset = ImageDataset(root=f'./data/reference_images', out_path='', backend='pt')
@@ -136,11 +145,13 @@ def correlation_matrix(F, a_min= -1., a_max= 1.):
     return corr_mat
 
 def correlate_rsms(rsm_a, rsm_b, correlation = 'pearson'):
+    """ Correlate the lower triangular parts of two rsms"""
+    rsm_a = fill_diag(rsm_a)
+    rsm_b = fill_diag(rsm_b)
     triu_inds = np.triu_indices(len(rsm_a), k=1)
     corr_func = getattr(scipy.stats, ''.join((correlation, 'r')))
     rho = corr_func(rsm_a[triu_inds], rsm_b[triu_inds])[0]
 
-    
     return rho
 
 # NOTE This seems to be wrong -> not the same results as obtained from torch.Distributions or scipy.stats

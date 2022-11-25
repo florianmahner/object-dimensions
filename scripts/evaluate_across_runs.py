@@ -11,7 +11,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--base_dir", type=str, default="./results/gamma_analysis")
 parser.add_argument("--key", type=str, default="gamma", help="Key to aggregate over that is contained in the path")
 
-
 def map_path_to_param(path):
     split = path.split("/")
     hparams = dict()
