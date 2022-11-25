@@ -3,7 +3,6 @@
 
 import torch
 import os
-import sys
 import logging
 import operator
 import inspect
@@ -15,8 +14,16 @@ from collections import defaultdict
 from abc import ABC, abstractmethod
 from copy import deepcopy
 
+__all__ = ["DeepEmbeddingLogger", "DefaultLogger"]
+
 
 class Logger(ABC):
+    r"""Abstract method to log the data. This is the base class for all loggers"""
+
+    @abstractmethod
+    def __init__(self, *args, **kwargs):
+        self._make_dir(fresh=kwargs.get("fresh", False))
+
     @property
     @abstractmethod
     def log_path(self):
@@ -26,16 +33,8 @@ class Logger(ABC):
     def log(self, *args, **kwargs):
         raise NotImplementedError
 
-    def _make_dir(self, fresh=False):
-        if fresh:
-            try:
-                shutil.rmtree(self.log_path)
-                print("Start fresh")
-            except OSError:
-                logging.info(
-                    "Not able to delete file or entire path {}".format(self.log_path)
-                )
-
+    def _build_file_or_folder(self):
+        """Build the file or folder base on the log path"""
         filename, file_extension = os.path.splitext(self.log_path)
         # create directory if log path is not a file
         if not file_extension and not os.path.exists(filename):
@@ -46,18 +45,36 @@ class Logger(ABC):
                 dir_path = os.path.dirname(self.log_path)
                 if not os.path.exists(dir_path):
                     os.makedirs(dir_path)
-                open(self.log_path, "a").close()
             except OSError:
                 print("Failed creating the file at {}".format(self.log_path))
+
+    def _make_dir(self, fresh=False):
+        if fresh:
+            try:
+                shutil.rmtree(self.log_path)
+                logging.info("Start fresh")
+            except OSError:
+                logging.info(
+                    "Not able to delete file or entire path {}".format(self.log_path)
+                )
+        self._build_file_or_folder()
 
     def __call__(self, *args, **kwargs):
         return self.log(*args, **kwargs)
 
 
 class DeepEmbeddingLogger:
+    r"""Class to log the data. This is the class that contains all the loggers"""
     # TODO Make subscriptable, so that I can do logger['abc'] and logger['des']
-    def __init__(self, log_path, model, fresh=False, tensorboard=False, 
-                 params_interval=100, checkpoint_interval=500):
+    def __init__(
+        self,
+        log_path,
+        model,
+        fresh=False,
+        tensorboard=False,
+        params_interval=100,
+        checkpoint_interval=500,
+    ):
         self.log_path = log_path
         self.logger = DefaultLogger(log_path, fresh)
         self.logger.add_logger(
@@ -74,14 +91,24 @@ class DeepEmbeddingLogger:
         )
         self.logger.add_logger(
             "params",
-            ParameterLogger(log_path, model, ["module.sorted_pruned_params"]),
+            ParameterLogger(log_path, model, ["sorted_pruned_params"]),
             update_interval=params_interval,
         )
         if tensorboard:
             self.logger.add_logger(
                 "tensorboard",
                 TensorboardLogger(log_path),
-                callbacks=["train_loss", "train_ll", "train_complexity", "val_loss", "dim", "val_acc", "train_acc"],
+                callbacks=[
+                    "train_loss",
+                    "train_nll",
+                    "train_complexity",
+                    "val_loss",
+                    "val_nll",
+                    "val_complexity",
+                    "dim",
+                    "val_acc",
+                    "train_acc",
+                ],
                 update_interval=1,
             )
 
@@ -95,7 +122,6 @@ class DeepEmbeddingLogger:
 class DefaultLogger(Logger):
     def __init__(self, log_path, fresh=False):
         self._log_path = log_path
-        self._make_dir(fresh)
         self.callbacks = defaultdict(list)
         self.extensions = defaultdict(Logger)
         # incremental counter for the number of logging operations
@@ -143,10 +169,10 @@ class DefaultLogger(Logger):
                 # some loggers dont have callbacks and just log e.g. model parameters
                 logger.log(*args, step=self.step_ctr, **kwargs)
 
+
 class FileLogger(Logger):
     def __init__(self, log_path):
         self._log_path = os.path.join(log_path, "training.log")
-        self._make_dir()
         self._init_loggers()
 
     @property
@@ -156,15 +182,15 @@ class FileLogger(Logger):
     def _init_loggers(self):
         self.logger = logging.getLogger()  # root logger
         self.logger.setLevel(logging.INFO)
-        formatter = logging.Formatter(
-            "%(asctime)s - %(levelname)s - %(message)s"
-        )
+        formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         filename = self.log_path
-        file_handler = logging.FileHandler(filename)
+
+        # breakpoint()
+        file_handler = logging.FileHandler(filename, mode="a+")
         file_handler.setLevel(logging.INFO)
         file_handler.setFormatter(formatter)
         self.logger.addHandler(file_handler)
-  
+
     def log(self, step=None, print_prepend=None, *args, **kwargs):
         self.logger.info("")
         print_prepend = print_prepend + " - " if print_prepend else ""
@@ -175,12 +201,13 @@ class FileLogger(Logger):
             k = k.replace("_", " ").capitalize()
             self.logger.info(f"{print_prepend}{k}: {v}")
 
+
 class CheckpointLogger(Logger):
     """Logs models and optimizer each checkpoint"""
+
     def __init__(self, log_path, ext=".tar"):
         self._log_path = os.path.join(log_path, "checkpoints")
         self.ext = ext
-        self._make_dir()
 
     @property
     def log_path(self):
@@ -191,12 +218,12 @@ class CheckpointLogger(Logger):
             model_state_dict = deepcopy(kwargs["model"].state_dict())
         if kwargs.get("optim"):
             optim_state_dict = deepcopy(kwargs["optim"].state_dict())
-    
+
         epoch = kwargs.get("epoch")
-        kwargs['model_state_dict'] = model_state_dict
-        kwargs['optim_state_dict'] = optim_state_dict
-        del kwargs['model']
-        del kwargs['optim']
+        kwargs["model_state_dict"] = model_state_dict
+        kwargs["optim_state_dict"] = optim_state_dict
+        del kwargs["model"]
+        del kwargs["optim"]
         save_dict = kwargs
 
         # Delete previous file with .tar ending in directory
@@ -214,7 +241,6 @@ class ParameterLogger(Logger):
     def __init__(self, log_path, model, attributes, ext=".txt"):
         "attributes can either be attributes as strings or a function that transforms attributes for storing"
         self._log_path = os.path.join(log_path, "params")
-        self._make_dir()
         self.attributes = attributes
         self.model = model
         self.ext = ext
@@ -275,7 +301,6 @@ class ParameterLogger(Logger):
 class TensorboardLogger(Logger):
     def __init__(self, log_path):
         self._log_path = os.path.join(log_path, "tboard")  # TODO make this more generic
-        self._make_dir()
         self._init_writer()
         global global_step
         global_step = 0
