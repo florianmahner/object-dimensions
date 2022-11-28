@@ -23,7 +23,6 @@ class Params(object):
             "val_loss",
             "train_acc",
             "val_nll",
-            "val_complexity",
             "val_acc",
             "dim_over_time",
         ):
@@ -38,7 +37,7 @@ class Params(object):
         If the type is a list, append the value to the list, else set new value as attribute"""
         for k, v in kwargs.items():
             if k not in self.__dict__:
-                continue
+                setattr(self, k, v)
             attr = getattr(self, k)
             if isinstance(attr, (int, float)) and isinstance(v, (int, float)):
                 setattr(self, k, v)
@@ -126,15 +125,12 @@ class EmbeddingTrainer(object):
             self.params.start_epoch = checkpoint["epoch"] + 1
             self.logger = checkpoint["logger"]  # only if exists!
 
-    def step_triplet_batch(self, indices):
-        """Step the model for a single batch of data and extract embedding triplets"""
+    def calculate_likelihood(self, embedding, indices):
         indices = indices.type("torch.LongTensor")
         indices = indices.to(self.device)
         indices = indices.unbind(1)
 
         ind_i, ind_j, ind_k = indices
-        embedding, loc, scale = self.model()
-
         embedding_i = F.relu(embedding[ind_i])
         embedding_j = F.relu(embedding[ind_j])
         embedding_k = F.relu(embedding[ind_k])
@@ -147,16 +143,25 @@ class EmbeddingTrainer(object):
         sims = torch.stack([sim_ij, sim_ik, sim_jk])
         log_softmax = F.log_softmax(sims, dim=0)  # i.e. BS x 3
 
-        # Compute accuracy for that batch -> triplet_choices = log_softmax.argmax(0)
-        triplet_choices = torch.argmax(log_softmax, 0)
-        triplet_accuracy = torch.sum(triplet_choices == 0) / len(triplet_choices)
-
-        # These are the most similar, i.e. the argmax, k is the ooo.
+        # Theis the most similar (sim_ij), i.e. the argmax, k is the ooo.
         log_softmax_ij = log_softmax[0]
 
         # Compute the cross entropy loss -> we dont need to one hot encode the batch
         # We just use the similarities at index 0, all other targets are 0 and redundant!
         nll = torch.mean(-log_softmax_ij)
+
+        # Compute accuracy for that batch -> triplet_choices = log_softmax.argmax(0)
+        triplet_choices = torch.argmax(log_softmax, 0)
+        triplet_accuracy = torch.sum(triplet_choices == 0) / len(triplet_choices)        
+        
+        return nll, triplet_accuracy
+
+    def step_triplet_batch(self, indices):
+        """Step the model for a single batch of data and extract embedding triplets"""
+
+        embedding, loc, scale = self.model()            
+        nll, triplet_accuracy = self.calculate_likelihood(embedding, indices)
+
 
         if isinstance(self.prior, LogGaussianPrior):
             # # log probability of variational distribution
@@ -209,37 +214,37 @@ class EmbeddingTrainer(object):
 
             # we do mc sampling of the variational posterior for validation batches
             else:
-                sampled_likelihoods = torch.zeros(
-                    (self.params.mc_samples, self.params.init_dim)
-                )
-                sampled_complexities = torch.zeros(
-                    (self.params.mc_samples, self.params.init_dim)
-                )
+        
+                if k == 0:
+                    _, pruned_q_mu, pruned_q_var = self.model.prune_dimensions() # only need to do it once during evaluation
+            
+                sampled_likelihoods = torch.zeros(self.params.mc_samples)
+                # sampled_complexities = torch.zeros(self.params.mc_samples)
 
                 for s in range(self.params.mc_samples):
-                    nll, kl_div, accuracy = self.step_triplet_batch(indices)
-                    complexity_loss = kl_div.sum() / n_triplets
 
-                    # NOTE For the val loss, we are not allowed to reweight using the beta hyperparameter!,
-                    # since we want to compare different models on the same scale!
+                    embedding = self.model.reparameterize(pruned_q_mu, pruned_q_var)
+                    nll, accuracy = self.calculate_likelihood(embedding, indices)
+
+                     # NOTE For the val loss, we are not allowed to reweight using the beta hyperparameter!,
+                     # since we want to compare different models on the same scale!
                     sampled_likelihoods[s] = nll.item()
-                    sampled_complexities[s] = complexity_loss.item()
 
-                # validation loss
-                loss = torch.mean(sampled_likelihoods) + torch.mean(
-                    sampled_complexities
-                )
+                loss = torch.mean(sampled_likelihoods)
 
                 print(
                     f"Val Batch {k}/{n_batches} NLL + Kl Div {loss}",
                     end="\r",
                 )
 
-            # def update loss history!
-            complex_losses[k] += complexity_loss.item()
-            nll_losses[k] += nll.item()
+            
+            nll_losses[k] = nll.item()
             losses[k] += loss.item()
-            triplet_accuracies[k] += accuracy.item()
+            triplet_accuracies[k] = accuracy.item()
+
+            if self.model.training:
+                complex_losses[k] = complexity_loss.item()
+            
 
         loss = losses.mean().item()
 
@@ -250,8 +255,7 @@ class EmbeddingTrainer(object):
             )
         else:
             self.params.update(
-                val_complexity=complex_losses.mean().item(),
-                val_nll=nll_losses.mean().item(),
+                val_nll=losses.mean().item(),
             )
 
         epoch_accuracy = torch.mean(triplet_accuracies).item()
@@ -340,7 +344,6 @@ class EmbeddingTrainer(object):
                     train_complexity=self.params.train_complexity,
                     val_loss=val_loss,
                     val_nll=self.params.val_nll,
-                    val_complexity=self.params.val_complexity,
                     val_acc=val_acc,
                     model=self.model,
                     beta=self.params.beta,
@@ -362,7 +365,7 @@ class EmbeddingTrainer(object):
                         "final"
                     ] = True  # we also log all things that dont have an update interval
                     self.logger.log(**log_params)
-                    self.store_final_embeddings(**log_params)
+                    self.store_final_embeddings()
                     break
 
                 self.logger.log(**log_params)
@@ -372,9 +375,14 @@ class EmbeddingTrainer(object):
             self.logger.log(**log_params)
             self.store_final_embeddings(**log_params)
 
-    def store_final_embeddings(self, **kwargs):
+    def store_final_embeddings(self):
         params = self.model.sorted_pruned_params()
         f_path = os.path.join(self.log_path, "params", "parameters.npz")
+        try:
+            os.makedirs(os.path.dirname(f_path), exist_ok=True)
+        except OSError as e:
+            print("Could not create directory for storing parameters, since {}".format(e))
+
         self.params.update(
             pruned_q_mu=params["pruned_q_mu"], pruned_q_var=params["pruned_q_var"]
         )

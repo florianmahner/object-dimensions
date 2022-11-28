@@ -49,6 +49,7 @@ class Embedding(nn.Module):
 
         self.non_zero_weights = non_zero_weights
         self.init_dim = init_dim
+        self.n_objects = n_objects
 
         self.q_mu = QMu(n_objects, init_dim)
         self.q_logvar = QLogVar(n_objects, init_dim)
@@ -103,8 +104,14 @@ class Embedding(nn.Module):
         elif isinstance(self.prior, SpikeSlabPrior):
             nn.init.kaiming_normal_(
                 self.q_mu.q_mu.data, mode="fan_out", nonlinearity="relu"
-            )
-            eps = self.q_mu.q_mu.std().log()
+            )        
+            
+            # Extract from F.linear -> Setting a=sqrt(5) in kaiming_uniform is the same as initializing with
+            # uniform(-1/sqrt(in_features), 1/sqrt(in_features)). For details, see
+            # https://github.com/pytorch/pytorch/issues/57109
+            eps = np.log(1 / np.sqrt(self.n_objects))
+
+                # eps = self.q_mu.q_mu.std().log()
             self.q_logvar.q_logvar.data.fill_(eps)
 
             # eps2 = -(self.q_mu.q_mu.data.std().log() * -1.0).exp()
