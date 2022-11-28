@@ -5,6 +5,7 @@ import torch
 import toml
 import os 
 import random
+import argparse
 
 import numpy as np
 
@@ -12,15 +13,16 @@ from deep_embeddings import Embedding
 from deep_embeddings import LogGaussianPrior, SpikeSlabPrior
 from deep_embeddings import EmbeddingTrainer
 from deep_embeddings import DeepEmbeddingLogger
-from deep_embeddings import build_triplet_dataset
 from deep_embeddings import ExperimentParser
+from deep_embeddings import build_triplet_dataset
 
 
 parser = ExperimentParser(description="Main training script for deep embeddings")
 parser.add_argument("--triplet_path", type=str, help="Path to the triplet file")
 parser.add_argument("--log_path", type=str, default="./results", help="Path to store all training outputs and model checkpoints")
 parser.add_argument("--modality", type=str, default="deep", choices=("deep", "behavior"), help="Modality to train on")
-parser.add_argument("--fresh", default=False, action='store_true', help="Start clean and delete old path content")
+parser.add_argument("--fresh", default=False, action='store_true', help="""Start clean and delete old path content. Otherwise
+continue training from checkpoint if it exists and load the previous config file from that directory""")
 parser.add_argument("--load_model", default=False, action='store_true', help="Load a pretrained model from log path")
 parser.add_argument("--tensorboard", default=False, action='store_true', help="Use tensorboard to log training")
 parser.add_argument("--init_dim", type=int, default=100, help="Initial dimensionality of the latent space")
@@ -73,61 +75,55 @@ def _convert_samples_to_string(train_dataset, val_dataset):
     n_samples = str(n_samples)
     n_samples = n_samples.rstrip("0")
     n_samples = n_samples + "mio"
-
     return n_samples
 
-
-def train(triplet_path, log_path, modality, fresh=False, load_model=False, tensorboard=False, 
-          init_dim=100, prior="sslab", batch_size=256, n_epochs=1000, lr=1e-3, 
-          stability_time=500, rnd_seed=42, beta=0.5, params_interval=100, mc_samples=5,
-          checkpoint_interval=500, scale=0.25, non_zero_weights=5, device_id=0, identifier=None,
-          toml_config=None):
-
+def load_args(args, log_path, fresh):
+    # If we continue training we load the previous parameters
+    if os.path.exists(os.path.join(log_path, "config.toml")) and not fresh:
+        print("Loading previous config file from the directory {} to continue training".format(log_path))
+        toml_config = toml.load(os.path.join(log_path, "config.toml"))
+        args = argparse.Namespace(**toml_config)
+    else:    
+        with open(os.path.join(log_path, "config.toml"), "w") as f:
+            toml.dump(vars(args), f)
+    return args
     
-    n_objects = _parse_number_of_objects(triplet_path, modality)
-    model_prior = _build_prior(prior, n_objects, init_dim, scale)
 
-    device = torch.device(f"cuda:{device_id}") if torch.cuda.is_available() else torch.device("cpu")
-    model = Embedding(model_prior, n_objects, init_dim, non_zero_weights)
+def train(args):
 
-    model.to(device)
-
-    
-    train_dataset, val_dataset = build_triplet_dataset(triplet_path)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=True)
-
-
+    train_dataset, val_dataset = build_triplet_dataset(args.triplet_path)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4, pin_memory=True)
     n_samples = _convert_samples_to_string(train_dataset, val_dataset)
-    
+      
     # Build the logpath
-    if modality == "deep":
-        log_path = os.path.join(log_path, identifier, modality, n_samples, prior, str(init_dim), str(batch_size),
-                                str(beta), str(scale), str(rnd_seed))
+    if args.modality == "behavior":
+        log_path = os.path.join(args.log_path, args.identifier, args.modality, n_samples, args.prior, str(args.init_dim), str(args.batch_size),
+                                str(args.beta), str(args.scale), str(args.rnd_seed))
 
     else:
-        model_name, module_name = triplet_path.split("/")[-2:]
-        log_path = os.path.join(log_path, identifier, modality, model_name, module_name, n_samples, prior, str(init_dim), str(batch_size),
-                                str(beta), str(scale), str(rnd_seed))
+        model_name, module_name = args.triplet_path.split("/")[-2:]
+        log_path = os.path.join(args.log_path, args.identifier, args.modality, model_name, module_name, n_samples, args.prior, str(args.init_dim), 
+                                str(args.batch_size), str(args.beta), str(args.scale), str(args.rnd_seed))
 
     # Save all configuration parameters in the directory
-
     if not os.path.exists(log_path):
         os.makedirs(log_path)
 
-    
-    # TODO Load and save the configs in the right way!
-    if os.path.exists(os.path.join(log_path, "config.toml")) and not fresh:
-        configs = toml.load(os.path.join(log_path, "config.toml"))
-    else:    
-        with open(os.path.join(log_path, "config.toml"), "w") as f:
-            toml.dump(toml_config, f)
+    args = load_args(args, log_path, args.fresh)
+    _set_global_seed(args.rnd_seed)
+
+    n_objects = _parse_number_of_objects(args.triplet_path, args.modality)
+    model_prior = _build_prior(args.prior, n_objects, args.init_dim, args.scale)
+    device = torch.device(f"cuda:{args.device_id}") if torch.cuda.is_available() else torch.device("cpu")
+    model = Embedding(model_prior, n_objects, args.init_dim, args.non_zero_weights)
+    model.to(device)
 
 
     # Build loggers and train the model!
-    logger = DeepEmbeddingLogger(log_path, model, fresh, tensorboard, params_interval, checkpoint_interval)
+    logger = DeepEmbeddingLogger(log_path, model, args.fresh, args.tensorboard, args.params_interval, args.checkpoint_interval)
     trainer = EmbeddingTrainer(model, model_prior, train_loader, val_loader, logger, device, 
-                               load_model, n_epochs, mc_samples, lr, beta, stability_time)
+                               args.load_model, args.n_epochs, args.mc_samples, args.lr, args.beta, args.stability_time)
     trainer.train()
 
 
@@ -136,10 +132,6 @@ def _check_args(args):
         raise ValueError("Cannot load a model and train from scratch at the same time")
 
 if __name__ == '__main__':
-    args, toml_config = parser.parse_args(return_config=True)
+    args = parser.parse_args()
     _check_args(args)
-
-    train(args.triplet_path, args.log_path, args.modality,
-          args.fresh, args.load_model, args.tensorboard, args.init_dim, args.prior, args.batch_size, args.n_epochs, args.lr, args.stability_time,
-          args.rnd_seed, args.beta, args.params_interval, args.mc_samples, args.checkpoint_interval, args.scale, args.non_zero_weights, 
-          args.device_id, args.identifier, toml_config)
+    train(args)

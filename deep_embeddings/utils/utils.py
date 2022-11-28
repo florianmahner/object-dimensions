@@ -49,7 +49,7 @@ class ExperimentParser:
         return default_args, cmdl_args
 
     def _find_changed_args(self, default_args, cmdl_args):
-        """Find the arguments that have been changed from the default values in the command line"""
+        """Find the arguments that have been changed from the command line to replace the .toml arguments"""
         default_args = vars(default_args)
         cmdl_args = vars(cmdl_args)
         changed_args = {}
@@ -59,7 +59,7 @@ class ExperimentParser:
         return changed_args
 
 
-    def parse_args(self, return_config=False):
+    def parse_args(self):
         """Parse the arguments from the command line and the configuration file"""
         default_args, cmdl_args = self._extract_args()
         changed_args = self._find_changed_args(default_args, cmdl_args)
@@ -91,11 +91,7 @@ class ExperimentParser:
             else:
                 setattr(cmdl_args, key, value)
 
-        if return_config:
-            return cmdl_args, config
-
-        else:
-            return cmdl_args
+        return cmdl_args
 
 
 def img_to_uint8(img):
@@ -203,11 +199,9 @@ def transform_weights(weights, relu=True):
     """We transform by (i) adding a positivity constraint and the sorting in descending order"""
     if relu:
         weights = relu_embedding(weights)
-    weights = remove_zeros(weights)
-
     sorted_dims = np.argsort(-np.linalg.norm(weights, axis=0, ord=1))
-    weights = weights[:, sorted_dims]
 
+    weights = weights[:, sorted_dims]
     d1, d2 = weights.shape
     # We transpose so that the matrix is always of shape (n_images, n_dims)
     if d1 < d2:
@@ -217,7 +211,13 @@ def transform_weights(weights, relu=True):
 
 
 def load_sparse_codes(path, with_dim=False, relu=True):
-    weights = np.loadtxt(os.path.join(path))
+    if isinstance(path, str):
+        weights = np.loadtxt(os.path.join(path))
+    elif isinstance(path, np.ndarray):
+        weights = path
+    else:
+        raise ValueError("Weights must be a .txt file path or as numpy array")
+    
     weights, sorted_dim = transform_weights(weights, relu=relu)
     if with_dim:
         return weights, sorted_dim
