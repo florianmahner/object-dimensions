@@ -1,14 +1,15 @@
 # Path parameters
 log_path = "./results"
-identifier = "test"
+# identifier = "sslab"
+identifier="4096_nll_pruned"
 
 # General parameters
-triplet_path = "./data/triplets/triplets_behavior"
+triplet_path = "./data/triplets/behavior"
 modality = "behavior" 
 load_model = false
 fresh = true
 tensorboard = true
-params_interval = 50
+params_interval = 500
 checkpoint_interval = 500  # we dont save the model in principle!
 device_id = 1
 
@@ -17,9 +18,9 @@ device_id = 1
 prior = "sslab"
 init_dim = 100
 n_epochs = 3000
-stability_time = 500
+stability_time = 1000
 rnd_seed = 0
-batch_size = 16384
+batch_size = 4096
 non_zero_weights = 5
 mc_samples = 5
 beta = 1.0
