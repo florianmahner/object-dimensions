@@ -1,23 +1,26 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import argparse
+""" This script computes the jackknife analysis for the deep embeddings. Jackknife 
+means that we remove one dimension at a time and compute the softmax decision for the odd one out triplet.
+We then look at the dimension that has the largest impact on the softmax decision by removing it (jackknifing it).
+and evaluate the impact of the dimension on the softmax decision. """
+
+
 import torch
 import os
 import torch.nn.functional as F
+import plotly.express as px
+import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
+from scipy.stats import rankdata
 
 import matplotlib.gridspec as gridspec
 
-from deep_embeddings.utils.utils import load_sparse_codes, filter_embedding_by_behavior, load_image_data
 from deep_embeddings import build_triplet_dataset
 from deep_embeddings import Embedding as model
-
-parser = argparse.ArgumentParser(description='Jackknife analysis')
-parser.add_argument("--dnn_path", type=str, help="Path to the human embedding")
-parser.add_argument("--human_path", type=str, help="Path to the human embedding")
 
 
 def compute_softmax_per_batch(q_mu, q_var, indices, device):
@@ -77,18 +80,33 @@ def compute_softmax_decisions(q_mu, q_var, val_loader, device):
     return softmax_decisions, ooo_indices
 
 
-def find_diverging_triplets(softmax_human, softmax_dnn, indices):
-    # Find the indices of the most diverging softmax choices!
-    softmax_diff = np.abs(softmax_human - softmax_dnn)
+def find_diverging_triplets(softmax_human, softmax_dnn, indices, topk=12):
 
-    # Sort the indices by the softmax difference
-    topk = 4
-    sort_indices = np.argsort(-softmax_diff)[:topk]
+    # # Find the indices of the most diverging softmax choices!
+    # softmax_diff = np.abs(softmax_human - softmax_dnn)
 
-    # Find the indices of the most diverging softmax choices!
-    ooo_indices = indices[sort_indices]
+    # # Sort the indices by the softmax difference
+    # sort_indices = np.argsort(-softmax_diff)[:topk]
 
-    return ooo_indices
+
+    rank_human = rankdata(softmax_human)
+    rank_dnn = rankdata(softmax_dnn)
+
+    high_both = np.mean([rank_human, rank_dnn], axis=0)
+    high_both = np.argsort(-high_both)[:topk]
+
+    high_human_low_dnn = np.mean([rank_human, -rank_dnn], axis=0)
+    high_human_low_dnn = np.argsort(-high_human_low_dnn)[:topk]
+
+    low_human_high_dnn = np.mean([-rank_human, rank_dnn], axis=0)
+    low_human_high_dnn = np.argsort(-low_human_high_dnn)[:topk]
+
+    
+    diverging_indices = dict(high_both=high_both, 
+                             high_human_low_dnn=high_human_low_dnn, 
+                             low_human_high_dnn=low_human_high_dnn)
+
+    return diverging_indices
 
 
 def jackknife(q_mu, q_var, ooo_indices, device):    
@@ -97,8 +115,11 @@ def jackknife(q_mu, q_var, ooo_indices, device):
     q_var = torch.tensor(q_var).to(device)
 
     n_dims = q_mu.shape[1]
-    soft_max_diff = np.ones(len(ooo_indices)) * float("inf")
+    softmax_diff = np.ones(len(ooo_indices)) * float("inf")
     most_important_dim = np.zeros(len(ooo_indices), dtype=int)
+
+    softmax_all = np.ones((len(ooo_indices), n_dims)) 
+
 
     for i in range(n_dims):
         # Take all elements except the i-th embedding dimension
@@ -111,124 +132,189 @@ def jackknife(q_mu, q_var, ooo_indices, device):
         # softmax_per_batch = softmax_per_batch[-1] # This is the odd one out probability (at index k)
         softmax_per_batch = softmax_per_batch[0] # This is the similarity of object i,j (k) is the odd one out
 
+        softmax_per_batch = softmax_per_batch.detach().cpu().numpy()
+        softmax_all[:, i] = softmax_per_batch
+        
         for s, softmax in enumerate(softmax_per_batch):
-            if softmax < soft_max_diff[s]:
-                soft_max_diff[s] = softmax
+            if softmax < softmax_diff[s]:
+                softmax_diff[s] = softmax
                 most_important_dim[s] = i
         
-    return soft_max_diff, most_important_dim
+    return softmax_all, softmax_diff, most_important_dim
 
 
-if __name__ == "__main__":
-    args = parser.parse_args()
-
-    args.human_weights = "./results/sslab/vgg16_bn/4mio/behavior/sslab/100/256/0.5/0.5/2/params/pruned_q_mu_epoch_600.txt"
-    args.human_var = "./results/sslab/vgg16_bn/4mio/behavior/sslab/100/256/0.5/0.5/2/params/pruned_q_var_epoch_600.txt"
-
-    args.dnn_weights = "./results/sslab/vgg16_bn/4mio/behavior/sslab/100/256/0.5/0.5/1/params/pruned_q_mu_epoch_600.txt"
-    args.dnn_var = "./results/sslab/vgg16_bn/4mio/behavior/sslab/100/256/0.5/0.5/1/params/pruned_q_var_epoch_600.txt"
-    
-    args.dnn_weights2 = "./results/50mio/16396/0.4/0.25/1.0/0.5/42/params/pruned_q_mu_epoch_5200.txt"
-    args.dnn_var2 = "./results/50mio/16396/0.4/0.25/1.0/0.5/42/params/pruned_q_var_epoch_5200.txt"
-
-    args.img_root = "./data/image_data/images12"
-
-    # NOTE Right now not implemented to the end with human-human and human-dnn comparison!
-    plot_dir = os.path.dirname(os.path.dirname(args.dnn_weights))
-    plot_dir = os.path.join(plot_dir, "jacknife")
-    if not os.path.exists(plot_dir):
-        os.makedirs(plot_dir)
-
-    _, _, image_filenames = load_image_data(args.img_root)
-
-    human_weights = load_sparse_codes(args.human_weights)
-
-    print(human_weights.shape)
-    dnn_weights = load_sparse_codes(args.dnn_weights)
-
-    human_var = load_sparse_codes(args.human_var)
-    dnn_var = load_sparse_codes(args.dnn_var)
-
-
-    # Filter out images without behavioral data
-    
-    dnn_weights2 = load_sparse_codes(args.dnn_weights2)
-    dnn_var2 = load_sparse_codes(args.dnn_var2)
-
-    dnn_weights2, ref_images = filter_embedding_by_behavior(dnn_weights2, image_filenames)
-    dnn_var2, ref_images = filter_embedding_by_behavior(dnn_var2, image_filenames)
-
-
-    assert len(human_weights) == len(dnn_weights),  "Embeddings have different shapes! (i.e. different number of images)"
-
-    triplet_path = "./data/triplets_behavior"
-    # If all data on GPU, num workers need to be 0 and pin memory false
-    device  = torch.device('cuda:3') if torch.cuda.is_available() else torch.device("cpu")
-    train_dataset, val_dataset = build_triplet_dataset(triplet_path, device)
-
+def build_dataloader(triplet_path):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    _, val_dataset = build_triplet_dataset(triplet_path, device)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=64, shuffle=False, num_workers=4)
 
+    return val_loader
 
-    softmax_human, indices_human = compute_softmax_decisions(human_weights, human_var, val_loader, device)
-    softmax_dnn, indices_dnn = compute_softmax_decisions(dnn_weights, dnn_var, val_loader, device)
+
+def plot_bar(decisions, out_path="./"):
+
+    dim = [f"Dim {str(i)}" for i in range(len(decisions))]
+    
+    df = pd.DataFrame({"softmax": decisions, "dim": dim} )
+    fig = px.bar_polar(df, theta="dim", r="softmax", color="dim", template="simple_white")
+
+    import plotly.graph_objects as go
+
+    fig.update_layout(
+    showlegend = False,
+    polar = dict(
+      bgcolor = "rgb(255, 255, 255)",
+      angularaxis = dict(
+        linewidth = 3,
+        showline=False,
+        showticklabels=False,
+        # ticks='',
+        linecolor='white'
+      ),
+      radialaxis = dict(
+        side = "clockwise",
+        showline = False,
+        showticklabels = False,
+        ticks = '',
+        linewidth = 2,
+        gridcolor = "white",
+        gridwidth = 2,
+      )
+    ),
+    paper_bgcolor = "rgb(255,255,255)"
+    )
+
+    for dim in fig.layout.annotations:
+        dim.font.size = 20
+
+    # fig.add_annotation(x=0.5, y=0.95, text="Dim 0", showarrow=False, font_size=15)
+
+
+
+
+
+
+
+#     fig.add_trace(go.Scatter(
+#     x=[0, 1, 2],
+#     y=[3, 3, 3],
+#     mode="lines+text",
+#     name="Lines and Text",
+#     text=["Text G", "Text H", "Text I"],
+#     textposition="bottom center"
+# ))
+    # fig.update_traces(textposition='inside')
+    # fig.update_layout(uniformtext_minsize=12, uniformtext_mode='hide')
+
+    fig.show()
+
+
+    fig.write_image(os.path.join(out_path, "bar_polar.png"), width=800, height=800)
+
+
+
+
+def run_jackknife(human_weights, human_var, dnn_weights, dnn_var, image_filenames, triplet_path, plot_dir,  topk=12):
+    """ This function runs the jackknife analysis for a given embedding"""
+
+    # If all data on GPU, num workers need to be 0 and pin memory false
+    device  = torch.device('cuda:0') if torch.cuda.is_available() else torch.device("cpu")
+    val_loader = build_dataloader(triplet_path)
+
+    softmax_human, indices = compute_softmax_decisions(human_weights, human_var, val_loader, device)
+    softmax_dnn, indices = compute_softmax_decisions(dnn_weights, dnn_var, val_loader, device)
 
     # Indices human and indices DNN are the same
-    most_diverging_indices = find_diverging_triplets(softmax_human, softmax_dnn, indices_human)
+    most_diverging_indices = find_diverging_triplets(softmax_human, softmax_dnn, indices, topk)
 
-    # Find the most diverging dimensions
-    soft_max_diff_human, most_important_dim_human = jackknife(human_weights, human_var, most_diverging_indices, device)
-    soft_max_diff_dnn, most_important_dim_dnn = jackknife(dnn_weights, dnn_var, most_diverging_indices, device)
+    most_important_dim_human = dict()
+    most_important_dim_dnn = dict()
 
-    plot_dir = "./jackknife"
-    os.makedirs(plot_dir, exist_ok=True)
+    for key, value in most_diverging_indices.items():
+        print(f"{key}: {value}")
 
 
-    for i, (triplet, important_human, important_dnn) in enumerate(zip(most_diverging_indices, most_important_dim_human, most_important_dim_dnn)):
+        interesting_triplets = indices[value]
+        softmax_jack_human, softmax_diff_human, important_human = jackknife(human_weights, human_var, interesting_triplets, device)
+        most_important_dim_human[key] = important_human
+
+        softmax_jack_dnn, softmax_diff_dnn, important_dnn = jackknife(dnn_weights, dnn_var, interesting_triplets, device)
+        most_important_dim_dnn[key] = important_dnn
+
+
+    i =0
+    for key, value in most_diverging_indices.items():
+
+        i += 1
+
+        print(f"Starting {key}")
         
-        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        dim_human = most_important_dim_human[key]
+        dim_dnn = most_important_dim_dnn[key]
 
-        for ctr, img_index in enumerate(triplet):
-            img = Image.open(ref_images[img_index])
-            img = img.resize((224, 224))
+        interesting_triplets = indices[value]
 
-            axes[ctr].imshow(img)
-            axes[ctr].axis("off")
-
-        plt.tight_layout()
-        plt.savefig(os.path.join(plot_dir, "triplet_{}.png".format(i)))
-        
-
-        human = human_weights[:, important_human]
-        human = np.argsort(-human)[:6]
-
-        dnn = dnn_weights[:, important_dnn]
-        dnn = np.argsort(-dnn)[:6]
+        for i, (triplet, dim_h, dim_d) in enumerate(zip(interesting_triplets, dim_human, dim_dnn)):
+            # fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
 
-        fig = plt.figure(figsize=(15, 5))
-        gs1 = gridspec.GridSpec(2, 3, figure=fig)
-        gs1.update(left=0.05, right=0.45, wspace=0.0, hspace=0.0)
-    
-        for ctr, human_idx in enumerate(human):
-            ax = plt.subplot(gs1[ctr])
-            img = Image.open(ref_images[human_idx])
-            img = img.resize((224, 224))
-            ax.imshow(img)
-            ax.axis("off")
-
-        plt.subplot(gs1[1]).set_title("Human", fontsize=20)
+            fig = plt.figure(figsize=(15, 10))
+            gs0 = gridspec.GridSpec(1, 3, figure=fig)
+            gs0.update(top=0.95, bottom=0.7, left=0.25, right=0.75, wspace=0.0, hspace=0.0)
 
 
-        gs2 = gridspec.GridSpec(2, 3, figure=fig)
-        gs2.update(left=0.55, right=0.95, wspace=0., hspace=0.0)
-        
-        for ctr, dnn_idx in enumerate(dnn):
-            ax = plt.subplot(gs2[ctr])
-            img = Image.open(ref_images[dnn_idx])
-            img = img.resize((224, 224))
+
+            for ctr, img_index in enumerate(triplet):
+                ax = plt.subplot(gs0[ctr])
+
+                img = Image.open(image_filenames[img_index])
+                img = img.resize((224, 224))
+
+                ax.imshow(img)
+                ax.axis("off")
+
+
+            plt.subplot(gs0[1]).set_title("Triplet", fontsize=20)
+
+            # plt.tight_layout()
+            # plt.savefig(os.path.join(plot_dir, "triplet_{}_{}.png".format(key, i)))
+            # plt.close()
             
-            ax.imshow(img)
-            ax.axis("off")
 
-        plt.subplot(gs2[1]).set_title("DNN", fontsize=20)
-        plt.savefig(os.path.join(plot_dir, "human_dnn_{}.png".format(i)), dpi=300)
+            human = human_weights[:, dim_h]
+            human = np.argsort(-human)[:6]
+
+            dnn = dnn_weights[:, dim_d]
+            dnn = np.argsort(-dnn)[:6]
+
+            if i==4:
+                breakpoint()
+
+            # fig = plt.figure(figsize=(15, 5))
+            gs1 = gridspec.GridSpec(2, 3, figure=fig)
+            gs1.update(top=0.65, bottom=0.1, left=0.05, right=0.45, wspace=0.0, hspace=0.0)
+        
+            for ctr, human_idx in enumerate(human):
+                ax = plt.subplot(gs1[ctr])
+                img = Image.open(image_filenames[human_idx])
+                img = img.resize((224, 224), Image.Resampling.BILINEAR)
+                ax.imshow(img)
+                ax.axis("off")
+
+            plt.subplot(gs1[1]).set_title("Dimension Human", fontsize=20)
+
+            gs2 = gridspec.GridSpec(2, 3, figure=fig)
+            gs2.update(top=0.65, bottom=0.1, left=0.55, right=0.95, wspace=0., hspace=0.0)
+            
+            for ctr, dnn_idx in enumerate(dnn):
+                ax = plt.subplot(gs2[ctr])
+                img = Image.open(image_filenames[dnn_idx])
+                img = img.resize((224, 224))
+                
+                ax.imshow(img)
+                ax.axis("off")
+
+            plt.subplot(gs2[1]).set_title("Dimension DNN", fontsize=20)
+            plt.savefig(os.path.join(plot_dir, "{}_{}.png".format(key, i)), dpi=300)
+            plt.close()
+
