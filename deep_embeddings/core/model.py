@@ -2,15 +2,12 @@
 # -*- coding: utf-8 -*-
 
 import torch
-import math
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-
 from deep_embeddings.core.pruning_lognormal import LogNormalDimensionPruning
 from deep_embeddings.core.pruning import NormalDimensionPruning
-
 from deep_embeddings.core.priors import SpikeSlabPrior, LogGaussianPrior
 
 
@@ -73,8 +70,10 @@ class Embedding(nn.Module):
         """Apply reparameterization trick."""
 
         if isinstance(self.prior, LogGaussianPrior):
-            # eps = nn.init.trunc_normal_(scale.data.new(scale.size()), mean=0, std=1, a=0.0)
-            eps = scale.data.new(scale.size()).log_normal_(0, 1)
+
+            # eps = scale.data.new(scale.size()).normal_()
+            eps = nn.init.trunc_normal_(scale.data.new(scale.size()), mean=0, std=1, a=0.0)
+            # eps = scale.data.new(scale.size()).log_normal_(0, 1)
 
         elif isinstance(self.prior, SpikeSlabPrior):
             eps = scale.data.new(scale.size()).normal_()
@@ -85,37 +84,27 @@ class Embedding(nn.Module):
         """Initialize weights for the embedding"""
 
         if isinstance(self.prior, LogGaussianPrior):
-            # nn.init.trunc_normal_(self.q_mu.q_mu.data, mean=0, std=1, a=0.0)
-            self.q_mu.q_mu.data.log_normal_(
-                mean=self.prior.mean, std=self.prior.variance
-            )
-            # self.q_mu.q_mu.data.log_normal_(mean=0, std=1)
-            eps2 = -(self.q_mu.q_mu.data.std().log() * -1.0).exp()
-            self.q_logvar.q_logvar.data.fill_(eps2)
-
+            nn.init.trunc_normal_(self.q_mu.q_mu.data, mean=0, std=0.1, a=0.0)
+            # self.q_mu.q_mu.data.log_normal_(
+                # mean=self.prior.mean, std=self.prior.variance
+            # )
+            self.q_mu.q_mu.data.log_normal_(mean=0, std=1)
+            # eps = -(1 / self.q_mu.q_mu.std())
+            # self.q_logvar.q_logvar.data.fill_(eps)        
+            # nn.init.trunc_normal_(self.q_logvar.q_logvar.data, mean=0, std=0.1, a=0.0)
+            self.q_logvar.q_logvar.data = self.q_logvar.q_logvar.data.log()
+            
             # nn.init.kaiming_normal_(self.q_mu.q_mu.data, mode="fan_out", nonlinearity="relu")
             # eps = self.q_mu.q_mu.std().log()
             # self.q_logvar.q_logvar.data.fill_(eps)
-
             # self.q_mu.q_mu.data = torch.abs(self.q_mu.q_mu.data)
             # nn.init.uniform_(self.q_logvar.q_logvar.data, a=-2.5, b=-2.0)
             # self.q_logvar.q_logvar.data.normal_(mean=-2.5, std=0.001)
 
         elif isinstance(self.prior, SpikeSlabPrior):
-            nn.init.kaiming_normal_(
-                self.q_mu.q_mu.data, mode="fan_out", nonlinearity="relu"
-            )        
-            
-            # Extract from F.linear -> Setting a=sqrt(5) in kaiming_uniform is the same as initializing with
-            # uniform(-1/sqrt(in_features), 1/sqrt(in_features)). For details, see
-            # https://github.com/pytorch/pytorch/issues/57109
-            eps = np.log(1 / np.sqrt(self.n_objects))
-
-                # eps = self.q_mu.q_mu.std().log()
+            nn.init.kaiming_normal_(self.q_mu.q_mu, mode="fan_in", nonlinearity="relu")
+            eps = -(1 / self.q_mu.q_mu.std())
             self.q_logvar.q_logvar.data.fill_(eps)
-
-            # eps2 = -(self.q_mu.q_mu.data.std().log() * -1.0).exp()
-            # self.q_logvar.q_logvar.data.fill_(eps2)
 
     def forward(self):
         q_mu = self.q_mu()
