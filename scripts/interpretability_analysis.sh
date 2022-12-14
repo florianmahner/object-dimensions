@@ -1,14 +1,24 @@
 #!/bin/bash
 
-# This script is used to analyze the results of the experiments.            
-vis_embedding=false
+vis=false
 sparse_codes=false
 big_gan=false
 searchlight=false
-gpt3=true
+gpt3=false
+
+while getopts "vcgbs" opt; do
+  case $opt in
+    v) vis=true ;;
+    c) sparse_codes=true ;;
+    b) big_gan=true ;;
+    g) gpt3=true ;;
+    s) searchlight=true ;;
+    \?) echo "Invalid option -$OPTARG" >&2 ;;
+  esac
+done
 
 
-if $vis_embedding; then
+if $vis; then
     echo "Visualize the image maximally activating embedding dimensions"
     python deep_embeddings/analyses/visualization/visualize_embedding.py \
         --config "./configs/interpretability.toml" --section "visualization"   
