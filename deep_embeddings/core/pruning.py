@@ -7,7 +7,7 @@ from functools import partial
 
 
 class NormalDimensionPruning(nn.Module):
-    """We prune dimensions based on the importance of each dimension, which is determined by the set of pvalues obtained from the
+    r"""We prune dimensions based on the importance of each dimension, which is determined by the set of pvalues obtained from the
     cdf of the normal distribution given the mean and variance of the embedding, corrected for multiple comparisons by calculting
     the FDR given the Benjamin-Hochberg procedure."""
 
@@ -18,7 +18,6 @@ class NormalDimensionPruning(nn.Module):
         self.register_buffer("cdf_loc", cdf_loc)
         # empirical cumulative distribution function factor for the benjamin hochberg correction
         self.register_buffer("ecdf_factor", self._ecdf_torch(n_objects)) 
-        print(n_objects, self.cdf_loc)
 
     def __call__(self, q_mu, q_var, alpha=0.05):
         pvals = self.compute_pvals_torch(q_mu, q_var)

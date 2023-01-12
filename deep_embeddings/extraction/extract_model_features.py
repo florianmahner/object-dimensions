@@ -5,18 +5,19 @@ import argparse
 import torch
 import torchvision
 
-import sys
-sys.path.append("./deep_embeddings/analyses/image_generation/stylegan_xl")
+# from thingsvision.utils.storing import save_features
+# from thingsvision import get_extractor
+# from thingsvision.utils.data import DataLoader
+# from thingsvision.core.extraction import center_features
 
-from thingsvision.utils.storing import save_features
-from thingsvision import Extractor
-# from thingsvision.utils.data import ImageDataset, DataLoader
-from thingsvision.utils.data import DataLoader
-from thingsvision.core.extraction import center_features
+import sys
+sys.path.append("./deep_embeddings/stylegan_xl")
+sys.path.append("../deep_embeddings/stylegan_xl")
 
 from deep_embeddings.utils.image_dataset import ImageDataset
-from deep_embeddings.analyses.image_generation.stylegan_xl import legacy
-from deep_embeddings.analyses.image_generation.stylegan_xl.dnnlib import util
+# from deep_embeddings.stylegan_xl import legacy
+# from deep_embeddings.stylegan_xl.dnnlib import util
+
 
 
 parser = argparse.ArgumentParser(description='Extract features from a dataset using a pretrained model')
@@ -25,7 +26,6 @@ parser.add_argument('--out_path', type=str, default='./data/vgg_features', help=
 parser.add_argument('--batch_size', type=int, default=64, help='Batch size for the dataloader to extract features')
 parser.add_argument('--model_name', type=str, default='vgg16_bn', help='Name of the pretrained model to use')
 parser.add_argument('--module_name', type=str, default='classifier.3', help='Name of the layer to extract features from')
-
 
 transforms = torchvision.transforms.Compose([
     torchvision.transforms.Resize(size=256),
@@ -45,32 +45,38 @@ def load_model(model_name):
             discriminator = legacy.load_network_pkl(f)['D']
             model = discriminator.eval().requires_grad_(False)
 
-    elif model_name == 'clip':
-        model =  Extractor(model_name='OpenCLIP', pretrained=True, device=device, source='custom',
+    elif model_name in ['clip', 'OpenCLIP']:
+        model =  get_extractor(model_name='OpenCLIP', pretrained=True, device=device, source='custom',
                         model_parameters={'variant': 'ViT-H-14', 'dataset': 'laion2b_s32b_b79k'})
 
     else:
-        model =  Extractor(model_name, pretrained=True, device=device, source='torchvision')
+        model =  get_extractor(model_name, pretrained=True, device=device, source='torchvision')
     return model
 
 
 def extract_features(img_root, out_path, model_name, module_name, batch_size):
-    model = load_model(model_name)
+    """ Extract features from a dataset using a pretrained model """
+    extractor = load_model(model_name)
     dataset = ImageDataset(
             img_root=img_root,
             out_path=out_path,
-            transforms=model.get_transformations()
+            transforms=extractor.get_transformations()
     )
+    assert len(dataset) > 0, "Dataset from path {} is empty!".format(img_root)
 
-    batches = DataLoader(dataset=dataset, batch_size=batch_size, backend=model.backend)
-    features = model.extract_features(
+    filenames = dataset.images
+    with open(out_path + '/filenames.txt', 'w') as f:
+        f.write('\n'.join(filenames))
+
+    batches = DataLoader(dataset=dataset, batch_size=batch_size, backend=extractor.backend)
+    features = extractor.extract_features(
                     batches=batches,
                     module_name=module_name,
                     flatten_acts=True,
-                    clip=True if model_name == 'clip' else False,
+                    clip=True if model_name in ["clip", "OpenCLIP"] else False,
     )
 
-    if model_name == "clip":
+    if model_name in ["clip", "OpenCLIP"]:
         features = center_features(features) 
 
     save_features(features, out_path, file_format='npy')

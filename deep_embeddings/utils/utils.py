@@ -33,6 +33,11 @@ class ExperimentParser:
             default="",
             help="Path to the configuration file.",
         )
+        self.parser.add_argument(
+            "--section", 
+            type=str, 
+            default="",
+            help="Section name in the config file to parse arguments from")
 
     def add_argument(self, *args, **kwargs):
         return self.parser.add_argument(*args, **kwargs)
@@ -45,7 +50,6 @@ class ExperimentParser:
         default_args = self.parser.parse_args()
         sys.argv = sys_defaults
         cmdl_args = self.parser.parse_args()
-
         return default_args, cmdl_args
 
     def _find_changed_args(self, default_args, cmdl_args):
@@ -53,16 +57,18 @@ class ExperimentParser:
         default_args = vars(default_args)
         cmdl_args = vars(cmdl_args)
         changed_args = {}
+
         for key, value in default_args.items():
             if cmdl_args[key] != value:
                 changed_args[key] = cmdl_args[key]
+
         return changed_args
 
 
-    def parse_args(self):
-        """Parse the arguments from the command line and the configuration file"""
+    def parse_args(self, combined_section="general"):
+        """Parse the arguments from the command line and the configuration file.
+        If a section name is provided, only the arguments in that section will be parsed from the .toml file"""
         default_args, cmdl_args = self._extract_args()
-        changed_args = self._find_changed_args(default_args, cmdl_args)
 
         # These are the default arguments options updated by the command line
         if not cmdl_args.config:
@@ -76,22 +82,43 @@ class ExperimentParser:
             raise FileNotFoundError(
                 "Config file {} not found".format(cmdl_args.config)
             )
- 
-        for key, value in config.items():
-            if key not in default_args:
-                raise ValueError(
-                    "Warning: key '{}' in config file {} not found in argparser".format(
-                        key, default_args.config
-                    )
+
+        changed_args = self._find_changed_args(default_args, cmdl_args)
+        if cmdl_args.section:
+            try:
+                section_name = cmdl_args.section        
+                section_config = config[section_name]                
+            except KeyError:
+                raise KeyError(
+                    "Section {} not found in config file".format(section_name)
                 )
+
+        else:
+            section_config = config
+
+        # Integrate args from a section that counts for all experiments
+        if config.get(combined_section):
+            section_config.update(config[combined_section])
+            
+        for key, value in section_config.items():
+            if key not in default_args:
+                # raise ValueError(
+                    # "Warning: key '{}' in config file {} not found in argparser".format(
+                        # key, default_args.config
+                    # )
+                # )
+                continue
             # If the key has been passed in the command line, do not overwrite the 
             # command line argument with the toml argument, but vice versa.
             if key in changed_args:
-                config[key] = changed_args[key]
+                section_config[key] = changed_args[key]
             else:
                 setattr(cmdl_args, key, value)
 
         return cmdl_args
+
+
+# ------- Helper Functions for images ------- #
 
 
 def img_to_uint8(img):
@@ -105,40 +132,42 @@ def img_to_uint8(img):
     return img
 
 
-def load_image_data(img_root):
+def load_image_data(img_root, filter_behavior=False, filter_plus=False):
     """Load image data from a folder"""
     dataset = ImageDataset(img_root=img_root, out_path="", transforms=get_image_transforms())
     assert len(dataset) > 0, "No images found in the image root"
-    idx2obj = None
-    obj2idx = None
-    images = dataset.images
+    
+    image_paths = dataset.images
+    indices = np.arange(len(image_paths))
 
-    return idx2obj, obj2idx, images
-
-
-def filter_embedding_by_behavior(embedding, image_paths):
-    """Filters from all THINGS image paths those that ned with a behavior name"""
-    print("Select only behavior images to visualize the embedding")
     class_names = [os.path.basename(img) for img in image_paths]
-    behavior_indices = np.array(
+
+    if filter_behavior:
+        indices = np.array(
         [i for i, img in enumerate(class_names) if "01b" in img]
-    )
-    image_paths = np.array(image_paths)[behavior_indices]
-    embedding = embedding[behavior_indices]
-
-    return embedding, image_paths
-
-
-def filter_embedding_by_plus(embedding, image_paths):
-    print("Select only plus images to visualize the embedding")
-    class_names = [os.path.basename(img) for img in image_paths]
-    behavior_indices = np.array(
+        )    
+    if filter_plus:
+        indices = np.array(
         [i for i, img in enumerate(class_names) if "plus" in img]
-    )
-    image_paths = np.array(image_paths)[behavior_indices]
-    embedding = embedding[behavior_indices]
+        )
+    
+    image_paths = np.array(image_paths)[indices]
 
-    return embedding, image_paths
+    return image_paths, indices
+
+
+def get_image_transforms():
+    transforms = torchvision.transforms.Compose(
+        [
+            torchvision.transforms.Resize(size=256),
+            torchvision.transforms.CenterCrop(size=(224, 224)),
+            torchvision.transforms.ToTensor(),
+        ]
+    )
+    return transforms
+
+
+# ------- Helper Functions for embeddings  ------- #
 
 
 # Determine the cosine similarity between two vectors in pytorch
@@ -179,50 +208,85 @@ def relu_embedding(W):
     return np.maximum(0, W)
 
 
+def create_path_from_params(path, *args):
+    """Create a path if it does not exist"""
+    import os
+    base_path = os.path.dirname(os.path.dirname(path))
+    out_path = os.path.join(base_path, *args)
+    try:
+        os.makedirs(out_path, exist_ok=True)
+    except OSError as os:
+        raise OSError("Error creating path {}: {}".format(path, os))
+
+    return out_path
+
+
 def remove_zeros(W, eps=0.1):
     w_max = np.max(W, axis=1)
     W = W[np.where(w_max > eps)]
     return W
 
-def get_image_transforms():
-    transforms = torchvision.transforms.Compose(
-        [
-            torchvision.transforms.Resize(size=256),
-            torchvision.transforms.CenterCrop(size=(224, 224)),
-            torchvision.transforms.ToTensor(),
-        ]
-    )
-    return transforms
 
-
-def transform_weights(weights, relu=True):
+def transform_params(weights, scale, relu=True):
     """We transform by (i) adding a positivity constraint and the sorting in descending order"""
+
     if relu:
         weights = relu_embedding(weights)
     sorted_dims = np.argsort(-np.linalg.norm(weights, axis=0, ord=1))
 
     weights = weights[:, sorted_dims]
+    scale = scale[:, sorted_dims]
     d1, d2 = weights.shape
     # We transpose so that the matrix is always of shape (n_images, n_dims)
     if d1 < d2:
         weights = weights.T
+        scale = scale.T
 
-    return weights, sorted_dims
+    return weights, scale, sorted_dims
 
 
-def load_sparse_codes(path, with_dim=False, relu=True):
-    if isinstance(path, str):
-        weights = np.loadtxt(os.path.join(path))
-    elif isinstance(path, np.ndarray):
-        weights = path
-    else:
-        raise ValueError("Weights must be a .txt file path or as numpy array")
+def load_sparse_codes(path, weights=None, vars=None, with_dim=False, with_var=False, relu=True):
+    """Load sparse codes from a directory. Can either be a txt file or a npy file or a loaded array of shape (n_images, n_dims)"""
+    if weights is not None and vars is not None:
+        assert isinstance(weights, np.ndarray) and isinstance(vars, np.ndarray), "Weights and var must be numpy arrays"
+    elif isinstance(path, str):
+        if path.endswith(".txt"):
+            try:
+                weights = np.loadtxt(path.replace("q_var", "q_mu"))
+                vars = np.loadtxt(path.replace("q_mu", "q_var"))                  
+            except OSError:
+                raise OSError("Error loading sparse codes from path {}".format(path))
+
+        elif path.endswith(".npz"):
+            params = np.load(path)
+            weights = params["pruned_q_mu"]
+            vars = params["pruned_q_var"]
+
+    elif isinstance(path, np.lib.npyio.NpzFile):
+        weights = path["pruned_q_mu"]
+        vars = path["pruned_q_var"]
     
-    weights, sorted_dim = transform_weights(weights, relu=relu)
-    if with_dim:
-        return weights, sorted_dim
     else:
-        return weights
+        raise ValueError("Weights or Vars must be a .txt file path or as numpy array or .npz file")
+    
+    if "embedding" in path:
+        weights = np.loadtxt(path)
+    
+    weights, vars, sorted_dims = transform_params(weights, vars, relu=relu)
+    if with_dim:
+        if with_var:
+            return weights, vars, sorted_dims
+        else:
+            return weights, sorted_dims
+    else:
+        if with_var:
+            return weights, vars
+        else:
+            
+            return weights
+
+
+# ------- Helper Functions for RSMs  ------- #
 
 
 def fill_diag(rsm):
@@ -262,6 +326,7 @@ def correlation_matrix(F, a_min=-1.0, a_max=1.0):
     # compute vector l2-norm across rows
     l2_norms = np.linalg.norm(F_c, axis=1)
     denom = np.outer(l2_norms, l2_norms)
+
     corr_mat = (cov / denom).clip(min=a_min, max=a_max)
 
     return corr_mat
@@ -278,6 +343,22 @@ def correlate_rsms(rsm_a, rsm_b, correlation="pearson"):
     rho = corr_func(rsm_a[triu_inds], rsm_b[triu_inds])[0]
 
     return rho
+
+
+@njit(parallel=True, fastmath=True)
+def matmul(A, B):
+    i, k = A.shape
+    k, j = B.shape
+    C = np.zeros((i, j))
+    for i in prange(i):
+        for j in prange(j):
+            for k in prange(k):
+                C[i, j] += A[i, k] * B[k, j]
+    return C
+
+
+
+# ------- Helper Functions for Probability Densities  ------- #
 
 
 def normal_pdf(X, loc, scale):
@@ -299,15 +380,3 @@ def log_normal_pdf(X, loc, scale):
     pdf = const * torch.exp(numerator / denominator)
 
     return pdf
-
-
-@njit(parallel=True, fastmath=True)
-def matmul(A, B):
-    i, k = A.shape
-    k, j = B.shape
-    C = np.zeros((i, j))
-    for i in prange(i):
-        for j in prange(j):
-            for k in prange(k):
-                C[i, j] += A[i, k] * B[k, j]
-    return C

@@ -17,21 +17,32 @@ import torch.nn as nn
 import numpy as np
 import matplotlib.gridspec as gridspec
 
+
 # NOTE Havent found a better solution right now. Alternative would be to make the repo pip installable, which
 # NOTE would require me to change the code base.
-import sys
-sys.path.append("./deep_embeddings/analyses/image_generation/stylegan_xl")
-from deep_embeddings.analyses.image_generation.stylegan_xl import legacy
-from deep_embeddings.analyses.image_generation.stylegan_xl.dnnlib import util
-from deep_embeddings.analyses.image_generation.stylegan_xl.torch_utils import gen_utils
-from deep_embeddings.analyses.image_generation.stylegan_xl.gen_images import make_transform
-from deep_embeddings.utils.utils import img_to_uint8
+# import sys
+# sys.path.append("./deep_embeddings/analyses/image_generation/stylegan_xl")
+# from deep_embeddings.analyses.image_generation.stylegan_xl_previous import legacy
+# from deep_embeddings.analyses.image_generation.stylegan_xl_previous.dnnlib import util
+# from deep_embeddings.analyses.image_generation.stylegan_xl_previous.torch_utils import gen_utils
+# from deep_embeddings.analyses.image_generation.stylegan_xl_previous.gen_images import make_transform
 
+import sys
+sys.path.append("./stylegan_xl")
+
+from stylegan_xl import legacy
+from stylegan_xl.dnnlib import util
+from stylegan_xl.torch_utils import gen_utils
+from stylegan_xl.gen_images import make_transform
+
+
+from deep_embeddings.utils.utils import img_to_uint8
+from deep_embeddings import ExperimentParser
 from deep_embeddings.analyses.image_generation.latent_predictor import LatentPredictor
 from torch.utils.data import DataLoader
 from PIL import Image
 
-parser = argparse.ArgumentParser()
+parser = ExperimentParser(description="Optimize and sample StyleGAN")
 parser.add_argument("--embedding_path", type=str, default="./weights/params/pruned_q_mu_epoch_300.txt", help="Path to weights directory")
 parser.add_argument("--model_name", type=str, default="vgg16_bn", help="Model to load from THINGSvision")
 parser.add_argument("--module_name", type=str, default="classifier.3", help="Layer of the model to load from THINGSvision")
@@ -59,7 +70,7 @@ transforms = torchvision.transforms.Compose([
 
 def load_style_gan():
     # Load the generator from style gan xl
-    network_pkl = "https://s3.eu-central-1.amazonaws.com/avg-projects/stylegan_xl/models/imagenet512.pkl"
+    network_pkl = "https://s3.eu-central-1.amazonaws.com/avg-projects/stylegan_xl/models/imagenet1024.pkl"
     print('Loading networks from "%s"...' % network_pkl)
 
     with util.open_url(network_pkl) as f:
@@ -124,12 +135,15 @@ class StyleGanGenerator(object):
             m = np.linalg.inv(m)
             self.generator.synthesis.input.transform.copy_(torch.from_numpy(m))
 
-        sampled_latents = torch.zeros((self.n_samples, 37, 512))
+        sampled_latents = torch.zeros((self.n_samples, 39, 512))
         seeds = np.random.randint(0, 2**32 - 1, size=self.n_samples)
         for i in range(self.n_samples):
             print(f"Generating latent w_space vector: {i+1}/{self.n_samples} ...", end="\r")
+
+            # Centroids path enbables multi-modal truncation for imagenet generations!
             w_latent = gen_utils.get_w_from_seed(self.generator, 1, self.device, self.truncation, seed=seeds[i], 
-                                                        centroids_path=None, class_idx=None)
+                                                centroids_path=None,
+                                                class_idx=None)
 
             sampled_latents[i] = w_latent
 
@@ -391,6 +405,7 @@ if __name__ == '__main__':
     torch.manual_seed(args.rnd_seed)
 
     if args.sample_dataset == "True":
+        print("Sampling latents...\n")
         generator = StyleGanGenerator(out_path="./data/stylegan_dataset", n_samples=args.n_samples, truncation=args.truncation, 
                                            batch_size=args.batch_size, device=args.device)
         generator.sample_dataset()    
@@ -398,7 +413,6 @@ if __name__ == '__main__':
 
     # We can either sample latents again or optimize previously stored ones
     if args.find_topk == "True":
-        print("Sampling latents...\n")
         find_topk_latents(args.model_name, args.module_name,  args.embedding_path, args.n_samples, 
                        args.batch_size, args.truncation, args.top_k, args.device)
 

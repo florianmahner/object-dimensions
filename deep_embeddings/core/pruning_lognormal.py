@@ -31,6 +31,7 @@ class LogNormalDimensionPruning(nn.Module):
         # will be less than or equal to 0 in our case) for a given mean (mu) and standard deviation (sigma):
         mu = q_mu[:, j]
         var = q_var[:, j]
+
         pvals = torch.distributions.LogNormal(mu, var).cdf(self.cdf_loc)
         return pvals
         

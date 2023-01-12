@@ -54,67 +54,49 @@ class Embedding(nn.Module):
         self._init_weights()
 
         if isinstance(prior, LogGaussianPrior):
+            # I Think this is the same as pruning using a normal with cdf_loc=0
             self.pruner = LogNormalDimensionPruning(n_objects, cdf_loc=cdf_loc)
-
         elif isinstance(prior, SpikeSlabPrior):
             self.pruner = NormalDimensionPruning(n_objects, cdf_loc=cdf_loc)
 
+
     @staticmethod
     def reparameterize_sslab(loc, scale):
-        """Apply reparameterization trick."""
         eps = scale.data.new(scale.size()).normal_()
-
         return loc + scale * eps
-
+    
     def reparameterize(self, loc, scale):
         """Apply reparameterization trick."""
-
+        eps = scale.data.new(scale.size()).normal_()
+        out = loc + scale * eps
+         
         if isinstance(self.prior, LogGaussianPrior):
+            out = out.exp() # this becomes log normal now
 
-            # eps = scale.data.new(scale.size()).normal_()
-            eps = nn.init.trunc_normal_(scale.data.new(scale.size()), mean=0, std=1, a=0.0)
-            # eps = scale.data.new(scale.size()).log_normal_(0, 1)
-
-        elif isinstance(self.prior, SpikeSlabPrior):
-            eps = scale.data.new(scale.size()).normal_()
-
-        return loc + scale * eps
+        return out
 
     def _init_weights(self):
         """Initialize weights for the embedding"""
 
         if isinstance(self.prior, LogGaussianPrior):
-            nn.init.trunc_normal_(self.q_mu.q_mu.data, mean=0, std=0.1, a=0.0)
-            # self.q_mu.q_mu.data.log_normal_(
-                # mean=self.prior.mean, std=self.prior.variance
-            # )
-            self.q_mu.q_mu.data.log_normal_(mean=0, std=1)
-            # eps = -(1 / self.q_mu.q_mu.std())
-            # self.q_logvar.q_logvar.data.fill_(eps)        
-            # nn.init.trunc_normal_(self.q_logvar.q_logvar.data, mean=0, std=0.1, a=0.0)
-            self.q_logvar.q_logvar.data = self.q_logvar.q_logvar.data.log()
-            
-            # nn.init.kaiming_normal_(self.q_mu.q_mu.data, mode="fan_out", nonlinearity="relu")
-            # eps = self.q_mu.q_mu.std().log()
-            # self.q_logvar.q_logvar.data.fill_(eps)
-            # self.q_mu.q_mu.data = torch.abs(self.q_mu.q_mu.data)
-            # nn.init.uniform_(self.q_logvar.q_logvar.data, a=-2.5, b=-2.0)
-            # self.q_logvar.q_logvar.data.normal_(mean=-2.5, std=0.001)
-
-        elif isinstance(self.prior, SpikeSlabPrior):
             nn.init.kaiming_normal_(self.q_mu.q_mu, mode="fan_in", nonlinearity="relu")
             eps = -(1 / self.q_mu.q_mu.std())
             self.q_logvar.q_logvar.data.fill_(eps)
 
+        elif isinstance(self.prior, SpikeSlabPrior):
+            nn.init.kaiming_normal_(self.q_mu.q_mu, mode="fan_in", nonlinearity="relu")
+
+            eps = -(self.q_mu.q_mu.data.std().log() * -1.0).exp()
+            self.q_logvar.q_logvar.data.fill_(eps)
+        
+
+            # eps = -(1 / self.q_mu.q_mu.std())
+            # self.q_logvar.q_logvar.data.fill_(eps)
+
     def forward(self):
         q_mu = self.q_mu()
         q_var = self.q_logvar().exp()  # we need to exponentiate the logvar
-
-        # This is a normal distribution
-        X = self.reparameterize(q_mu, q_var)
-
-        if isinstance(self.prior, LogGaussianPrior):
-            X = F.relu(X) + 1e-12
+        X = self.reparameterize(q_mu, q_var) # This is a sample from a gaussian
 
         return X, q_mu, q_var
 
@@ -122,6 +104,7 @@ class Embedding(nn.Module):
     def prune_dimensions(self, alpha=0.05):
         q_mu = self.q_mu()
         q_var = self.q_logvar().exp()
+
         importance = self.pruner(q_mu, q_var, alpha=alpha)
         signal = torch.where(importance > self.non_zero_weights)[0]
 
@@ -138,13 +121,21 @@ class Embedding(nn.Module):
 
         return params
 
+
     def sorted_pruned_params(self):
         _, pruned_loc, pruned_scale = self.prune_dimensions()
-        pruned_loc = pruned_loc.detach().cpu().numpy()
-        pruned_scale = pruned_scale.detach().cpu().numpy()
-        argsort_loc = np.argsort(-np.linalg.norm(pruned_loc, axis=0, ord=1))
+        # embedding = torch.distributions.LogNormal(pruned_loc, pruned_scale).mode
+
+        argsort_loc = torch.argsort(torch.linalg.norm(pruned_loc, dim=0, ord=1), descending=True)
         pruned_loc = pruned_loc[:, argsort_loc]
         pruned_scale = pruned_scale[:, argsort_loc]
-        params = dict(pruned_q_mu=pruned_loc, pruned_q_var=pruned_scale)
+
+        func = torch.distributions.LogNormal if isinstance(self.prior, LogGaussianPrior) else torch.distributions.Normal
+        embedding = func(pruned_loc, pruned_scale).sample()
+    
+        embedding = embedding.detach().cpu().numpy()
+        pruned_loc = pruned_loc.detach().cpu().numpy()
+        pruned_scale = pruned_scale.detach().cpu().numpy()
+        params = dict(pruned_q_mu=pruned_loc, pruned_q_var=pruned_scale, embedding=embedding)
 
         return params

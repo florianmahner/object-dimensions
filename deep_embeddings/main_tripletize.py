@@ -18,18 +18,21 @@ parser.add_argument('--rnd_seed', type=int, default=0, help='Random seed for tri
 
 def run_pipeline(img_root, extract=False, tripletize=False, n_samples=2e6, rnd_seed=42, adaptive=False):
     # I want to take: 1 supervised, 1 unsupervised, e.g. the latents of a GAN and one transformer based!
-    # model_names = ('vgg_16bn', 'stylegan_xl', 'OpenCLIP')
-    # module_names = ('classifier.3', 'latent', 'visual')
+    # model_names = ['vgg_16bn', 'resnet50', 'clip']
+    # module_names = ['classifier.3', 'avgpool', 'visual']
 
-    # model_names = ['resnet50', 'clip']
-    # module_names = ['avgpool', 'visual']
+    # model_names = ['resnet50']
+    # module_names = ['layer4.2.relu']
 
-    model_names = ['clip']
-    module_names = ['visual']
+    model_names = ["vgg16_bn"]
+    module_names = ['classifier.3']
+
+    # model_names = ['vgg16_bn']
+    # module_names = ['classifier.3']
 
     for model_name, module_name in zip(model_names, module_names):
         print("Extracting features from model: {} and module: {}".format(model_name, module_name))
-        out_path = os.path.join("./data", "models", model_name, module_name)
+        out_path = os.path.join("./data", "triplets", model_name, module_name)
         if not os.path.exists(out_path):
             print(f"Creating output path: {out_path}")
             extract = True
@@ -51,24 +54,11 @@ def run_pipeline(img_root, extract=False, tripletize=False, n_samples=2e6, rnd_s
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    # behavior_path = "./data/reference_images"
-    # dataset_path = "./data/image_data/images12"
-    args.img_root = "./data/image_data/images12"
-
-    args.extract = True
-
+    args.n_samples = 5e7
+    args.extract= False
     run_pipeline(args.img_root, 
                  extract=args.extract, 
                  tripletize=args.tripletize, 
                  n_samples=args.n_samples, 
                  rnd_seed=args.rnd_seed, 
                  adaptive=args.adaptive)
-
-
-
-
-
-
-
-    
-

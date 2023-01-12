@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import argparse
 import joblib
 import multiprocessing
 import os
@@ -16,10 +15,12 @@ from sklearn.linear_model import Ridge
 from sklearn.model_selection import KFold, GridSearchCV
 from sklearn.metrics import r2_score
 
+from deep_embeddings import ExperimentParser
+
 
 os.environ['OMP_NUM_THREADS'] = '32'
 
-parser = argparse.ArgumentParser(description='Run ridge regression on DNN features and embedding matrix.')
+parser = ExperimentParser(description='Run ridge regression on DNN features and embedding matrix.')
 parser.add_argument("--dnn_path", type=str, default="./data/vgg_bn_features_12", help='Path to DNN features.')
 parser.add_argument("--embedding_path", type=str, default="./embedding/weights/params/pruned_params_epoch_1000.txt", help='Path to embedding matrix.')
 parser.add_argument("--k_folds", type=int, default=4, help='Number of folds for cross-validation.')
@@ -70,7 +71,7 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
 
             model = Ridge(random_state=1)
             space = dict()
-            space['alpha'] = np.arange(5.8,6.2,0.2)
+            space['alpha'] = np.arange(800,3000, 500)
 
             # Evluate the model on the inner loop
             search = GridSearchCV(model, space, scoring='r2', cv=cv_inner, refit=True, n_jobs=num_workers)
@@ -87,7 +88,7 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
 
         r2_scores.append(np.mean(outer_r2_scores))
         print(f'Best alpha for dimension {dim}: {np.mean(outer_alphas)}')
-        print(f'R2 score for dimension {dim}: {np.mean(r2_scores)}\n')
+        print(f'R2 score for dimension {dim}: {np.mean(outer_r2_scores)}\n')
         joblib.dump(best_model, os.path.join(results_path, f'predictor_{dim:02d}.joblib'))
 
     with open(os.path.join(results_path, 'r2_scores.npy'), 'wb') as f:

@@ -3,11 +3,9 @@
 
 __all__ = ["sample_latents", "optimize_latents"]
 
-import argparse
 import random
 import torch
 import os
-
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
 import torch.nn as nn 
@@ -15,11 +13,12 @@ import numpy as np
 import matplotlib.gridspec as gridspec
 
 from pytorch_pretrained_biggan import BigGAN, truncated_noise_sample
-from deep_embeddings.utils.utils import img_to_uint8
 from latent_predictor import LatentPredictor
 from torch.utils.data import DataLoader
 
-parser = argparse.ArgumentParser()
+from deep_embeddings import ExperimentParser
+
+parser = ExperimentParser(description="BigGAN latent space optimization")
 parser.add_argument("--embedding_path", type=str, default="./weights/params/pruned_q_mu_epoch_300.txt", help="Path to weights directory")
 parser.add_argument("--model_name", type=str, default="vgg16_bn", help="Model to load from THINGSvision")
 parser.add_argument("--module_name", type=str, default="classifier.3", help="Layer of the model to load from THINGSvision")
@@ -102,7 +101,6 @@ class Sampler(object):
         noise_vector = truncated_noise_sample(truncation=self.truncation, batch_size=self.n_samples)
         dim_vector = truncated_noise_sample(truncation=self.truncation, batch_size=self.n_samples)
 
-        breakpoint()
         noise_vector = torch.from_numpy(noise_vector)
         dim_vector = torch.from_numpy(dim_vector)
 
@@ -289,7 +287,7 @@ if __name__ == '__main__':
     torch.manual_seed(args.rnd_seed)
 
     # We can either sample latents again or optimize previously stored ones
-    if args.sample_latents == "True":
+    if args.sample_latents:
         print("Sampling latents...\n")
         sample_latents(args.model_name, args.module_name,  args.embedding_path, args.n_samples, 
                        args.batch_size, args.truncation, args.top_k, args.device)

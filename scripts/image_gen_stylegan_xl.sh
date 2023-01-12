@@ -6,14 +6,15 @@ device="cuda:0"
 
 model_name="vgg16_bn"
 module_name="classifier.3"
-n_samples=1000000
+n_samples=2_000_000
 window_size=50
-batch_size=2
-truncation=0.4
+batch_size=10
+truncation=0.7
 top_k=16
-sample_latents=True
+sample_dataset=True
+find_topk=True
 max_iter=200
-dim=(0)
+dim=(1)
 alpha=1.0
 beta=1.0
 
@@ -27,7 +28,8 @@ python deep_embeddings/analyses/image_generation/optimize_and_sample_stylegan.py
         --truncation $truncation \
         --top_k $top_k \
         --rnd_seed $rnd_seed \
-        --sample_latents $sample_latents \
+        --sample_dataset $sample_dataset \
+        --find_topk $find_topk \
         --max_iter $max_iter \
         --dim ${dim[@]} \
         --alpha $alpha \

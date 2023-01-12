@@ -24,7 +24,7 @@ class Sampler(object):
     def __init__(self, in_path, out_path, n_samples, k=3, train_fraction=0.9, rnd_seed=42):
         self.in_path = in_path
         self.out_path = out_path
-        self.n_samples = n_samples
+        self.n_samples = int(n_samples)
         self.k = k
         self.train_fraction = train_fraction
         self.rnd_seed = rnd_seed
@@ -182,7 +182,7 @@ class Sampler(object):
         n_iter = 0
         n_tri = len(unique_triplets)
         while n_tri < self.n_samples:
-            print(f'{n_iter} samples drawn, {n_tri}/{self.n_samples} added', end='\r')
+            print(f'{n_tri} samples drawn, {n_tri}/{self.n_samples} added', end='\r')
             sample = self.random_combination(items, 3)
             unique_triplets.add(sample)
             n_tri = len(unique_triplets)
@@ -221,7 +221,7 @@ class Sampler(object):
     def run_and_save_pairwise(self, similarity="cosine"):
         S, random_sample = self.sample_pairs(args.similarity)
         self.save_similarity_judgements(random_sample)
-        with open(os.path.join(args.out_path, "similarity_matrix.npy"), "wb") as f:
+        with open(os.path.join(args.out_path, f"similarity_matrix_{similarity}.npy"), "wb") as f:
             np.save(f, S)
 
 

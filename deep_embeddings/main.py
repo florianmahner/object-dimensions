@@ -61,7 +61,7 @@ parser.add_argument(
     "--prior",
     type=str,
     default="sslab",
-    choices=["sslab", "gauss"],
+    choices=["sslab", "gauss", "normal"],
     help="Prior to use",
 )
 parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
@@ -135,7 +135,8 @@ def _build_prior(prior, n_objects, init_dim, scale):
     if prior == "sslab":
         return SpikeSlabPrior(n_objects, init_dim)
     elif prior == "gauss":
-        return LogGaussianPrior(n_objects, init_dim, scale=scale)
+        print(scale)
+        return LogGaussianPrior(n_objects, init_dim, loc=0.0, scale=scale)
     else:
         raise ValueError("Unknown prior: {}".format(prior))
 
@@ -153,6 +154,7 @@ def _convert_samples_to_string(train_dataset, val_dataset):
 
 
 def load_args(args, log_path, fresh):
+    load_model = args.load_model
     # If we continue training we load the previous parameters
     if os.path.exists(os.path.join(log_path, "config.toml")) and not fresh:
         print(
@@ -165,25 +167,46 @@ def load_args(args, log_path, fresh):
     else:
         with open(os.path.join(log_path, "config.toml"), "w") as f:
             toml.dump(vars(args), f)
+
+    args.load_model = load_model
     return args
 
 
 def train(args):
 
-    train_dataset, val_dataset = build_triplet_dataset(args.triplet_path)
+    device = (
+        torch.device(f"cuda:{args.device_id}")
+        if torch.cuda.is_available()
+        else torch.device("cpu")
+    )
+
+    print(args.beta, args.scale, args.batch_size, args.rnd_seed)
+
+    g = torch.Generator()
+    g.manual_seed(args.rnd_seed)
+
+    train_dataset, val_dataset = build_triplet_dataset(args.triplet_path, device=device)
+
+    # train_loader = train_dataset
+    # val_loader = val_dataset
+    
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=4,
-        pin_memory=True,
+        pin_memory=False,
+        generator=g,
+        num_workers=16,
+        worker_init_fn=_set_global_seed,
     )
     val_loader = torch.utils.data.DataLoader(
         val_dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=4,
-        pin_memory=True,
+        pin_memory=False,
+        num_workers=16,
+        generator=g,
+        worker_init_fn=_set_global_seed
     )
     n_samples = _convert_samples_to_string(train_dataset, val_dataset)
 
@@ -201,9 +224,8 @@ def train(args):
             str(args.scale),
             str(args.rnd_seed),
         )
-
     else:
-        model_name, module_name = args.triplet_path.split("/")[-2:]
+        model_name, module_name = args.triplet_path.split("/")[-3:-1]
         log_path = os.path.join(
             args.log_path,
             args.identifier,
@@ -228,11 +250,6 @@ def train(args):
 
     n_objects = _parse_number_of_objects(args.triplet_path, args.modality)
     model_prior = _build_prior(args.prior, n_objects, args.init_dim, args.scale)
-    device = (
-        torch.device(f"cuda:{args.device_id}")
-        if torch.cuda.is_available()
-        else torch.device("cpu")
-    )
     model = Embedding(model_prior, n_objects, args.init_dim, args.non_zero_weights)
     model.to(device)
 

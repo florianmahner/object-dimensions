@@ -6,19 +6,19 @@ has been colleted! For each of these images GPT3 features have been generated. T
 these features with the learned embedding and find the descriptions that best describe each dimension """
 
 import os
-import pickle
-import argparse
 
 import pandas as pd
-import numpy as np
-from collections import defaultdict
 from copy import deepcopy
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
 
-from deep_embeddings.utils.utils import load_sparse_codes, filter_embedding_by_behavior
 
-parser = argparse.ArgumentParser(description='Label dimensions of sparse codes using GPT3')
+from deep_embeddings.utils.utils import load_sparse_codes, load_image_data
+from deep_embeddings import ExperimentParser
+
+parser = ExperimentParser(description='Label dimensions of sparse codes using GPT3')
 parser.add_argument('--embedding_path', default='./embedding.txt', type=str, help='Path to the embedding txt file')
-parser.add_argument('--dnn_path', default='./vgg_features', type=str, help='Path to all vgg features')
+parser.add_argument('--img_root', default='./data/image_data/images12_plus', type=str, help='Path to all vgg features')
 parser.add_argument('--feature_norm_path', default='./data/feature_norms', type=str, help='Path to GPT3 norms')
 
 
@@ -85,32 +85,23 @@ def matrix_to_top_list(df, topk=6):
     return df_list
 
 
-def generate_gpt3_norms(embedding_path, dnn_path, feature_norm_path='./data/feature_norms/feature_object_matrix.csv'):
+def generate_gpt3_norms(embedding_path, img_root, feature_norm_path='./data/feature_norms/feature_object_matrix.csv'):
     feature_norms = pd.read_csv(feature_norm_path)
     feature_norms = feature_norms.T
+    
     embedding = load_sparse_codes(embedding_path)
 
-    if not os.path.exists(dnn_path):
-        raise ValueError(f'Path to DNN features does not exist: {dnn_path}')
-    
-    file_path = os.path.join(dnn_path, 'filenames.txt')
-    if not os.path.isfile(file_path):
-        raise ValueError('VGG path does not contain filenames.txt')
-    else:
-        filenames = np.loadtxt(file_path, dtype=str)
-    
-    # Find reference images in THINGS database, i.e. indices from behavior, i.e. images ending with ".b"
-    embedding, filenames = filter_embedding_by_behavior(embedding, filenames)
+    image_filenames, indices = load_image_data(img_root, filter_behavior=True)
+    embedding = embedding[indices]
 
-    objects = [os.path.basename(f).split(".")[0][:-4] for f in filenames]
+    objects = [os.path.basename(f).split(".")[0][:-4] for f in image_filenames]
     embedding_pd = pd.DataFrame(embedding, index=objects)
 
     descriptions = calc_top_feature_per_dim(embedding_pd, feature_norms, list(range(embedding.shape[1])))
-    topk_descriptions = matrix_to_top_list(descriptions, topk=8)
+    topk_descriptions = matrix_to_top_list(descriptions, topk=10)
 
     topk_indices = topk_descriptions['feature'].tolist()
     
-
     # Get the first row of the feature norms pd dataframe
     text = feature_norms.iloc[0, :].tolist()
     features = [text[t] for t in topk_indices]
@@ -118,10 +109,31 @@ def generate_gpt3_norms(embedding_path, dnn_path, feature_norm_path='./data/feat
 
     # Save to file
     base_path = os.path.dirname(os.path.dirname(embedding_path))
-    out_path = os.path.join(base_path, 'analyses', 'gpt3_labels', 'dimensions_labelled.csv')
-    topk_descriptions.to_csv(out_path, index=False)
+    out_path = os.path.join(base_path, 'analyses', 'per_dim', 'gpt3_labels')
+
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
+
+    fname = os.path.join(out_path, 'dimensions_labelled.csv')
+    topk_descriptions.to_csv(fname, index=False)
+
+    # Create a word cloud for each dimension with its description weights by the weight
+    for dim in range(embedding.shape[1]):
+        dim_df = topk_descriptions[topk_descriptions['dimension'] == dim]
+        dim_df = dim_df.sort_values(by='weight', ascending=False)
+        words = dim_df['description'].tolist()
+        weights = dim_df['weight'].tolist()
+        weights = [w * 1000 for w in weights]
+        weights = [int(w) for w in weights]
+        wordcloud = WordCloud(width=800, height=400, max_words=100, 
+                            background_color="white", colormap='tab10').generate_from_frequencies(dict(zip(words, weights)))
+        plt.figure(figsize=(20,10))
+        plt.imshow(wordcloud, interpolation="bilinear")
+        plt.axis("off")
+        plt.savefig(os.path.join(out_path, f'{dim:02d}' f'word_cloud.png'))
+        plt.close()
 
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    generate_gpt3_norms(args.embedding_path, args.dnn_path, args.feature_norm_path)
+    generate_gpt3_norms(args.embedding_path, args.img_root, args.feature_norm_path)

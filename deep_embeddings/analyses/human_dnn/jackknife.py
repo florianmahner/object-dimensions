@@ -16,6 +16,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 from scipy.stats import rankdata
+import seaborn as sns
 
 import matplotlib.gridspec as gridspec
 
@@ -81,14 +82,8 @@ def compute_softmax_decisions(q_mu, q_var, val_loader, device):
 
 
 def find_diverging_triplets(softmax_human, softmax_dnn, indices, topk=12):
-
-    # # Find the indices of the most diverging softmax choices!
-    # softmax_diff = np.abs(softmax_human - softmax_dnn)
-
-    # # Sort the indices by the softmax difference
-    # sort_indices = np.argsort(-softmax_diff)[:topk]
-
-
+    """We ranksort the softmax decisions of the human and the dnn and find the triplets that are most 
+    diverging, i.e. where the rank is high in one and low in the other. """
     rank_human = rankdata(softmax_human)
     rank_dnn = rankdata(softmax_dnn)
 
@@ -115,10 +110,14 @@ def jackknife(q_mu, q_var, ooo_indices, device):
     q_var = torch.tensor(q_var).to(device)
 
     n_dims = q_mu.shape[1]
-    softmax_diff = np.ones(len(ooo_indices)) * float("inf")
+    softmax_diff = np.ones((len(ooo_indices), n_dims)) * float("inf")
     most_important_dim = np.zeros(len(ooo_indices), dtype=int)
 
     softmax_all = np.ones((len(ooo_indices), n_dims)) 
+
+    # Without jackknifing for that triplet
+    softmax_default = compute_softmax_per_batch(q_mu, q_var, ooo_indices, device)[0]
+    softmax_default = softmax_default.detach().cpu().numpy()
 
 
     for i in range(n_dims):
@@ -134,13 +133,12 @@ def jackknife(q_mu, q_var, ooo_indices, device):
 
         softmax_per_batch = softmax_per_batch.detach().cpu().numpy()
         softmax_all[:, i] = softmax_per_batch
+        softmax_diff[:, i] = np.abs(softmax_per_batch - softmax_default)
         
-        for s, softmax in enumerate(softmax_per_batch):
-            if softmax < softmax_diff[s]:
-                softmax_diff[s] = softmax
-                most_important_dim[s] = i
         
-    return softmax_all, softmax_diff, most_important_dim
+    most_important_dim = np.argmin(softmax_all, axis=1)
+
+    return softmax_diff, most_important_dim
 
 
 def build_dataloader(triplet_path):
@@ -151,71 +149,85 @@ def build_dataloader(triplet_path):
     return val_loader
 
 
-def plot_bar(decisions, out_path="./"):
+def plot_bar(decisions, dimensions, out_path="./rose.png"):
+    # Get the topk most important dimensions that changed the most for a triplet
+    topk = 12
+    decisions = decisions[np.argsort(-decisions)][:topk]
 
-    dim = [f"Dim {str(i)}" for i in range(len(decisions))]
-    
+    decisions = decisions / decisions.sum()
+    decisions = decisions * 1000
+    decisions = np.array(decisions, dtype=int)
+
+    dim = [f"Dim {str(i)}" for i in dimensions]
     df = pd.DataFrame({"softmax": decisions, "dim": dim} )
-    fig = px.bar_polar(df, theta="dim", r="softmax", color="dim", template="simple_white")
 
-    import plotly.graph_objects as go
+    plt.figure(figsize=(6,8))
+    ax = plt.subplot(111, polar=True)
+    plt.axis('off')
 
-    fig.update_layout(
-    showlegend = False,
-    polar = dict(
-      bgcolor = "rgb(255, 255, 255)",
-      angularaxis = dict(
-        linewidth = 3,
-        showline=False,
-        showticklabels=False,
-        # ticks='',
-        linecolor='white'
-      ),
-      radialaxis = dict(
-        side = "clockwise",
-        showline = False,
-        showticklabels = False,
-        ticks = '',
-        linewidth = 2,
-        gridcolor = "white",
-        gridwidth = 2,
-      )
-    ),
-    paper_bgcolor = "rgb(255,255,255)"
-    )
+    lowerLimit = 0
+    palette = sns.color_palette("husl", 13)
 
-    for dim in fig.layout.annotations:
-        dim.font.size = 20
+    # Compute the angle each bar is centered on:
+    indexes = list(range(1, len(df.index)+1))
+    width2 = 2*np.pi / len(df.index)
+    angles = [element * width2 for element in indexes]
 
-    # fig.add_annotation(x=0.5, y=0.95, text="Dim 0", showarrow=False, font_size=15)
+    # Draw bars
+    bars = ax.bar(
+        x=angles, 
+        height=df['softmax'], 
+        width=0.2, 
+        bottom=lowerLimit,
+        linewidth=2, 
+        edgecolor="white",
+        color=palette)
 
 
+    # little space between the bar and the label
+    labelPadding = 0.1
+
+    # Add labels
+    for bar, angle, height, label in zip(bars,angles, df['softmax'], df["dim"]):
+
+        # Labels are rotated. Rotation must be specified in degrees :(
+        rotation = np.rad2deg(angle)
+
+        # Flip some labels upside down
+        alignment = "" 
+        if angle >= np.pi/2 and angle < 3*np.pi/2:
+            alignment = "right"
+            rotation = rotation + 180
+        else: 
+            alignment = "left"
+
+
+        # Add a label to the bar right below the bar rotated
+        ax.text(
+            x=angle, 
+            y=height + labelPadding, 
+            s=label, 
+            rotation=rotation, 
+            rotation_mode="anchor", 
+            ha=alignment, 
+            va="center_baseline", 
+            fontsize=15)
+
+    plt.savefig(out_path, bbox_inches='tight', pad_inches=0)
 
 
 
 
-
-#     fig.add_trace(go.Scatter(
-#     x=[0, 1, 2],
-#     y=[3, 3, 3],
-#     mode="lines+text",
-#     name="Lines and Text",
-#     text=["Text G", "Text H", "Text I"],
-#     textposition="bottom center"
-# ))
-    # fig.update_traces(textposition='inside')
-    # fig.update_layout(uniformtext_minsize=12, uniformtext_mode='hide')
-
-    fig.show()
-
-
-    fig.write_image(os.path.join(out_path, "bar_polar.png"), width=800, height=800)
-
-
-
-
-def run_jackknife(human_weights, human_var, dnn_weights, dnn_var, image_filenames, triplet_path, plot_dir,  topk=12):
+def run_jackknife(human_weights, human_var, dnn_weights, dnn_var, image_filenames, triplet_path, plot_dir,  topk=12,
+                  comparison="dnn"):
     """ This function runs the jackknife analysis for a given embedding"""
+
+    if comparison == "human":
+        title_1 = "Dimension Human 1"
+        title_2 = "Dimension Human 2"
+    else:
+        title_1 = "Dimension Human"
+        title_2 = "Dimension DNN"
 
     # If all data on GPU, num workers need to be 0 and pin memory false
     device  = torch.device('cuda:0') if torch.cuda.is_available() else torch.device("cpu")
@@ -227,42 +239,65 @@ def run_jackknife(human_weights, human_var, dnn_weights, dnn_var, image_filename
     # Indices human and indices DNN are the same
     most_diverging_indices = find_diverging_triplets(softmax_human, softmax_dnn, indices, topk)
 
+    # Replace all keys in most_divering_indices that start with dnn with human
+    most_diverging_indices_human = dict()
+    for key, value in most_diverging_indices.items():
+        most_diverging_indices_human[key.replace("dnn", "human")] = value
+    
+    most_diverging_indices = most_diverging_indices_human
+
+
+    # Where the DNN is sure about the odd one out -> This is currently not meaningul...
+    """
+    interesting_dnn_indices = rankdata(softmax_dnn, method="max")[0:topk].astype(int)
+    interesting_triplets = indices[interesting_dnn_indices]
+    softmax_diff = jackknife(human_weights, human_var, interesting_triplets, device)[0]
+
+    # Shape topk x topk
+    dims = np.argsort(-softmax_diff, axis=1)[:, :topk]
+    
+    filtered_diffs = np.zeros((topk, topk))
+    for i, diff in enumerate(softmax_diff):
+
+        filtered_diffs[i] = diff[dims[i]]
+
+    # plot_bar(filtered_diffs[0], dims[0], out_path=os.path.join(plot_dir, "rose_0.png"))
+    """
+
+
     most_important_dim_human = dict()
     most_important_dim_dnn = dict()
 
+    # FOr two embeddings, we have found the most diverging triplets. For these triplets we now iteratively
+    # observe the change in softmax probability when removing one dimension at a time. This is the jackknife analysis
+    # and gives us a probability measure for each dimension and its importance towards making a decision for a 
+    # given triplet
     for key, value in most_diverging_indices.items():
         print(f"{key}: {value}")
 
-
         interesting_triplets = indices[value]
-        softmax_jack_human, softmax_diff_human, important_human = jackknife(human_weights, human_var, interesting_triplets, device)
+
+        softmax_diff, important_human = jackknife(human_weights, human_var, interesting_triplets, device)
         most_important_dim_human[key] = important_human
 
-        softmax_jack_dnn, softmax_diff_dnn, important_dnn = jackknife(dnn_weights, dnn_var, interesting_triplets, device)
+        softmax_diff, important_dnn = jackknife(dnn_weights, dnn_var, interesting_triplets, device)
         most_important_dim_dnn[key] = important_dnn
 
 
-    i =0
-    for key, value in most_diverging_indices.items():
-
-        i += 1
-
+    for key, value in most_diverging_indices.items():    
         print(f"Starting {key}")
         
         dim_human = most_important_dim_human[key]
         dim_dnn = most_important_dim_dnn[key]
-
         interesting_triplets = indices[value]
 
+
+
         for i, (triplet, dim_h, dim_d) in enumerate(zip(interesting_triplets, dim_human, dim_dnn)):
-            # fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-
-
+        
             fig = plt.figure(figsize=(15, 10))
             gs0 = gridspec.GridSpec(1, 3, figure=fig)
             gs0.update(top=0.95, bottom=0.7, left=0.25, right=0.75, wspace=0.0, hspace=0.0)
-
-
 
             for ctr, img_index in enumerate(triplet):
                 ax = plt.subplot(gs0[ctr])
@@ -273,22 +308,13 @@ def run_jackknife(human_weights, human_var, dnn_weights, dnn_var, image_filename
                 ax.imshow(img)
                 ax.axis("off")
 
-
             plt.subplot(gs0[1]).set_title("Triplet", fontsize=20)
-
-            # plt.tight_layout()
-            # plt.savefig(os.path.join(plot_dir, "triplet_{}_{}.png".format(key, i)))
-            # plt.close()
-            
 
             human = human_weights[:, dim_h]
             human = np.argsort(-human)[:6]
 
             dnn = dnn_weights[:, dim_d]
             dnn = np.argsort(-dnn)[:6]
-
-            if i==4:
-                breakpoint()
 
             # fig = plt.figure(figsize=(15, 5))
             gs1 = gridspec.GridSpec(2, 3, figure=fig)
@@ -301,7 +327,7 @@ def run_jackknife(human_weights, human_var, dnn_weights, dnn_var, image_filename
                 ax.imshow(img)
                 ax.axis("off")
 
-            plt.subplot(gs1[1]).set_title("Dimension Human", fontsize=20)
+            plt.subplot(gs1[1]).set_title(title_1, fontsize=20)
 
             gs2 = gridspec.GridSpec(2, 3, figure=fig)
             gs2.update(top=0.65, bottom=0.1, left=0.55, right=0.95, wspace=0., hspace=0.0)
@@ -314,7 +340,6 @@ def run_jackknife(human_weights, human_var, dnn_weights, dnn_var, image_filename
                 ax.imshow(img)
                 ax.axis("off")
 
-            plt.subplot(gs2[1]).set_title("Dimension DNN", fontsize=20)
+            plt.subplot(gs2[1]).set_title(title_2, fontsize=20)
             plt.savefig(os.path.join(plot_dir, "{}_{}.png".format(key, i)), dpi=300)
             plt.close()
-

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import argparse
 import random
 import torch
 import os 
@@ -10,16 +9,18 @@ import pickle
 
 import numpy as np
 import matplotlib.pyplot as plt
-from thingsvision import Extractor
+from thingsvision import get_extractor
 from thingsvision.utils.data import ImageDataset
+
+from deep_embeddings import ExperimentParser
 
 from deep_embeddings.utils.searchlight_utils import mask_img
 from deep_embeddings.utils.utils import load_deepnet_activations, img_to_uint8
 from deep_embeddings.analyses.image_generation.latent_predictor import LatentPredictor
 
-parser = argparse.ArgumentParser(description='Searchlight analysis for one image.')
+parser = ExperimentParser(description='Searchlight analysis for one image.')
 parser.add_argument('--embedding_path', type=str, help='Path to the embedding file.')
-parser.add_argument('--image_root', type=str, default="./data/images", help='Path to the all images used for the embedding.')
+parser.add_argument('--img_root', type=str, default="./data/images", help='Path to the all images used for the embedding.')
 parser.add_argument('--analysis', type=str, default='regression', help='Type of analysis to perform.')
 parser.add_argument('--feature_path', type=str, default="./data/models/vgg16bn/classifier.3", help='Path to the stored features.')
 parser.add_argument('--model_name', type=str, default='vgg16_bn', help='Name of the model to use.')
@@ -113,8 +114,8 @@ if __name__ == '__main__':
     torch.manual_seed(args.rnd_seed)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    extractor = Extractor(model_name=args.model_name, pretrained=True, device=device, source='torchvision')
-    dataset = ImageDataset(root=args.image_root, out_path='', backend=extractor.backend, transforms=extractor.get_transformations())
+    extractor = get_extractor(model_name=args.model_name, pretrained=True, device=device, source='torchvision')
+    dataset = ImageDataset(root=args.img_root, out_path='', backend=extractor.backend, transforms=extractor.get_transformations())
 
     base_path = os.path.dirname(os.path.dirname(args.embedding_path))
     regression_path = os.path.join(base_path, 'analyses', 'sparse_codes')
@@ -126,8 +127,6 @@ if __name__ == '__main__':
     features =  load_deepnet_activations(args.feature_path, to_torch=True)
     features = features.to(device)
 
-
-    
     idx2obj = dataset.idx_to_cls
     obj2idx = dataset.cls_to_idx
 

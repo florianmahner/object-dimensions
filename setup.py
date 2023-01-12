@@ -11,6 +11,6 @@ setup(
     license="LICENSE",
     long_description=open("docs/README.md").read(),
     packages=find_packages(),
-    scripts=["scripts/train_model.sh", "scripts/gamma_analysis.sh"],
+    scripts=["scripts/train_model.sh"],
     python_requires=">=3.9"
 )

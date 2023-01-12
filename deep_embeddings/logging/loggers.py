@@ -101,10 +101,9 @@ class DeepEmbeddingLogger:
                 callbacks=[
                     "train_loss",
                     "train_nll",
-                    "train_complexity",
+                    "train_kl",
                     "val_loss",
                     "val_nll",
-                    "val_complexity",
                     "dim",
                     "val_acc",
                     "train_acc",
@@ -207,6 +206,8 @@ class CheckpointLogger(Logger):
 
     def __init__(self, log_path, ext=".tar"):
         self._log_path = os.path.join(log_path, "checkpoints")
+        if not os.path.exists(self.log_path):
+            os.makedirs(self.log_path)
         self.ext = ext
 
     @property
@@ -241,6 +242,8 @@ class ParameterLogger(Logger):
     def __init__(self, log_path, model, attributes, ext=".txt"):
         "attributes can either be attributes as strings or a function that transforms attributes for storing"
         self._log_path = os.path.join(log_path, "params")
+        if not os.path.exists(self.log_path):
+            os.makedirs(self.log_path)
         self.attributes = attributes
         self.model = model
         self.ext = ext

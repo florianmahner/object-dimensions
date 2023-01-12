@@ -6,7 +6,7 @@ import joblib
 import torch
 import glob
 
-from thingsvision import Extractor
+from thingsvision import get_extractor
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -16,7 +16,7 @@ class LatentPredictor(nn.Module):
 
     def __init__(self, model_name='vgg_16bn', module_name='classifier.3', device='cpu', regression_path=""):
         super().__init__()
-        extractor = Extractor(model_name=model_name, pretrained=True, device=device, source='torchvision')
+        extractor = get_extractor(model_name=model_name, pretrained=True, device=device, source='torchvision')
         model = extractor.model
         model = model.eval()
         self.feature_extractor = model.features
