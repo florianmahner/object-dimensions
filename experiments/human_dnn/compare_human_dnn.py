@@ -9,8 +9,8 @@ import toml
 
 import numpy as np
 from deep_embeddings.utils.utils import load_sparse_codes, load_image_data, create_path_from_params, compute_rdm, fill_diag
-from deep_embeddings.analyses.human_dnn.jackknife import run_jackknife
-from deep_embeddings.analyses.human_dnn.embedding_analysis import run_embedding_analysis
+from .jackknife import run_jackknife
+from .embedding_analysis import run_embedding_analysis
 from deep_embeddings import ExperimentParser
 from scipy.stats import pearsonr, rankdata
 import cv2

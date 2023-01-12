@@ -38,7 +38,7 @@ from stylegan_xl.gen_images import make_transform
 
 from deep_embeddings.utils.utils import img_to_uint8
 from deep_embeddings import ExperimentParser
-from deep_embeddings.analyses.image_generation.latent_predictor import LatentPredictor
+from deep_embeddings.utils.latent_predictor import LatentPredictor
 from torch.utils.data import DataLoader
 from PIL import Image
 

@@ -13,7 +13,7 @@ import numpy as np
 import matplotlib.gridspec as gridspec
 
 from pytorch_pretrained_biggan import BigGAN, truncated_noise_sample
-from latent_predictor import LatentPredictor
+from deep_embeddings.utils.latent_predictor import LatentPredictor
 from torch.utils.data import DataLoader
 
 from deep_embeddings import ExperimentParser
