@@ -3,6 +3,9 @@
 
 # dnn_path = "./results/50mio/16396/0.4/0.25/1.0/0.5/42/params/pruned_q_mu_epoch_5200.txt"
 dnn_path = "./results/sslab/deep/20mio/sslab/100/16384/2.0/0.25/0/params/pruned_q_mu_epoch_2000.txt"
+
+
+# human_path_base = "./results/4096_nll_pruned"
 human_path_base = "./results/sslab/vgg16_bn/4mio/behavior/sslab/100/256/0.5/0.5/2/params/pruned_q_mu_epoch_1200.txt"
 human_path_comp = "./results/sslab/vgg16_bn/4mio/behavior/sslab/100/256/0.5/0.5/1/params/pruned_q_mu_epoch_1200.txt"
 
