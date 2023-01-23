@@ -119,7 +119,6 @@ class EmbeddingTrainer(object):
             self.optim.load_state_dict(checkpoint["optim_state_dict"])
             self.model.load_state_dict(checkpoint["model_state_dict"])
             params = checkpoint["params"]
-            params.stability_time += self.params.stability_time
             self.params = params
             self.params.n_epochs = checkpoint["epoch"] + self.params.n_epochs
             self.params.start_epoch = checkpoint["epoch"] + 1
@@ -310,6 +309,9 @@ class EmbeddingTrainer(object):
                 val_loss, val_acc = self.evaluate_one_epoch()
                 convergence = self.evaluate_convergence()
 
+                # import logging
+                # logging.info("Stability: {}".format(convergence))
+
                 # Update our training params
                 self.params.update(
                     train_loss=train_loss,
@@ -340,7 +342,9 @@ class EmbeddingTrainer(object):
                     print_prepend="Epoch {}".format(self.epoch),
                 )
 
-                if convergence or (self.epoch == self.params.n_epochs):
+                # if convergence or (self.epoch == self.params.n_epochs):
+                if convergence:
+                    
                     print(
                         f"Stopped training after {self.epoch} epochs. Model has converged or max number of epochs have been reached!"
                     )
