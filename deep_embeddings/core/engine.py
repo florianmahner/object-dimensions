@@ -7,8 +7,6 @@ import glob
 
 import numpy as np
 import torch.nn.functional as F
-from deep_embeddings.core.priors import SpikeSlabPrior, LogGaussianPrior
-
 
 class Params(object):
     r"""The class stores the training configuration of the training pipeline
