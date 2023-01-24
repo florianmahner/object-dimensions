@@ -71,7 +71,7 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
 
             model = Ridge(random_state=1)
             space = dict()
-            space['alpha'] = np.arange(800,3000, 500)
+            space['alpha'] = np.arange(800,10_000,200)
 
             # Evluate the model on the inner loop
             search = GridSearchCV(model, space, scoring='r2', cv=cv_inner, refit=True, n_jobs=num_workers)

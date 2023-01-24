@@ -14,6 +14,7 @@ import matplotlib.gridspec as gridspec
 
 from pytorch_pretrained_biggan import BigGAN, truncated_noise_sample
 from deep_embeddings.utils.latent_predictor import LatentPredictor
+from deep_embeddings.utils.utils import img_to_uint8
 from torch.utils.data import DataLoader
 
 from deep_embeddings import ExperimentParser
@@ -118,17 +119,17 @@ class Sampler(object):
         generator.eval()
         comparator.eval()
 
-        sampled_codes = torch.zeros(self.n_samples, self.n_dims).to(self.device)
+        sampled_codes = torch.zeros(self.n_samples, self.n_dims, device=self.device)
         n_iter = len(dataloader)
         with torch.no_grad():
             for i, batch in enumerate(dataloader):
                 batch = batch.to(self.device) # shape (batch_size, 256)
                 images = generator(batch, self.truncation)
-                # images = img_to_uint8(images)
+                images = img_to_uint8(images)
                 
                 _, codes = comparator(images)
-                sampled_codes[i*self.batch_size:(i+1)*self.batch_size] += codes
-                print(f'Iteration: {(i+1):02d} / {n_iter:02d}', end='\r')
+                sampled_codes[i*self.batch_size:(i+1)*self.batch_size] += codes.detach()
+                print(f'Sampling Iteration: {(i+1):02d} / {n_iter:02d}', end='\r')
 
         self._save_topk(generator, sampled_codes, sampled_latents)
 
@@ -138,6 +139,9 @@ class Sampler(object):
             topk_indices = torch.argsort(code, descending=True)[:self.top_k]
             topk_latents = sampled_latents[topk_indices]
             self._save_latents(generator, topk_latents, j)
+
+            if j == 5:
+                break
 
     def _save_latents(self, generator, topk_latents, j):
         out_path = os.path.join(self.out_path, f'{j:02d}', 'sampled_latents')
@@ -155,18 +159,18 @@ class Sampler(object):
         self._save_images(images, out_path)
 
     def _save_images(self, images, out_path):
-        out_path = os.path.join(out_path, f'images')
+        out_path = os.path.dirname(out_path)
+        out_path = os.path.join(out_path, f'generated_images')
         if not os.path.exists(out_path):
             os.makedirs(out_path)
         
         images = images.cpu()
         for k, img in enumerate(images):
-
             img = global_shift(img)
             img = img.permute(1, 2, 0).numpy()
             plt.imshow(img)
             plt.axis('off')
-            plt.savefig(os.path.join(out_path, f'image_{k:02d}.jpg'))
+            plt.savefig(os.path.join(out_path, f'image_{k:02d}_generated.png'), bbox_inches='tight', dpi=300, pad_inches=0)
             plt.clf()
             plt.close()
 
@@ -214,7 +218,7 @@ class Optimizer(nn.Module):
         for i in range(self.max_iter):
             optim.zero_grad()
             img = generator(latent, self.truncation) # Create an image
-            # img = img_to_uint8(img)
+            img = img_to_uint8(img)
             _, codes = comparator(img) # Extract VGG features
             log_code = F.log_softmax(codes, dim=1).squeeze(0)[self.dim] # Get the value of that image within the dimension we want to optimize for
             
@@ -257,26 +261,18 @@ class Optimizer(nn.Module):
             torch.save(latent, os.path.join(out_path, f'optimized_latent_{k:02d}.pt'))
 
     def _save_images(self, images):
-        out_path = os.path.join(self.in_path, f'{self.dim:02d}', 'optimized_latents')
+        out_path = os.path.join(self.in_path, f'{self.dim:02d}', 'optimized_images')
         if not os.path.exists(out_path):
             print(f'Creating directories...\n')
             os.makedirs(out_path)
-
-        fig = plt.figure(figsize=(4,4))
-        gs1 = gridspec.GridSpec(4,4)
-        gs1.update(wspace=0.002, hspace=0.002) # set the spacing between axes.
-
         for k, img in enumerate(images):
-            ax = plt.subplot(gs1[k])
             img = global_shift(img)
             img = img.permute(1, 2, 0).numpy()
-            ax.imshow(img)
-            ax.axis('off')
-
-        fname = os.path.join(out_path, f'dim_{self.dim}_optimized.png')
-        # fig.suptitle("Dimension: {}".format(self.dim))
-        fig.savefig(fname, dpi=150)
-        plt.close(fig)
+            plt.imshow(img)
+            plt.axis('off')
+            plt.savefig(os.path.join(out_path, f'image_{k:02d}_optimized.png'), bbox_inches='tight', dpi=300, pad_inches=0)
+            plt.clf()
+            plt.close()
 
 
 if __name__ == '__main__':
