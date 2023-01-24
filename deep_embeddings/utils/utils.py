@@ -269,7 +269,7 @@ def load_sparse_codes(path, weights=None, vars=None, with_dim=False, with_var=Fa
     else:
         raise ValueError("Weights or Vars must be a .txt file path or as numpy array or .npz file")
     
-    if "embedding" in path:
+    if "embedding" in os.path.basename(path):
         weights = np.loadtxt(path)
     
     weights, vars, sorted_dims = transform_params(weights, vars, relu=relu)

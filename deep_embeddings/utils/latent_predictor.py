@@ -14,7 +14,7 @@ import torch.nn.functional as F
 class LatentPredictor(nn.Module):
     """ Predicts Sparse Codes  (i.e. embedding dimensions) from a collection of sampled images.""" 
 
-    def __init__(self, model_name='vgg_16bn', module_name='classifier.3', device='cpu', regression_path=""):
+    def __init__(self, model_name='vgg16_bn', module_name='classifier.3', device='cpu', regression_path=""):
         super().__init__()
         extractor = get_extractor(model_name=model_name, pretrained=True, device=device, source='torchvision')
         model = extractor.model
@@ -71,6 +71,9 @@ class LatentPredictor(nn.Module):
         probas = F.softmax(logits, dim=1)
         
         behavior_features = self.classifier_trunc(features)
+
+        # NOTE Negative valus are also discared when building the triplets and for the sparse code predictions
+        behavior_features = F.relu(behavior_features) 
         latent_codes = self.regression(behavior_features)
         latent_codes = F.relu(latent_codes)
         
