@@ -5,8 +5,9 @@ import torch
 import os
 import numpy as np
 
+
 def build_triplet_dataset(triplet_path, n_train=None, n_val=None, device="cpu"):
-    """ Build a triplet dataset from a triplet directory containing sample triplets for all objects """
+    """Build a triplet dataset from a triplet directory containing sample triplets for all objects"""
 
     # Find all files ending .npy or .txt and containing train or val
     files = os.listdir(triplet_path)
@@ -22,18 +23,17 @@ def build_triplet_dataset(triplet_path, n_train=None, n_val=None, device="cpu"):
             train = np.loadtxt(os.path.join(triplet_path, file))
         elif file.endswith(".txt") and "test_10" in file:
             test = np.loadtxt(os.path.join(triplet_path, file))
-            
+
     # maybe need to do train/val split here beforehand and test=test?
     train_dataset = TripletDataset(train, n_train, device=device)
     val_dataset = TripletDataset(test, n_val, device=device)
 
-    # train_dataset = TensorDataloader(train, batch_size=16384, shuffle=True, random_seed=42, device=device)
-    # val_dataset = TensorDataloader(test, batch_size=16384, shuffle=False, random_seed=42, device=device)
-
     return train_dataset, val_dataset
 
+
 class TripletDataset(torch.utils.data.Dataset):
-    ''' Sample triplet indices from the list combinations'''
+    """Sample triplet indices from the list combinations"""
+
     def __init__(self, triplet_indices, n_samples=None, device="cpu"):
         super().__init__()
         self.triplet_indices = triplet_indices
@@ -46,35 +46,32 @@ class TripletDataset(torch.utils.data.Dataset):
         return self.triplet_indices[idx]
 
     def __len__(self):
-        return self.n_indices 
+        return self.n_indices
 
 
 class TensorDataloader:
-    """ Write a class that extract 1x3 indices from a a large array and includes
-    functionality from torch dataloader with shuffling and batching
-    """
-    
-    def __init__(self, data, batch_size, shuffle=True, random_seed=42, device="cpu"):
-            self.dataset = data
-            self.batch_size = batch_size
-            self.shuffle = shuffle
-            self.random_seed = random_seed
-            self.n_samples = data.shape[0]
-         
-            # self.n_batches = self.n_samples // self.batch_size
-            self._get_batches()
-            self.dataset = torch.from_numpy(self.dataset).to(device)
-            self.dataset = self.dataset.type("torch.LongTensor")
+    """Dataloader for tensors when entire dataset is put on gpu and fits into memory"""
 
+    def __init__(self, data, batch_size, shuffle=True, random_seed=42, device="cpu"):
+        self.dataset = data
+        self.batch_size = batch_size
+        self.shuffle = shuffle
+        self.random_seed = random_seed
+        self.n_samples = data.shape[0]
+        self._get_batches()
+        self.dataset = torch.from_numpy(self.dataset).to(device)
+        self.dataset = self.dataset.type("torch.LongTensor")
 
     def _get_batches(self):
         # Check if number of samples can be divided by batch size and discard the last batch
         if self.n_samples % self.batch_size != 0:
-            print("Number of samples is not divisible by batch size. Discarding last batch.")
+            print(
+                "Number of samples is not divisible by batch size. Discarding last batch."
+            )
             self.n_samples = self.n_samples - (self.n_samples % self.batch_size)
-            self.dataset = self.dataset[:self.n_samples]
+            self.dataset = self.dataset[: self.n_samples]
             self.n_batches = self.n_samples // self.batch_size
-    
+
     def __len__(self):
         return self.n_batches
 
@@ -88,4 +85,3 @@ class TensorDataloader:
         for i in range(self.n_batches):
             batch_indices = indices[i * self.batch_size : (i + 1) * self.batch_size]
             yield self.dataset[batch_indices]
-

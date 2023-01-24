@@ -59,19 +59,18 @@ class Embedding(nn.Module):
         elif isinstance(prior, SpikeSlabPrior):
             self.pruner = NormalDimensionPruning(n_objects, cdf_loc=cdf_loc)
 
-
     @staticmethod
     def reparameterize_sslab(loc, scale):
         eps = scale.data.new(scale.size()).normal_()
         return loc + scale * eps
-    
+
     def reparameterize(self, loc, scale):
         """Apply reparameterization trick."""
         eps = scale.data.new(scale.size()).normal_()
         out = loc + scale * eps
-         
+
         if isinstance(self.prior, LogGaussianPrior):
-            out = out.exp() # this becomes log normal now
+            out = out.exp()  # this becomes log normal now
 
         return out
 
@@ -88,15 +87,11 @@ class Embedding(nn.Module):
 
             eps = -(self.q_mu.q_mu.data.std().log() * -1.0).exp()
             self.q_logvar.q_logvar.data.fill_(eps)
-        
-
-            # eps = -(1 / self.q_mu.q_mu.std())
-            # self.q_logvar.q_logvar.data.fill_(eps)
 
     def forward(self):
         q_mu = self.q_mu()
         q_var = self.q_logvar().exp()  # we need to exponentiate the logvar
-        X = self.reparameterize(q_mu, q_var) # This is a sample from a gaussian
+        X = self.reparameterize(q_mu, q_var)  # This is a sample from a gaussian
 
         return X, q_mu, q_var
 
@@ -121,21 +116,26 @@ class Embedding(nn.Module):
 
         return params
 
-
     def sorted_pruned_params(self):
         _, pruned_loc, pruned_scale = self.prune_dimensions()
-        # embedding = torch.distributions.LogNormal(pruned_loc, pruned_scale).mode
-
-        argsort_loc = torch.argsort(torch.linalg.norm(pruned_loc, dim=0, ord=1), descending=True)
+        argsort_loc = torch.argsort(
+            torch.linalg.norm(pruned_loc, dim=0, ord=1), descending=True
+        )
         pruned_loc = pruned_loc[:, argsort_loc]
         pruned_scale = pruned_scale[:, argsort_loc]
 
-        func = torch.distributions.LogNormal if isinstance(self.prior, LogGaussianPrior) else torch.distributions.Normal
+        func = (
+            torch.distributions.LogNormal
+            if isinstance(self.prior, LogGaussianPrior)
+            else torch.distributions.Normal
+        )
         embedding = func(pruned_loc, pruned_scale).sample()
-    
+
         embedding = embedding.detach().cpu().numpy()
         pruned_loc = pruned_loc.detach().cpu().numpy()
         pruned_scale = pruned_scale.detach().cpu().numpy()
-        params = dict(pruned_q_mu=pruned_loc, pruned_q_var=pruned_scale, embedding=embedding)
+        params = dict(
+            pruned_q_mu=pruned_loc, pruned_q_var=pruned_scale, embedding=embedding
+        )
 
         return params

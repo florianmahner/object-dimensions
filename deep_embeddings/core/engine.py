@@ -8,6 +8,7 @@ import glob
 import numpy as np
 import torch.nn.functional as F
 
+
 class Params(object):
     r"""The class stores the training configuration of the training pipeline
     and updates the results depending on the type of the keyword arguments in the update (e.g. list, array)"""
@@ -98,7 +99,6 @@ class EmbeddingTrainer(object):
     def _build_optimizer(self):
         self.optim = torch.optim.Adam(self.model.parameters(), lr=self.params.lr)
 
-
     def init_model_from_checkpoint(self):
         print("Load model and optimizer from state dict to resume training")
 
@@ -123,11 +123,10 @@ class EmbeddingTrainer(object):
             self.logger = checkpoint["logger"]  # only if exists!
 
     def calculate_likelihood(self, embedding, indices):
-        # indices = indices.type("torch.LongTensor")
-        # indices = indices.to(self.device)        
+        """Compute the negative log likelihood of the data given the embedding"""
         indices = indices.unbind(1)
-
         ind_i, ind_j, ind_k = indices
+
         embedding_i = F.relu(embedding[ind_i])
         embedding_j = F.relu(embedding[ind_j])
         embedding_k = F.relu(embedding[ind_k])
@@ -135,9 +134,11 @@ class EmbeddingTrainer(object):
         sim_ij = torch.einsum("ij,ij->i", embedding_i, embedding_j)
         sim_ik = torch.einsum("ij,ij->i", embedding_i, embedding_k)
         sim_jk = torch.einsum("ij,ij->i", embedding_j, embedding_k)
-        
-        # Compute the log softmax loss, i.e. we just look at the argmax anyways!    
-        sims = torch.cat([sim_ij, sim_ik, sim_jk]).view(3,-1) # faster than torch.stack
+
+        # Compute the log softmax loss, i.e. we just look at the argmax anyways!
+        sims = torch.cat([sim_ij, sim_ik, sim_jk]).view(
+            3, -1
+        )  # faster than torch.stack
         log_softmax = F.log_softmax(sims, dim=0)  # i.e. 3 x batch_size
 
         # Theis the most similar (sim_ij), i.e. the argmax, k is the ooo.
@@ -149,22 +150,25 @@ class EmbeddingTrainer(object):
 
         # Compute accuracy for that batch
         triplet_choices = torch.argmax(log_softmax, 0)
-        triplet_accuracy = torch.sum(triplet_choices == 0) / len(triplet_choices)        
-        
+        triplet_accuracy = torch.sum(triplet_choices == 0) / len(triplet_choices)
+
         return nll, triplet_accuracy
 
-
     def _kl_divergence(self, mu_prior, mu_q, scale_p, scale_q):
-        """Compute the KL divergence between two Log Gaussians. This is the same as the KL divergence 
-        between two Gaussians. see  
+        """Compute the KL divergence between two Log Gaussians. This is the same as the KL divergence
+        between two Gaussians. see
         https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians"""
-        kl = torch.log(scale_p / scale_q) + (scale_q ** 2 + (mu_q - mu_prior) ** 2) / (2 * scale_p ** 2) - 0.5
-        
+        kl = (
+            torch.log(scale_p / scale_q)
+            + (scale_q**2 + (mu_q - mu_prior) ** 2) / (2 * scale_p**2)
+            - 0.5
+        )
+
         return kl
 
     def calculate_complexity(self, embedding, loc, scale):
+        """Compute the KL divergence between the prior and the variational posterior"""
         n_train = len(self.train_loader.dataset)
-        # n_train = len(self.train_loader)        
         log_q = self.prior.log_pdf(embedding, loc, scale)
         log_p = self.prior(embedding)
         kl_div = log_q.sum() - log_p.sum()
@@ -172,17 +176,16 @@ class EmbeddingTrainer(object):
 
         return kl_div
 
-
     def step_triplet_batch(self, indices):
         """Step the model for a single batch of data and extract embedding triplets"""
-        embedding, loc, scale = self.model()            
+        embedding, loc, scale = self.model()
         nll, triplet_accuracy = self.calculate_likelihood(embedding, indices)
         kl_div = self.calculate_complexity(embedding, loc, scale)
 
         return nll, kl_div, triplet_accuracy
 
     def step_dataloader(self, dataloader):
-        
+        """Step the model for a single epoch"""
         n_batches = len(dataloader)
         kl_losses = torch.zeros(n_batches, device=self.device)
         nll_losses = torch.zeros(n_batches, device=self.device)
@@ -209,7 +212,7 @@ class EmbeddingTrainer(object):
             # we do mc sampling of the variational posterior for validation batches
             else:
                 sampled_likelihoods = torch.zeros(self.params.mc_samples)
-                for s in range(self.params.mc_samples):        
+                for s in range(self.params.mc_samples):
                     embedding = self.model()[0]
                     nll, accuracy = self.calculate_likelihood(embedding, indices)
                     sampled_likelihoods[s] = nll.detach()
@@ -221,14 +224,11 @@ class EmbeddingTrainer(object):
                     end="\r",
                 )
 
-        
             nll_losses[k] = nll.detach()
             triplet_accuracies[k] = accuracy.detach()
 
-
             if self.model.training:
                 kl_losses[k] = kl_div.detach()
-            
 
         if self.model.training:
             epoch_loss = nll_losses.mean().item() + kl_losses.mean().item()
@@ -258,20 +258,6 @@ class EmbeddingTrainer(object):
         self.model.eval()
         val_loss = self.step_dataloader(self.val_loader)
         return val_loss
-
-    def evaluate_val_loss_convergence(self):
-        """Do we maybe need to analyse converge in term of the validation loss?"""
-        # NOTE still need to implement this to have an analysis of convergence!
-        if self.params.best_val_loss > self.params.val_loss[-1]:
-            self.params.update(best_val_loss=self.params.val_loss[-1])
-
-        if (
-            self.params.best_val_loss
-            not in self.params.val_loss[: -self.params.stability_time]
-        ):
-            return True
-
-        return False
 
     def evaluate_convergence(self):
         """We evaluate convergence as the representational stability of the number of dimensions across a certain time
@@ -307,9 +293,6 @@ class EmbeddingTrainer(object):
                 val_loss, val_acc = self.evaluate_one_epoch()
                 convergence = self.evaluate_convergence()
 
-                # import logging
-                # logging.info("Stability: {}".format(convergence))
-
                 # Update our training params
                 self.params.update(
                     train_loss=train_loss,
@@ -340,9 +323,7 @@ class EmbeddingTrainer(object):
                     print_prepend="Epoch {}".format(self.epoch),
                 )
 
-                # if convergence or (self.epoch == self.params.n_epochs):
-                if convergence:
-                    
+                if convergence or (self.epoch == self.params.n_epochs):
                     print(
                         f"Stopped training after {self.epoch} epochs. Model has converged or max number of epochs have been reached!"
                     )
@@ -365,9 +346,13 @@ class EmbeddingTrainer(object):
         try:
             os.makedirs(os.path.dirname(f_path), exist_ok=True)
         except OSError as e:
-            print("Could not create directory for storing parameters, since {}".format(e))
+            print(
+                "Could not create directory for storing parameters, since {}".format(e)
+            )
 
         self.params.update(
-            pruned_q_mu=params["pruned_q_mu"], pruned_q_var=params["pruned_q_var"], embedding=params["embedding"]
+            pruned_q_mu=params["pruned_q_mu"],
+            pruned_q_var=params["pruned_q_var"],
+            embedding=params["embedding"],
         )
         self.params.save(f_path)
