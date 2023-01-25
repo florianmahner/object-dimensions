@@ -2,12 +2,12 @@
 # -*- coding: utf-8 -*-
 
 import os
-import argparse
 
 from deep_embeddings import extract_features
 from deep_embeddings import Sampler
+from deep_embeddings import ExperimentParser
 
-parser = argparse.ArgumentParser(description='Extract features and tripletize from a dataset using a pretrained model and module')
+parser = ExperimentParser(description='Extract features and tripletize from a dataset using a pretrained model and module')
 parser.add_argument('--img_root', type=str, default='./data/THINGS', help='Path to image dataset')
 parser.add_argument('--extract', type=bool, default=True, help='Extract features from the dataset')
 parser.add_argument('--tripletize', type=bool, default=True, help='Tripletize the features')
@@ -17,18 +17,8 @@ parser.add_argument('--rnd_seed', type=int, default=0, help='Random seed for tri
 
 
 def run_pipeline(img_root, extract=False, tripletize=False, n_samples=2e6, rnd_seed=42, adaptive=False):
-    # I want to take: 1 supervised, 1 unsupervised, e.g. the latents of a GAN and one transformer based!
-    # model_names = ['vgg_16bn', 'resnet50', 'clip']
-    # module_names = ['classifier.3', 'avgpool', 'visual']
-
-    # model_names = ['resnet50']
-    # module_names = ['layer4.2.relu']
-
     model_names = ["vgg16_bn"]
     module_names = ['classifier.3']
-
-    # model_names = ['vgg16_bn']
-    # module_names = ['classifier.3']
 
     for model_name, module_name in zip(model_names, module_names):
         print("Extracting features from model: {} and module: {}".format(model_name, module_name))
@@ -54,8 +44,6 @@ def run_pipeline(img_root, extract=False, tripletize=False, n_samples=2e6, rnd_s
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    args.n_samples = 5e7
-    args.extract= False
     run_pipeline(args.img_root, 
                  extract=args.extract, 
                  tripletize=args.tripletize, 
