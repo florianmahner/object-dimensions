@@ -75,7 +75,10 @@ def plot_per_dim(args):
         if not os.path.exists(out_path):
             os.makedirs(out_path)
 
-        fname = os.path.join(out_path, f"dim_{dim}_topk.png")
+
+        fname = os.path.join(out_path, f'{dim:02d}', f"{dim}_topk.png")
+        if not os.path.exists(os.path.dirname(fname)):
+            os.makedirs(os.path.dirname(fname))
         fig.savefig(fname, dpi=300, bbox_inches='tight', pad_inches=0)
     
         plt.close(fig)
@@ -112,6 +115,11 @@ def plot_dimensions(args):
             ax.set_xticks([])
             ax.set_yticks([])
 
+            # Set a ylabel per row
+            if k == 0:
+                ax.set_ylabel(f"{j}", rotation=0, va="center", ha="right", fontsize=14)
+
+
     # Save figure in predefined embedding path directory
     base_path = os.path.dirname(os.path.dirname(args.embedding_path))
     filename = os.path.basename(args.embedding_path)
@@ -127,7 +135,7 @@ def plot_dimensions(args):
         fname = fname.format("_filtered_plus", epoch)
     else:
         fname = fname.format("", epoch)
-    fig.savefig(fname, dpi=50)
+    fig.savefig(fname, dpi=50, bbox_inches='tight', pad_inches=0)
 
 
 if __name__ == "__main__":
