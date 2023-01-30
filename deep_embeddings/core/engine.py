@@ -342,7 +342,7 @@ class EmbeddingTrainer(object):
 
     def store_final_embeddings(self):
         pruned_params = self.model.sorted_pruned_params()
-        params = self.model.detach_params()
+        params = self.model.detached_params()
         f_path = os.path.join(self.log_path, "params", "parameters.npz")
         try:
             os.makedirs(os.path.dirname(f_path), exist_ok=True)
