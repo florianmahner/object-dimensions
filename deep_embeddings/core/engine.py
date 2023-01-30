@@ -341,7 +341,8 @@ class EmbeddingTrainer(object):
             self.store_final_embeddings()
 
     def store_final_embeddings(self):
-        params = self.model.sorted_pruned_params()
+        pruned_params = self.model.sorted_pruned_params()
+        params = self.model.detach_params()
         f_path = os.path.join(self.log_path, "params", "parameters.npz")
         try:
             os.makedirs(os.path.dirname(f_path), exist_ok=True)
@@ -351,8 +352,10 @@ class EmbeddingTrainer(object):
             )
 
         self.params.update(
-            pruned_q_mu=params["pruned_q_mu"],
-            pruned_q_var=params["pruned_q_var"],
-            embedding=params["embedding"],
+            q_mu = params["q_mu"],
+            q_var = params["q_var"],
+            pruned_q_mu=pruned_params["pruned_q_mu"],
+            pruned_q_var=pruned_params["pruned_q_var"],
+            embedding=pruned_params["embedding"],
         )
         self.params.save(f_path)
