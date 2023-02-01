@@ -117,6 +117,7 @@ class EmbeddingTrainer(object):
             self.optim.load_state_dict(checkpoint["optim_state_dict"])
             self.model.load_state_dict(checkpoint["model_state_dict"])
             params = checkpoint["params"]
+            params.stability_time = self.params.stability_time
             self.params = params
             self.params.n_epochs = checkpoint["epoch"] + self.params.n_epochs
             self.params.start_epoch = checkpoint["epoch"] + 1
@@ -139,6 +140,7 @@ class EmbeddingTrainer(object):
         sims = torch.cat([sim_ij, sim_ik, sim_jk]).view(
             3, -1
         )  # faster than torch.stack
+
         log_softmax = F.log_softmax(sims, dim=0)  # i.e. 3 x batch_size
 
         # Theis the most similar (sim_ij), i.e. the argmax, k is the ooo.

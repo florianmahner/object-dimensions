@@ -110,6 +110,7 @@ class Embedding(nn.Module):
 
     def detached_params(self):
         """Detach params from computational graph"""
+        # TODO Add argsort maybe
         q_mu = self.q_mu().detach()
         q_var = self.q_logvar().exp().detach()
         params = dict(q_mu=q_mu.cpu().numpy(), q_var=q_var.cpu().numpy())
