@@ -49,7 +49,7 @@ class Params(object):
 
     def save(self, path):
         """Save the parameters of the model as a dictionary"""
-        np.savez(path, **self.__dict__)
+        np.savez_compressed(path, **self.__dict__)
 
 
 class EmbeddingTrainer(object):
