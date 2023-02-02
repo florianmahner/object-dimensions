@@ -91,7 +91,7 @@ class DeepEmbeddingLogger:
         )
         self.logger.add_logger(
             "params",
-            ParameterLogger(log_path, model, ["sorted_pruned_params"]),
+            ParameterLogger(log_path, model, ["sorted_pruned_params", "detached_params"], ext=".npz"),
             update_interval=params_interval,
         )
         if tensorboard:
@@ -297,6 +297,8 @@ class ParameterLogger(Logger):
                 param_dict.update(param())
             else:
                 param_dict[attr] = param
+
+        param_dict.update(kwargs["params"])
 
         self._save_params(param_dict, step)
 
