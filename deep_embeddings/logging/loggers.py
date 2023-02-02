@@ -267,9 +267,9 @@ class ParameterLogger(Logger):
             ), "Model {} has no attribute of name {}".format(self.model, v)
 
     def _save_params(self, param_dict, step):
-        if self.ext == "npz":
+        if self.ext == ".npz":
             key = "params_epoch_" + str(step)
-            np.savez(os.path.join(self.log_path, key + self.ext), **param_dict)
+            np.savez_compressed(os.path.join(self.log_path, key + self.ext), **param_dict)
         else:
             for key, val in param_dict.items():
                 key = key + "_epoch_" + str(step)
@@ -298,8 +298,9 @@ class ParameterLogger(Logger):
             else:
                 param_dict[attr] = param
 
-        param_dict.update(kwargs["params"])
-
+        # We save the general parameters and the model parameters!
+        params = kwargs.get("params")
+        param_dict.update(**params.__dict__)
         self._save_params(param_dict, step)
 
 
