@@ -221,7 +221,6 @@ def train(args):
             str(args.init_dim),
             str(args.batch_size),
             str(args.beta),
-            str(args.scale),
             str(args.rnd_seed),
         )
     else:
@@ -237,7 +236,6 @@ def train(args):
             str(args.init_dim),
             str(args.batch_size),
             str(args.beta),
-            str(args.scale),
             str(args.rnd_seed),
         )
 
