@@ -6,8 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-from deep_embeddings.core.pruning_lognormal import LogNormalDimensionPruning
-from deep_embeddings.core.pruning import NormalDimensionPruning
+from deep_embeddings.core.pruning import NormalDimensionPruning, LogNormalDimensionPruning
 from deep_embeddings.core.priors import SpikeSlabPrior, LogGaussianPrior
 
 
@@ -33,8 +32,8 @@ class QMu(nn.Module):
         return self.q_mu
 
 
-class Embedding(nn.Module):
-    r"""This is the representational embedding for objects. It is specified by a variational
+class VariationalEmbedding(nn.Module):
+    r"""This is the representational embedding for objects that is specified by a variational
     distribution. The variational distribution is parameterized by a mean and a log-variance.
     The mean and log variance are linear transformations of the input data. Both are free parameters
     that are learned during training."""
@@ -101,12 +100,12 @@ class Embedding(nn.Module):
         q_var = self.q_logvar().exp()
 
         importance = self.pruner(q_mu, q_var, alpha=alpha)
-        signal = torch.where(importance > self.non_zero_weights)[0]
+        dims_included = torch.where(importance > self.non_zero_weights)[0]
 
-        pruned_loc = q_mu[:, signal]
-        pruned_scale = q_var[:, signal]
+        pruned_loc = q_mu[:, dims_included]
+        pruned_scale = q_var[:, dims_included]
 
-        return signal, pruned_loc, pruned_scale
+        return dims_included, pruned_loc, pruned_scale
 
     def detached_params(self):
         """Detach params from computational graph"""
@@ -140,3 +139,70 @@ class Embedding(nn.Module):
         )
 
         return params
+
+
+class DeterministicEmbedding(nn.Module):
+    r"""This is the representational embedding for objects for SPoSE. The embedding is specified by a point-estimate of our posterior
+    distribution where only the mean is used. The mean is a linear transformation of the input data. It is a free parameter
+    that is learned during training."""
+    def __init__(self, n_objects, init_dim, init_weights=True):
+        super().__init__()
+        self.n_objects = n_objects
+        self.init_dim = init_dim
+        self.fc = nn.Linear(self.init_dim, self.n_objects, bias=False)
+        if init_weights:
+            self._initialize_weights()
+
+    def forward(self):
+        return self.fc.weight
+
+    def _initialize_weights(self):
+        mean, std = .1, .01
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                m.weight.data.normal_(mean, std)
+
+    def l1_regularization(self):
+        l1_reg = torch.tensor(0., requires_grad=True)
+        for n, p in self.named_parameters():
+            if re.search(r'weight', n):
+                l1_reg = l1_reg + torch.norm(p, 1)
+        return l1_reg
+
+    def get_nneg_dims(self, weights, eps=0.1):
+        w_max = weights.max(0)[0]
+        nneg_d = len(w_max[w_max > eps])
+        
+        return nneg_d
+
+    def sort_weights(self):
+        weights = self.fc.weight
+        index = torch.argsort(
+            torch.linalg.norm(weights, dim=0, ord=1), descending=True
+        )
+        weights = weights[:, index]
+
+    def detached_params(self):
+        weights = self.sort_weights()
+        weights = weights.detach().cpu().numpy()
+
+        return dict(weights=weights)
+
+    def sorted_pruned_params(self):
+        weights = self.prune_dimensions()[1]
+        weights = weights.detach().cpu().numpy()
+        params = dict(pruned_weights=weights)
+
+    @torch.no_grad()
+    def prune_dimensions(self, alpha=0.05):
+        weights = self.fc.weight
+        index = torch.argsort(
+            torch.linalg.norm(weights, dim=0, ord=1), descending=True
+        )
+        weights = weights[:, index]
+        eps = 0.1
+        w_max = weights.max(0)
+        dims_included = w_max > eps
+        weights = weights[:, dims_included]
+
+        return dims_included, weights

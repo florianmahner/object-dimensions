@@ -16,7 +16,7 @@ class Params(object):
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
         for key in (
-            "train_kl",
+            "train_complexity",
             "train_nll",
             "train_loss",
             "val_loss",
@@ -69,6 +69,7 @@ class EmbeddingTrainer(object):
         lr=0.001,
         beta=1.0,
         stability_time=200,
+        method="variational",
     ):
         self.model = model
         self.train_loader = train_loader
@@ -83,12 +84,14 @@ class EmbeddingTrainer(object):
             mc_samples=mc_samples,
             stability_time=stability_time,
             load_model=load_model,
+            method=method
         )
 
         self.log_path = logger.log_path
         self._build_optimizer()
         self.prior = prior
         self.device = device
+        self.method = method
 
     def parse_from_args(self, args):
         attrs = ["n_epochs", "mc_samples", "lr", "beta", "stability_time", "load_model"]
@@ -168,7 +171,7 @@ class EmbeddingTrainer(object):
 
         return kl
 
-    def calculate_complexity(self, embedding, loc, scale):
+    def calculate_kl_div(self, embedding, loc, scale):
         """Compute the KL divergence between the prior and the variational posterior"""
         n_train = len(self.train_loader.dataset)
         log_q = self.prior.log_pdf(embedding, loc, scale)
@@ -178,26 +181,53 @@ class EmbeddingTrainer(object):
 
         return kl_div
 
+    def calculate_spose_complexity(self, embedding):
+        """Compute the complexity loss for the SPOSE model"""
+        l1_pen = self.model.l1_regularization()
+        n_items = self.model.n_objects
+        pos_pen = torch.sum(F.relu(-embedding)) #positivity constraint to enforce non-negative values in embedding matrix
+        complexity_loss = (self.params.beta/n_items) * l1_pen 
+        complexity_loss = 0.01 * pos_pen + complexity_loss  
+        
+        return complexity_loss
+
     def step_triplet_batch(self, indices):
         """Step the model for a single batch of data and extract embedding triplets"""
-        embedding, loc, scale = self.model()
-        nll, triplet_accuracy = self.calculate_likelihood(embedding, indices)
-        kl_div = self.calculate_complexity(embedding, loc, scale)
+        if self.method == "variational":
+            embedding, loc, scale = self.model()
+            complex_loss = self.calculate_kl_div(embedding, loc, scale)
+        else:
+            embedding = self.model()
+            complex_loss = self.calculate_spose_complexity(embedding)
 
-        return nll, kl_div, triplet_accuracy
+        nll, triplet_accuracy = self.calculate_likelihood(embedding, indices)
+
+        return nll, complex_loss, triplet_accuracy
+
+    def variational_evaluation(self):
+        """ Sample from the variational posterior and compute the likelihood of the data"""
+        sampled_likelihoods = torch.zeros(self.params.mc_samples)
+        for s in range(self.params.mc_samples):
+            embedding = self.model()[0]
+            nll, accuracy = self.calculate_likelihood(embedding, indices)
+            sampled_likelihoods[s] = nll.detach()
+
+        nll = torch.mean(sampled_likelihoods)
+        
+        return nll
 
     def step_dataloader(self, dataloader):
         """Step the model for a single epoch"""
         n_batches = len(dataloader)
-        kl_losses = torch.zeros(n_batches, device=self.device)
+        complex_losses = torch.zeros(n_batches, device=self.device)
         nll_losses = torch.zeros(n_batches, device=self.device)
         triplet_accuracies = torch.zeros(n_batches, device=self.device)
 
         for k, indices in enumerate(dataloader):
 
             if self.model.training:
-                nll, kl_div, accuracy = self.step_triplet_batch(indices)
-                loss = nll + self.params.beta * kl_div
+                nll, complex_loss, accuracy = self.step_triplet_batch(indices)
+                loss = nll + self.params.beta * complex_loss
 
                 # faster alternative to optim.zero_grad()
                 for param in self.model.parameters():
@@ -211,16 +241,15 @@ class EmbeddingTrainer(object):
                     end="\r",
                 )
 
-            # we do mc sampling of the variational posterior for validation batches
-            else:
-                sampled_likelihoods = torch.zeros(self.params.mc_samples)
-                for s in range(self.params.mc_samples):
-                    embedding = self.model()[0]
-                    nll, accuracy = self.calculate_likelihood(embedding, indices)
-                    sampled_likelihoods[s] = nll.detach()
-
-                nll = torch.mean(sampled_likelihoods)
-
+            # Do a variational evaluation if we are not training
+            if self.model.training == False:
+                if self.method == "variational":
+                    nll = self.variational_evaluation()
+                
+                else:
+                    embedding = self.model()
+                    nll = self.calculate_likelihood(embedding, indices)
+                
                 print(
                     f"Val Batch {k}/{n_batches}",
                     end="\r",
@@ -230,13 +259,13 @@ class EmbeddingTrainer(object):
             triplet_accuracies[k] = accuracy.detach()
 
             if self.model.training:
-                kl_losses[k] = kl_div.detach()
+                complex_losses[k] = complex_loss.detach()
 
         if self.model.training:
-            epoch_loss = nll_losses.mean().item() + kl_losses.mean().item()
+            epoch_loss = nll_losses.mean().item() + comples_losses.mean().item()
 
             self.params.update(
-                train_kl=kl_losses.mean().item(),
+                train_complexity=comples_losses.mean().item(),
                 train_nll=nll_losses.mean().item(),
             )
         else:
@@ -264,7 +293,7 @@ class EmbeddingTrainer(object):
     def evaluate_convergence(self):
         """We evaluate convergence as the representational stability of the number of dimensions across a certain time
         frame of epochs"""
-        signal, _, _ = self.model.prune_dimensions()
+        signal = self.model.prune_dimensions()[0]
         dimensions = len(signal)
         self.params.update(dim_over_time=dimensions)
 
@@ -309,7 +338,7 @@ class EmbeddingTrainer(object):
                     train_loss=train_loss,
                     train_acc=train_acc,
                     train_nll=self.params.train_nll,
-                    train_kl=self.params.train_kl,
+                    train_complexity=self.params.train_complexity,
                     val_loss=val_loss,
                     val_nll=self.params.val_nll,
                     val_acc=val_acc,
@@ -353,11 +382,5 @@ class EmbeddingTrainer(object):
                 "Could not create directory for storing parameters, since {}".format(e)
             )
 
-        self.params.update(
-            q_mu = params["q_mu"],
-            q_var = params["q_var"],
-            pruned_q_mu=pruned_params["pruned_q_mu"],
-            pruned_q_var=pruned_params["pruned_q_var"],
-            embedding=pruned_params["embedding"],
-        )
+        self.params.update(**pruned_params, **params)
         self.params.save(f_path)

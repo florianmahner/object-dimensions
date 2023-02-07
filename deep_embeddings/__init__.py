@@ -1,10 +1,12 @@
-from .core.model import Embedding
+from .core.model import VariationalEmbedding, DeterministicEmbedding
 from .core.priors import SpikeSlabPrior, LogGaussianPrior
-from .core.dataset import TripletDataset, build_triplet_dataset
+from .core.pruning import NormalDimensionPruning, LogNormalDimensionPruning
 from .core.engine import EmbeddingTrainer
-from .core.pruning_lognormal import LogNormalDimensionPruning
-from .core.pruning import NormalDimensionPruning
-from .logging.loggers import DeepEmbeddingLogger
+from .core.dataset import TripletDataset, build_triplet_dataset
+from .logging.loggers import EmbeddingLogger
 from .extraction.extract_model_features import extract_features
 from .extraction.sampler import Sampler
 from .utils.utils import ExperimentParser
+
+from .core import priors, engine, dataset, pruning, model
+from .utils import utils

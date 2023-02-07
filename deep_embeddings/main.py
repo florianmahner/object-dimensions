@@ -9,15 +9,22 @@ import argparse
 
 import numpy as np
 
-from deep_embeddings import Embedding
-from deep_embeddings import LogGaussianPrior, SpikeSlabPrior
-from deep_embeddings import EmbeddingTrainer
-from deep_embeddings import DeepEmbeddingLogger
-from deep_embeddings import ExperimentParser
-from deep_embeddings import build_triplet_dataset
+from deep_embeddings.core.engine import EmbeddingTrainer
+from deep_embeddings.core.model import VariationalEmbedding, DeterministicEmbedding
+from deep_embeddings.core.priors import SpikeSlabPrior, LogGaussianPrior
+
+from deep_embeddings import ExperimentParser, build_triplet_dataset
+from deep_embeddings import EmbeddingLogger
 
 
 parser = ExperimentParser(description="Main training script for deep embeddings")
+parser.add_argument(
+    "--method", 
+    type=str,
+    default="variational",
+    choices=("variational", "deterministic"),
+    help="Type of embedding to train. Variational = VICE, deterministic = SPoSE"
+)
 parser.add_argument("--triplet_path", type=str, help="Path to the triplet file")
 parser.add_argument(
     "--log_path",
@@ -61,8 +68,8 @@ parser.add_argument(
     "--prior",
     type=str,
     default="sslab",
-    choices=["sslab", "gauss", "normal"],
-    help="Prior to use",
+    choices=["sslab", "gauss"],
+    help="Select the prior to use for the variational embedding",
 )
 parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
 parser.add_argument(
@@ -75,7 +82,7 @@ parser.add_argument(
     default=100,
     help="Number of epochs to train before checking stability",
 )
-parser.add_argument("--rnd_seed", type=int, default=42, help="Random seed")
+parser.add_argument("--seed", type=int, default=42, help="Random seed")
 parser.add_argument(
     "--beta",
     type=float,
@@ -125,17 +132,16 @@ def _parse_number_of_objects(triplet_path, modality):
         return features.shape[0]
 
 
-def _set_global_seed(rnd_seed):
-    torch.manual_seed(rnd_seed)
-    np.random.seed(rnd_seed)
-    random.seed(rnd_seed)
+def _set_global_seed(seed):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
 
 
 def _build_prior(prior, n_objects, init_dim, scale):
     if prior == "sslab":
         return SpikeSlabPrior(n_objects, init_dim)
     elif prior == "gauss":
-        print(scale)
         return LogGaussianPrior(n_objects, init_dim, loc=0.0, scale=scale)
     else:
         raise ValueError("Unknown prior: {}".format(prior))
@@ -172,23 +178,31 @@ def load_args(args, log_path, fresh):
     return args
 
 
-def train(args):
+def _build_model(args):
+    n_objects = _parse_number_of_objects(args.triplet_path, args.modality)
+    if args.method == "variational":
+        model_prior = _build_prior(args.prior, n_objects, args.init_dim, args.scale)
+        model = VariationalEmbedding(model_prior, n_objects, args.init_dim, args.non_zero_weights)
+        return model, model_prior
+    elif args.method == "embedding":
+        model = DeterministicEmbedding(n_objects, args.init_dim)
+        return model, None
 
+def _check_args(args):
+    if args.fresh and args.load_model:
+        raise ValueError("Cannot load a model and train from scratch at the same time")
+
+def train(args):
     device = (
         torch.device(f"cuda:{args.device_id}")
         if torch.cuda.is_available()
         else torch.device("cpu")
     )
 
-    print(args.beta, args.scale, args.batch_size, args.rnd_seed)
-
     g = torch.Generator()
-    g.manual_seed(args.rnd_seed)
+    g.manual_seed(args.seed)
 
     train_dataset, val_dataset = build_triplet_dataset(args.triplet_path, device=device)
-
-    # train_loader = train_dataset
-    # val_loader = val_dataset
     
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
@@ -210,6 +224,10 @@ def train(args):
     )
     n_samples = _convert_samples_to_string(train_dataset, val_dataset)
 
+    # If we are training a deterministic embedding using MLE this is the same as a variational point estimate with a uniform prior
+    if args.method == "deterministc":
+        args.prior = "uniform"
+
     # Build the logpath
     if args.modality == "behavior":
         log_path = os.path.join(
@@ -221,7 +239,7 @@ def train(args):
             str(args.init_dim),
             str(args.batch_size),
             str(args.beta),
-            str(args.rnd_seed),
+            str(args.seed),
         )
     else:
         model_name, module_name = args.triplet_path.split("/")[-3:-1]
@@ -236,7 +254,7 @@ def train(args):
             str(args.init_dim),
             str(args.batch_size),
             str(args.beta),
-            str(args.rnd_seed),
+            str(args.seed),
         )
 
     # Save all configuration parameters in the directory
@@ -244,15 +262,12 @@ def train(args):
         os.makedirs(log_path)
 
     args = load_args(args, log_path, args.fresh)
-    _set_global_seed(args.rnd_seed)
-
-    n_objects = _parse_number_of_objects(args.triplet_path, args.modality)
-    model_prior = _build_prior(args.prior, n_objects, args.init_dim, args.scale)
-    model = Embedding(model_prior, n_objects, args.init_dim, args.non_zero_weights)
+    _set_global_seed(args.seed)    
+    model, model_prior = _build_model(args)
     model.to(device)
 
     # Build loggers and train the model!
-    logger = DeepEmbeddingLogger(
+    logger = EmbeddingLogger(
         log_path,
         model,
         args.fresh,
@@ -275,12 +290,6 @@ def train(args):
         args.stability_time,
     )
     trainer.train()
-
-
-def _check_args(args):
-    if args.fresh and args.load_model:
-        raise ValueError("Cannot load a model and train from scratch at the same time")
-
 
 if __name__ == "__main__":
     args = parser.parse_args()
