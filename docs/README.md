@@ -1,10 +1,9 @@
 # Object Dimensions in Humans :elf: and DNNs :spider_web:
 
-Before using this repository, we recommend to install all packages inside the provided virtual environment:
+Before using this repository, we recommend to install all packages. We provide a `makefile` for this:
 
 ```bash
-conda env create -f environment.yaml
-conda activate deep
+make env
 ```
 
 ## Content of this repository
