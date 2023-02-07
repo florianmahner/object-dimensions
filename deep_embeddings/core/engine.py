@@ -314,7 +314,8 @@ class EmbeddingTrainer(object):
             self.init_model_from_checkpoint()
 
         self.model.to(self.device)
-        self.prior.to(self.device)
+        if self.prior:
+            self.prior.to(self.device)
         self.batch_size = self.train_loader.batch_size
 
         try:

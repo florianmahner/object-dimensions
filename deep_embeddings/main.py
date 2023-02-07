@@ -288,6 +288,7 @@ def train(args):
         args.lr,
         args.beta,
         args.stability_time,
+        args.method
     )
     trainer.train()
 
