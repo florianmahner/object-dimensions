@@ -1,7 +1,7 @@
 #!/bin/bash
 
 embedding_path="./results/50mio/16396/0.4/0.25/1.0/0.5/42/params/pruned_q_mu_epoch_5200.txt"
-rnd_seed=42
+seed=42
 device="cuda:0"
 
 model_name="vgg16_bn"
@@ -18,7 +18,7 @@ dim=(1)
 alpha=1.0
 beta=1.0
 
-python deep_embeddings/analyses/image_generation/optimize_and_sample_stylegan.py \
+python experiments/image_generation/optimize_and_sample_stylegan.py \
         --embedding_path $embedding_path \
         --model_name $model_name \
         --module_name $module_name \
@@ -27,7 +27,7 @@ python deep_embeddings/analyses/image_generation/optimize_and_sample_stylegan.py
         --batch_size $batch_size \
         --truncation $truncation \
         --top_k $top_k \
-        --rnd_seed $rnd_seed \
+        --seed $seed \
         --sample_dataset $sample_dataset \
         --find_topk $find_topk \
         --max_iter $max_iter \

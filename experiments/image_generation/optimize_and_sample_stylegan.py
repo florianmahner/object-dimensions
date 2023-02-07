@@ -55,7 +55,7 @@ parser.add_argument("--sample_dataset", type=str, default="True", choices=("True
 parser.add_argument("--find_topk", type=str, default="False", choices=("True", "False"), help="Find top k latent dimensions")
 parser.add_argument("--max_iter", type=int, default=200, help="Number of optimizing iterations")
 parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
-parser.add_argument("--rnd_seed", type=int, default=42, help="Random seed")
+parser.add_argument("--seed", type=int, default=42, help="Random seed")
 parser.add_argument("--dim", type=int, default=(1,2), nargs="+", help="Dimension to optimize for")
 parser.add_argument("--alpha", type=float, default=1.0, help="Weight of the absolute value in a dimension to optimize for")
 parser.add_argument("--beta", type=float, default=1.0, help="Weight for the softmax loss in the dimension optimization")
@@ -400,9 +400,9 @@ class Optimizer(nn.Module):
 if __name__ == '__main__':
     args = parser.parse_args()
 
-    np.random.seed(args.rnd_seed)
-    random.seed(args.rnd_seed)
-    torch.manual_seed(args.rnd_seed)
+    np.random.seed(args.seed)
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
 
     if args.sample_dataset == "True":
         print("Sampling latents...\n")

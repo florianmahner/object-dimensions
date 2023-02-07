@@ -10,7 +10,6 @@ import matplotlib.pyplot as plt
 import torch.nn.functional as F
 import torch.nn as nn 
 import numpy as np
-import matplotlib.gridspec as gridspec
 
 from pytorch_pretrained_biggan import BigGAN, truncated_noise_sample
 from deep_embeddings.utils.latent_predictor import LatentPredictor
@@ -31,7 +30,7 @@ parser.add_argument("--top_k", type=int, default=16, help="Top k values to sampl
 parser.add_argument("--sample_latents", type=str, default="False", choices=("True", "False"), help="Sample latents")
 parser.add_argument("--max_iter", type=int, default=200, help="Number of optimizing iterations")
 parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
-parser.add_argument("--rnd_seed", type=int, default=42, help="Random seed")
+parser.add_argument("--seed", type=int, default=42, help="Random seed")
 parser.add_argument("--dim", type=int, default=(1,2), nargs="+", help="Dimension to optimize for")
 parser.add_argument("--alpha", type=float, default=1.0, help="Weight of the absolute value in a dimension to optimize for")
 parser.add_argument("--beta", type=float, default=1.0, help="Weight for the softmax loss in the dimension optimization")
@@ -139,9 +138,6 @@ class Sampler(object):
             topk_indices = torch.argsort(code, descending=True)[:self.top_k]
             topk_latents = sampled_latents[topk_indices]
             self._save_latents(generator, topk_latents, j)
-
-            if j == 5:
-                break
 
     def _save_latents(self, generator, topk_latents, j):
         out_path = os.path.join(self.out_path, f'{j:02d}', 'sampled_latents')
@@ -278,9 +274,9 @@ class Optimizer(nn.Module):
 if __name__ == '__main__':
     args = parser.parse_args()
 
-    np.random.seed(args.rnd_seed)
-    random.seed(args.rnd_seed)
-    torch.manual_seed(args.rnd_seed)
+    np.random.seed(args.seed)
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
 
     # We can either sample latents again or optimize previously stored ones
     if args.sample_latents:

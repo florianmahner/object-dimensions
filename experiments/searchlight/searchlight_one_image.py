@@ -27,7 +27,7 @@ parser.add_argument('--model_name', type=str, default='vgg16_bn', help='Name of 
 parser.add_argument('--module_name', type=str, default='classifier.3', help='Name of the module to use.')
 parser.add_argument('--window_size', type=int, default=20, choices=[15,20,25,30,35], help='Size of the window to use for the searchlight.')
 parser.add_argument('--stride', type=int, default=1, choices=[1,2,3,4,5], help='Stride of the window to use for the searchlight.')
-parser.add_argument('--rnd_seed', type=int, default=42, help='Random seed to use for the searchlight.')
+parser.add_argument('--seed', type=int, default=42, help='Random seed to use for the searchlight.')
 
 # The queries of the database that we want to visualize!
 # QUERIES =  [
@@ -109,9 +109,9 @@ def map_predictions_to_classes(predictions, classes):
 if __name__ == '__main__':
     args = parser.parse_args()
 
-    np.random.seed(args.rnd_seed)
-    random.seed(args.rnd_seed)
-    torch.manual_seed(args.rnd_seed)
+    np.random.seed(args.seed)
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     extractor = get_extractor(model_name=args.model_name, pretrained=True, device=device, source='torchvision')

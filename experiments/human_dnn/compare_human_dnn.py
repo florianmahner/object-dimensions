@@ -9,11 +9,10 @@ import toml
 
 import numpy as np
 from deep_embeddings.utils.utils import load_sparse_codes, load_image_data, create_path_from_params, compute_rdm, fill_diag
-from .jackknife import run_jackknife
-from .embedding_analysis import run_embedding_analysis
+from experiments.human_dnn.jackknife import run_jackknife
+from experiments.human_dnn.embedding_analysis import run_embedding_analysis
 from deep_embeddings import ExperimentParser
 from scipy.stats import pearsonr, rankdata
-import cv2
 
 
 parser = ExperimentParser(description='Analysis and comparison of embeddings')
@@ -100,7 +99,6 @@ def kmeans(mat, K=50):
     res2 = res.reshape((mat.shape))
     return res2
 
-
 def kmeans_sklearn(img, k):
     """ Write a function that segments a 2d grayscale image using kmeans clustering and sklearn """
     from sklearn.cluster import KMeans
@@ -146,6 +144,8 @@ def compare_human_dnn(args):
 
     if os.path.isfile(args.human_path_comp):
         human_embedding_comp, human_var_comp = load_sparse_codes(args.human_path_comp, with_var=True)
+
+
     
 
 

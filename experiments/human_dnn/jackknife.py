@@ -222,6 +222,8 @@ def run_jackknife(human_weights, human_var, dnn_weights, dnn_var, image_filename
                   comparison="dnn"):
     """ This function runs the jackknife analysis for a given embedding"""
 
+    # TODO Show triplets and dimensions where the DNN is sure about the odd one out but actually wrong!
+
     if comparison == "human":
         title_1 = "Dimension Human 1"
         title_2 = "Dimension Human 2"

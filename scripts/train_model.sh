@@ -23,7 +23,7 @@ init_dim=100
 prior="gauss"
 n_epochs=3000
 stability_time=500
-rnd_seed=0
+seed=0
 batch_size=16384
 # batch_size=256
 beta=1.0
@@ -46,7 +46,7 @@ python deep_embeddings/main.py \
     --init_dim $init_dim \
     --prior $prior \
     --stability_time $stability_time \
-    --rnd_seed $rnd_seed \
+    --seed $seed \
     --batch_size $batch_size \
     --n_epochs $n_epochs \
     --beta $beta \

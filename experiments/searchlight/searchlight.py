@@ -34,7 +34,7 @@ class Config:
     truncation = 0.4
 
     device = 'cuda:0'
-    rnd_seed = 42
+    seed = 42
 
 
 def searchlight_(img, regression_predictor, window_size, stride=1, latent_dim=1):
@@ -102,9 +102,9 @@ if __name__ == '__main__':
 
     cfg = Config
 
-    np.random.seed(cfg.rnd_seed)
-    random.seed(cfg.rnd_seed)
-    torch.manual_seed(cfg.rnd_seed)
+    np.random.seed(cfg.seed)
+    random.seed(cfg.seed)
+    torch.manual_seed(cfg.seed)
 
     device = torch.device(cfg.device)
 

@@ -1,32 +1,14 @@
 
 # These are for all 
 [general]
-# embedding_path="./results/sslab/deep/20mio/sslab/100/16384/2.0/0.25/0/params/pruned_q_mu_epoch_2000.txt"
-# embedding_path = "./results/sslab/vgg16_bn/4mio/behavior/sslab/100/256/0.5/0.5/2/params/pruned_q_mu_epoch_1200.txt"
 
-# embedding_path = "./results/4096_nll/behavior/4.58mio/sslab/100/4096/1.3/0.25/0/params/pruned_q_mu_epoch_2000.txt"
-# embedding_path = "./results/sslab/deep/20mio/sslab/100/16384/2.0/0.25/0/params/pruned_q_mu_epoch_2000.txt"
-
-# embedding_path = "./results/sslab/behavior/4.58mio/sslab/100/16384/2.5/0.25/0/params/pruned_q_mu_epoch_750.txt"
-
-# embedding_path = "./results/lognormal_bs_256/behavior/4.58mio/gauss/100/256/1.0/0.25/0/params/pruned_q_var_epoch_300.txt"
-
-# embedding_path = "./results/test_beta1_0/behavior/4.58mio/gauss/100/16384/1.0/0.25/0/params/pruned_q_mu_epoch_300.txt"
-
-# embedding_path = "./results/50mio_run2/deep/classifier.3/triplets_50mio/50.mio/sslab/100/16384/2.5/0.25/42/params/pruned_q_mu_epoch_4450.txt"
-
-# embedding_path = "./results/new_run_log_gauss_normal_prune/behavior/4.58mio/gauss/100/256/1.0/0.25/0/params/embedding_epoch_300.txt"
-
-# embedding_path = "./results/128bs_behavior/behavior/4.58mio/sslab/100/128/1.0/0.25/0/params/pruned_q_mu_epoch_600.txt"
-
-embedding_path = "./results/sslab_final/deep/vgg16_bn/classifier.3/20.mio/sslab/500/16384/0.6/1.0/0/params/pruned_q_mu_epoch_2000.txt"
-
-
-
+# embedding_path="./embedding_256/params/embedding_epoch_500.txt"
+# embedding_path="./embedding/1/params/parameters.npz"
+embedding_path="./results/test/deep/vgg16_bn/classifier.3/20.mio/sslab/300/16384/0.1/0/params/params_epoch_2030.npz"
 
 
 dnn_path="./data/triplets/vgg16_bn/classifier.3"
-rnd_seed = 42
+seed = 42
 device = "cuda:0"
 img_root = "./data/image_data/images12_plus"
 
@@ -44,14 +26,14 @@ feature_norm_path = "./data/feature_norms/feature_object_matrix.csv"
 [big_gan]
 model_name = "vgg16_bn"
 module_name = "classifier.3"
-n_samples = 100000
+n_samples = 2_000_000
 window_size = 50
-batch_size = 1
+batch_size = 16
 truncation = 0.4
 top_k = 16
 sample_latents= true
 max_iter = 200
-dim = 0
+dim = [0,1,2,3]
 alpha = 1.0
 beta = 1.0
 
@@ -65,4 +47,3 @@ feature_path = "./data/models/vgg16_bn/classifier.3/"
 window_size = 20
 stride = 1
 analysis = "regression"
-

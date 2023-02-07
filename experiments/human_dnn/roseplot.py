@@ -55,34 +55,21 @@ for bar, angle, height, label in zip(bars,angles, df['weight'], df["Name"]):
     else: 
         alignment = "left"
 
-
-    # Add a label to the bar right below the bar rotated
-    ax.text(
-        x=angle, 
-        y=height + labelPadding, 
-        s=label, 
-        rotation=rotation, 
-        rotation_mode="anchor", 
-        ha=alignment, 
-        va="center_baseline", 
-        fontsize=20)
-
-    # # Finally add the labels
-    # x_offset = angle - np.pi / 12
-    # y_offset = lowerLimit + bar.get_height() + labelPadding 
+    # Finally add the labels
+    x_offset = angle - np.pi / 12
+    y_offset = lowerLimit + bar.get_height() + labelPadding 
 
 
-    # cut_off = 0.0
-    # if height > cut_off:
-    #     ax.text(
-    #         x=x_offset, 
-    #         y=y_offset, 
-    #         s=label, 
-    #         ha=alignment, 
-    #         va='center', 
-    #         rotation=rotation, 
-    #         rotation_mode="anchor",
-    #         fontsize = 20) 
+    cut_off = 0.0
+    if height > cut_off:
+        ax.text(
+            x=x_offset, 
+            y=y_offset, 
+            s=label, 
+            ha=alignment, 
+            va='center', 
+            rotation=rotation, 
+            rotation_mode="anchor",
+            fontsize = 20) 
 
-
-plt.savefig("test.jpg")
+plt.savefig("rose.jpg")

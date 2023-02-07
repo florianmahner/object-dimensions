@@ -16,18 +16,18 @@ parser.add_argument("--out_path", type=str, help="Path to store Triplets")
 parser.add_argument("--n_samples", type=int, help="Number of triplets to sample")
 parser.add_argument("--k", type=int, default=3, choices=[2, 3], help="Whether to sample pairs or triplets")
 parser.add_argument("--similarity", type=str, choices=["cosine", "dot"], help="Similarity function for pairiwse sampling")
-parser.add_argument("--rnd_seed", type=int, default=42, help="Random seed")
+parser.add_argument("--seed", type=int, default=42, help="Random seed")
 parser.add_argument("--adaptive", type=bool, default=False, help="If adaptive sampling or not")
 
 
 class Sampler(object):
-    def __init__(self, in_path, out_path, n_samples, k=3, train_fraction=0.9, rnd_seed=42):
+    def __init__(self, in_path, out_path, n_samples, k=3, train_fraction=0.9, seed=42):
         self.in_path = in_path
         self.out_path = out_path
         self.n_samples = int(n_samples)
         self.k = k
         self.train_fraction = train_fraction
-        self.rnd_seed = rnd_seed
+        self.seed = seed
 
     def load_domain(self):
         if not re.search(r"(npy)$", self.in_path):
@@ -36,8 +36,8 @@ class Sampler(object):
             print(f"\n....Creating output directory: {self.out_path}\n")
             os.makedirs(self.out_path)
 
-        random.seed(self.rnd_seed)
-        np.random.seed(self.rnd_seed)
+        random.seed(self.seed)
+        np.random.seed(self.seed)
         X = np.load(self.in_path)
         X = self.remove_nans_(X)
         X = self.remove_negatives_(X) # positivity constraint also on vgg features!
@@ -228,7 +228,7 @@ class Sampler(object):
 if __name__ == "__main__":
     # parse arguments
     args = parser.parse_args()
-    sampler = Sampler(in_path=args.in_path, out_path=args.out_path, n_samples=args.n_samples, k=args.k, rnd_seed=args.rnd_seed)
+    sampler = Sampler(in_path=args.in_path, out_path=args.out_path, n_samples=args.n_samples, k=args.k, seed=args.seed)
     if args.k == 3:
         sampler.run_and_save_tripletization(adaptive=args.adaptive)
     else:

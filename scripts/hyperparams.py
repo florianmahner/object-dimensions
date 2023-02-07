@@ -23,10 +23,10 @@ for seed in SEEDS:
         with open("./scripts/slurm/slurm_script.txt") as f:
             slurm = f.readlines()
 
-        # cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_deep.toml" --beta {} --rnd_seed {} --init_dim 200 --batch_size 256 --load_model'.format(beta, seed)
-        # cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_deep.toml" --beta {} --rnd_seed {} --init_dim 500 --batch_size 256 --load_model'.format(beta, seed)
-        cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_deep.toml" --beta {} --rnd_seed {} --init_dim 500 --batch_size 16384 --identifier "reproducibility" --stability_time 1000 --load_model'.format(beta, seed)
-        # cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_behavior.toml" --beta {} --rnd_seed {} --init_dim 500 --load_model'.format(beta, seed)
+        # cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_deep.toml" --beta {} --seed {} --init_dim 200 --batch_size 256 --load_model'.format(beta, seed)
+        # cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_deep.toml" --beta {} --seed {} --init_dim 500 --batch_size 256 --load_model'.format(beta, seed)
+        cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_deep.toml" --beta {} --seed {} --init_dim 500 --batch_size 16384 --identifier "reproducibility" --stability_time 1000 --load_model'.format(beta, seed)
+        # cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_behavior.toml" --beta {} --seed {} --init_dim 500 --load_model'.format(beta, seed)
 
         slurm.append(cmd)
 
