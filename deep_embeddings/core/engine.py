@@ -204,7 +204,7 @@ class EmbeddingTrainer(object):
 
         return nll, complex_loss, triplet_accuracy
 
-    def variational_evaluation(self):
+    def variational_evaluation(self, indices):
         """ Sample from the variational posterior and compute the likelihood of the data"""
         sampled_likelihoods = torch.zeros(self.params.mc_samples)
         for s in range(self.params.mc_samples):
@@ -240,12 +240,10 @@ class EmbeddingTrainer(object):
                     f"Train Batch {k}/{n_batches}",
                     end="\r",
                 )
-
             # Do a variational evaluation if we are not training
             if self.model.training == False:
                 if self.method == "variational":
-                    nll = self.variational_evaluation()
-                
+                    nll = self.variational_evaluation(indices)
                 else:
                     embedding = self.model()
                     nll = self.calculate_likelihood(embedding, indices)
