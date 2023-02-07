@@ -184,7 +184,7 @@ def _build_model(args):
         model_prior = _build_prior(args.prior, n_objects, args.init_dim, args.scale)
         model = VariationalEmbedding(model_prior, n_objects, args.init_dim, args.non_zero_weights)
         return model, model_prior
-    elif args.method == "embedding":
+    else:
         model = DeterministicEmbedding(n_objects, args.init_dim)
         return model, None
 
