@@ -207,14 +207,17 @@ class EmbeddingTrainer(object):
     def variational_evaluation(self, indices):
         """ Sample from the variational posterior and compute the likelihood of the data"""
         sampled_likelihoods = torch.zeros(self.params.mc_samples)
+        sampled_accuracies = torch.zeros(self.params.mc_samples)
         for s in range(self.params.mc_samples):
             embedding = self.model()[0]
             nll, accuracy = self.calculate_likelihood(embedding, indices)
             sampled_likelihoods[s] = nll.detach()
+            sampled_accuracies[s] = accuracy.detach()
 
         nll = torch.mean(sampled_likelihoods)
+        accuracy = torch.mean(sampled_accuracies)
         
-        return nll
+        return nll, accuracy
 
     def step_dataloader(self, dataloader):
         """Step the model for a single epoch"""
@@ -243,10 +246,10 @@ class EmbeddingTrainer(object):
             # Do a variational evaluation if we are not training
             if self.model.training == False:
                 if self.method == "variational":
-                    nll = self.variational_evaluation(indices)
+                    nll, accuracy = self.variational_evaluation(indices)
                 else:
                     embedding = self.model()
-                    nll = self.calculate_likelihood(embedding, indices)
+                    nll, accuracy = self.calculate_likelihood(embedding, indices)
                 
                 print(
                     f"Val Batch {k}/{n_batches}",
