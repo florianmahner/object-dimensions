@@ -25,9 +25,31 @@ python tripletize.py --config "configs/tripletize.toml"
 We can train the model using MLE as introduced with SPoSE or variationally as in VICE.
 To run the model for behavior for instance and using SPoSE please execute
 
-bash
-```
+
+```bash
 python main.py --configs "/configs/train_behavior.toml" --method "deterministic"
 ```
 
+
+The model run is stored in different paths, depending on whether the modality are behavior or deep neural net triplets:
+
+```
+Behavior: "./log_path/identifier/behavior/n_samples/prior/init_dim/batch_size/beta/seed"
+DNN: "./log_path/identifier/deep/model_name/module_name/n_samples/prior/init_dim/batch_size/beta/seed"
+```
+
+In each run path the following is stored
+
+```
+path
+├── config.toml
+├── training.log
+├── params
+├── └── parameters.npz
+├── tboard
+├── checkpoints
+├── └── checkpoint_epoch_*.tar
+```
+
+## Evaluating the model
 
