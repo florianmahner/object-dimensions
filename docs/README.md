@@ -1,5 +1,4 @@
-# Object Dimensions in Humans and DNNs 
-
+# Object Dimensions in Humans :elf: and DNNs :spider_web:
 
 Before using this repository, we recommend to install all packages inside the provided virtual environment:
 
@@ -22,8 +21,16 @@ python tripletize.py --config "configs/tripletize.toml"
 
 ## Training the model
 
-We can train the model using MLE as introduced with SPoSE or variationally as in VICE.
-To run the model for behavior for instance and using SPoSE please execute
+We can train the model using a variety of different hyperparameters and optimizations. 
+For a list of arguments execute:
+
+```bash
+python main.py --help
+```
+
+Most importantly, we can train the model determinstically using MLE as introduced with [SPoSE](https://www.nature.com/articles/s41562-020-00951-3) or variationally as in [VICE](https://arxiv.org/abs/2205.00756). We enable these through the flags `--method {deterministic, variational}`.
+
+To simplify recreating the experiments, we have summarized example configurations in `.toml` files. The arguments in the file are passed onto the argument parser and can be used for training (see [here](https://github.com/florianmahner/toml_argparse) for the corresponding repo). We can execute a model run using the configuration files as follows:
 
 
 ```bash
@@ -53,3 +60,4 @@ path
 
 ## Evaluating the model
 
+Our final model is stored in `parameters.npz` alongside all training configurations. For SPoSE we model only the mean of our embedding, which is saved, and for VICE the mean and variance of our Gaussian variational distribution.
