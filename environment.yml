@@ -110,7 +110,6 @@ dependencies:
   - nest-asyncio=1.5.5=py39h06a4308_0
   - nettle=3.7.3=hbbd107a_1
   - nsight-compute=2022.3.0.22=0
-  - numpy-base=1.23.4=py39h31eccc5_0
   - openh264=2.1.1=h4ff587b_0
   - openssl=1.1.1s=h7f8727e_0
   - parso=0.8.3=pyhd3eb1b0_0
@@ -128,7 +127,6 @@ dependencies:
   - pysocks=1.7.1=py39h06a4308_0
   - python=3.9.12=h12debd9_1
   - python-dateutil=2.8.2=pyhd3eb1b0_0
-  - pytorch=1.13.0=py3.9_cuda11.6_cudnn8.3.2_0
   - pytorch-cuda=11.6=h867d48c_0
   - pytorch-mutex=1.0=cuda
   - pyzmq=22.3.0=py39h295c915_2
@@ -170,11 +168,13 @@ dependencies:
     - cffi==1.15.0
     - charset-normalizer==2.1.1
     - click==8.1.3
+    - clip==0.2.0
     - contextlib2==21.6.0
     - cycler==0.11.0
     - defusedxml==0.7.1
     - dill==0.3.5.1
     - fastjsonschema==2.15.3
+    - filelock==3.9.0
     - flatbuffers==1.12
     - fonttools==4.37.3
     - frozenlist==1.3.0
@@ -186,6 +186,7 @@ dependencies:
     - google-pasta==0.2.0
     - grpcio==1.48.1
     - h5py==3.7.0
+    - huggingface-hub==0.11.1
     - imageio==2.22.0
     - importlib-metadata==4.12.0
     - ipython-genutils==0.2.0
@@ -219,7 +220,12 @@ dependencies:
     - notebook==6.4.12
     - numba==0.56.2
     - numpy==1.22.4
+    - nvidia-cublas-cu11==11.10.3.66
+    - nvidia-cuda-nvrtc-cu11==11.7.99
+    - nvidia-cuda-runtime-cu11==11.7.99
+    - nvidia-cudnn-cu11==8.5.0.96
     - oauthlib==3.2.1
+    - open-clip-torch==2.0.2
     - opencv-python==4.6.0.66
     - opt-einsum==3.3.0
     - packaging==21.3
@@ -266,17 +272,20 @@ dependencies:
     - termcolor==2.0.1
     - terminado==0.15.0
     - tf-estimator-nightly==2.8.0.dev2021122109
+    - thingsvision==2.2.11
     - threadpoolctl==3.1.0
     - tifffile==2022.8.12
     - timm==0.6.7
     - tinycss2==1.1.1
     - tomli==2.0.1
-    - torch==1.12.1
+    - torch==1.13.1
     - torch-tb-profiler==0.4.0
     - torchmetrics==0.9.0
-    - torchvision==0.13.1
+    - torchtyping==0.1.4
+    - torchvision==0.14.1
     - tqdm==4.64.0
     - traitlets==5.2.2.post1
+    - typeguard==2.13.3
     - webencodings==0.5.1
     - werkzeug==2.2.2
     - widgetsnbextension==3.6.0
