@@ -3,7 +3,7 @@
 Before using this repository, we recommend to install all packages. We provide a `makefile` for this:
 
 ```bash
-make env
+make install
 ```
 
 ## Content of this repository

@@ -1,4 +1,4 @@
-env:
+install:
 	echo "Creating conda environment 'deep' from environment.yaml"
 	conda env create -f environment.yaml
 	conda activate deep
