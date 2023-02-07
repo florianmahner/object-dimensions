@@ -262,10 +262,10 @@ class EmbeddingTrainer(object):
                 complex_losses[k] = complex_loss.detach()
 
         if self.model.training:
-            epoch_loss = nll_losses.mean().item() + comples_losses.mean().item()
+            epoch_loss = nll_losses.mean().item() + complex_losses.mean().item()
 
             self.params.update(
-                train_complexity=comples_losses.mean().item(),
+                train_complexity=complex_losses.mean().item(),
                 train_nll=nll_losses.mean().item(),
             )
         else:
