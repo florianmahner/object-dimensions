@@ -173,7 +173,6 @@ class DeterministicEmbedding(nn.Module):
     def get_nneg_dims(self, weights, eps=0.1):
         w_max = weights.max(0)[0]
         nneg_d = len(w_max[w_max > eps])
-        
         return nneg_d
 
     def sort_weights(self):
@@ -182,17 +181,18 @@ class DeterministicEmbedding(nn.Module):
             torch.linalg.norm(weights, dim=0, ord=1), descending=True
         )
         weights = weights[:, index]
+        return weights
 
     def detached_params(self):
         weights = self.sort_weights()
         weights = weights.detach().cpu().numpy()
-
         return dict(weights=weights)
 
     def sorted_pruned_params(self):
         weights = self.prune_dimensions()[1]
         weights = weights.detach().cpu().numpy()
         params = dict(pruned_weights=weights)
+        return params
 
     @torch.no_grad()
     def prune_dimensions(self, alpha=0.05):
