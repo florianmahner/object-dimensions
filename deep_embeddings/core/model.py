@@ -203,7 +203,8 @@ class DeterministicEmbedding(nn.Module):
         weights = weights[:, index]
         eps = 0.1
         w_max = weights.max(0)[0]
-        dims_included = w_max > eps
-        weights = weights[:, dims_included]
+        above_threshold = w_max > eps
+        weights = weights[:, above_threshold]        
+        dims_included = above_threshold.nonzero().squeeze()
 
         return dims_included, weights
