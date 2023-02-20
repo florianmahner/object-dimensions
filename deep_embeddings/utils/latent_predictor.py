@@ -11,6 +11,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+def load_regression_weights(path, in_features, out_features):
+    # this loads the regression weight in the decoding layer!
+    W = torch.zeros(out_features, in_features)
+    b = torch.zeros(out_features)    
+    files = glob.glob(os.path.join(path, '*.joblib'))
+    for i, f in enumerate(files):
+        W[i] += joblib.load(os.path.join(path, f)).coef_
+        b[i] += joblib.load(os.path.join(path, f)).intercept_
+    return W, b
+
+
 class LatentPredictor(nn.Module):
     """ Predicts Sparse Codes  (i.e. embedding dimensions) from a collection of sampled images.""" 
 
@@ -36,23 +47,10 @@ class LatentPredictor(nn.Module):
         self._update_weights(regression_path)
         
     def _update_weights(self, path):
-        W, b = self._load_regression_weights(path)
+        W, b = load_regression_weights(path, self.regression.in_features, 
+                                            self.regression.out_features)
         self.regression.weight.data = W.to(self.device)
         self.regression.bias.data = b.to(self.device)
-
-    def _load_regression_weights(self, path):
-        # this loads the regression weight in the decoding layer!
-        in_size = self.regression.in_features
-        out_size = self.regression.out_features
-        W = torch.zeros(out_size, in_size)
-        b = torch.zeros(out_size)
-        i = 0
-        for f in sorted(os.listdir(path)):
-            if f.endswith('joblib'):
-                W[i] += joblib.load(os.path.join(path, f)).coef_
-                b[i] += joblib.load(os.path.join(path, f)).intercept_
-                i += 1
-        return W, b
 
     def forward(self, x):
         """ Forward pass of the model give an image. First extracts VGG feature representations and then predicts the sparse codes from these

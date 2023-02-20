@@ -180,8 +180,11 @@ def cosine_similarity(embedding_i, embedding_j):
         )
 
 
-def load_deepnet_activations(activation_path, center=False, to_torch=False):
+def load_deepnet_activations(activation_path, center=False, zscore=False, to_torch=False):
     """Load activations from a .npy file"""
+    # Check that not both center and zscore are true
+    if center and zscore:
+        raise ValueError("Cannot center and zscore activations at the same time")
     activation_path = glob.glob(os.path.join(activation_path, "*.npy"), recursive=True)
     if len(activation_path) > 1:
         raise ValueError("More than one .npy file found in the activation path")
@@ -191,18 +194,28 @@ def load_deepnet_activations(activation_path, center=False, to_torch=False):
             act = np.load(f)
     else:
         act = np.loadtxt(activation_path)
-    if center:
-        center_activations(act)
     # We also add the positivity constraint here when loading activities!
     act = np.maximum(0, act)
+
+    # Center and zscore the activations. Important we do this after the relu
+    # In this case negative values then have meaning
+    if center:
+       act = center_activations(act)
+    if zscore:
+        act = zscore_activations(act)
+
     if to_torch:
         act = torch.from_numpy(act)
 
     return act
 
-
 def center_activations(act):
     return act - act.mean(axis=0)
+
+def zscore_activations(act, dim=0, eps=1e-8):
+    std = np.std(act, axis=dim) + eps
+    mean = np.mean(act, axis=dim)
+    return (act - mean) / std
 
 def relu_embedding(W):
     return np.maximum(0, W)
@@ -245,7 +258,7 @@ def transform_params(weights, scale, relu=True):
     return weights, scale, sorted_dims
 
 
-def load_sparse_codes(path, weights=None, vars=None, with_dim=False, with_var=False, relu=True):
+def load_sparse_codes(path, weights=None, vars=None, with_dim=False, with_var=False, relu=True, zscore=False):
     """Load sparse codes from a directory. Can either be a txt file or a npy file or a loaded array of shape (n_images, n_dims)"""
     if weights is not None and vars is not None:
         assert isinstance(weights, np.ndarray) and isinstance(vars, np.ndarray), "Weights and var must be numpy arrays"
@@ -273,6 +286,11 @@ def load_sparse_codes(path, weights=None, vars=None, with_dim=False, with_var=Fa
         weights = np.loadtxt(path)
     
     weights, vars, sorted_dims = transform_params(weights, vars, relu=relu)
+
+    if zscore:
+        weights = zscore_activations(weights)
+        vars = zscore_activations(vars)
+
     if with_dim:
         if with_var:
             return weights, vars, sorted_dims

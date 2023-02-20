@@ -48,7 +48,7 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
         print('\n...Creating directories.\n')
         os.makedirs(results_path)
 
-    X = utils.load_deepnet_activations(dnn_path)
+    X = utils.load_deepnet_activations(dnn_path, zscore=True)
     Y = utils.load_sparse_codes(embedding_path)
 
     print(f'\nShape of embedding matrix: {Y.shape}')
@@ -57,12 +57,14 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
     assert X.shape[0] == Y.shape[0], '\nNumber of objects in embedding and DNN feature matrix must be the same.\n'
 
     r2_scores = []
-    for dim, y in reversed(list(enumerate(Y.T))):
+    for dim, y in enumerate(Y.T):
+    # for dim, y in reversed(list(enumerate(Y.T))):
 
         cv_outer = KFold(n_splits=k_folds, shuffle=True, random_state=1)
         outer_alphas = []
         outer_l1_ratios = []
         outer_r2_scores = []
+        outer_models = []
 
         # This is the outer loop, where we split the data into k_folds
         for train_idx, test_idx in cv_outer.split(X):
@@ -74,7 +76,7 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
             # model = ElasticNet(random_state=1)
 
             space = dict()
-            space['alpha'] = np.arange(2_000,20_000,2_000)
+            space['alpha'] = np.arange(1000,10000,1000)
             # space['alpha'] = np.arange(0.1, 0.5, 0.02)
             # space['alpha'] = [0.001, 0.01, 0.1, 0.2]
             # space['alpha'] = [0.01, 0.05, 0.1, 0.2, 1.0]
@@ -89,10 +91,13 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
             # Extract best params and estimators
             best_model = result.best_estimator_
             best_alpha = best_model.alpha  
-            # best_l1_ratio = best_model.l1_ratio
+        
             y_pred = best_model.predict(X_test)
             r2 = r2_score(y_test, y_pred)
             outer_alphas.append(best_alpha)
+            outer_models.append(best_model)
+
+            # best_l1_ratio = best_model.l1_ratio
             # outer_l1_ratios.append(best_l1_ratio)
 
             outer_r2_scores.append(r2)
@@ -100,8 +105,14 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
 
         r2_scores.append(np.mean(outer_r2_scores))
         print(f'Best alpha for dimension {dim}: {np.mean(outer_alphas)}')
-        # print(f'Best l1_ratio for dimension {dim}: {np.mean(outer_l1_ratios)}')
+
         print(f'R2 score for dimension {dim}: {np.mean(outer_r2_scores)}\n')
+
+        # print(f'Best l1_ratio for dimension {dim}: {np.mean(outer_l1_ratios)}')
+
+        # breakpoint()
+        best_model = outer_models[np.argmax(outer_r2_scores)]
+
         joblib.dump(best_model, os.path.join(results_path, f'predictor_{dim:02d}.joblib'))
 
     with open(os.path.join(results_path, 'r2_scores.npy'), 'wb') as f:
