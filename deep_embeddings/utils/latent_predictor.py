@@ -15,7 +15,7 @@ def load_regression_weights(path, in_features, out_features):
     # this loads the regression weight in the decoding layer!
     W = torch.zeros(out_features, in_features)
     b = torch.zeros(out_features)    
-    files = glob.glob(os.path.join(path, '*.joblib'))
+    files = glob.glob(os.path.join(path, '*.joblib'), recursive=True)
     for i, f in enumerate(files):
         W[i] += joblib.load(os.path.join(path, f)).coef_
         b[i] += joblib.load(os.path.join(path, f)).intercept_
