@@ -1,7 +1,6 @@
 # Path parameters
 log_path = "./results"
-identifier = "sslab_behavior"
-
+identifier = ""
 
 # General parameters
 triplet_path = "./data/triplets/behavior"
@@ -12,6 +11,7 @@ tensorboard = true
 params_interval = 200
 checkpoint_interval = 50  # we dont save the model in principle!
 device_id = 0
+method = "variational"
 
 # Model parameters
 prior = "sslab"

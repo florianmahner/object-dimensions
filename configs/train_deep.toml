@@ -1,6 +1,6 @@
 # Path parameters
 log_path = "./results"
-identifier = "sslab_final"
+identifier = ""
 
 # General parameters
 triplet_path = "./data/triplets/vgg16_bn/classifier.3/triplets_20mio"
@@ -9,17 +9,17 @@ load_model = true
 fresh = false  
 tensorboard = true
 params_interval = 500
-checkpoint_interval = 50  # we dont save the model in principle!
+checkpoint_interval = 50  
 device_id = 0
-
+method = "variational"
 
 # Model parameters
 prior = "sslab"
 init_dim = 500
-n_epochs = 50000
+n_epochs = 2000
 stability_time = 2000
 seed = 0
-batch_size = 16384
+batch_size = 256
 non_zero_weights = 5
 mc_samples = 20
 beta = 1.0
