@@ -180,7 +180,7 @@ def cosine_similarity(embedding_i, embedding_j):
         )
 
 
-def load_deepnet_activations(activation_path, center=False, zscore=False, to_torch=False):
+def load_deepnet_activations(activation_path, center=False, zscore=False, to_torch=False, relu=True):
     """Load activations from a .npy file"""
     # Check that not both center and zscore are true
     if center and zscore:
@@ -195,17 +195,23 @@ def load_deepnet_activations(activation_path, center=False, zscore=False, to_tor
     else:
         act = np.loadtxt(activation_path)
     # We also add the positivity constraint here when loading activities!
-    act = np.maximum(0, act)
-
-    # Center and zscore the activations. Important we do this after the relu
-    # In this case negative values then have meaning
-    if center:
-       act = center_activations(act)
-    if zscore:
-        act = zscore_activations(act)
-
+    act = transform_activations(act, zscore=zscore, center=center, relu=relu)
     if to_torch:
         act = torch.from_numpy(act)
+
+    return act
+
+def transform_activations(act, zscore=False, center=False, relu=False):
+    """Transform activations"""
+    if center and zscore:
+        raise ValueError("Cannot center and zscore activations at the same time")
+    if relu:
+        act = relu_embedding(act)
+    # We standardize or center AFTER the relu. neg vals. are then meaningful
+    if center:
+        act = center_activations(act)
+    if zscore:
+        act = zscore_activations(act)
 
     return act
 

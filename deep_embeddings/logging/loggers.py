@@ -63,7 +63,7 @@ class Logger(ABC):
         return self.log(*args, **kwargs)
 
 
-class EmbeddingLogger:
+class DeepEmbeddingLogger:
     r"""Class to log the data. This is the class that contains all the loggers"""
     # TODO Make subscriptable, so that I can do logger['abc'] and logger['des']
     def __init__(

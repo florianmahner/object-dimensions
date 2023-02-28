@@ -40,6 +40,20 @@ parser.add_argument(
     "--per_dim", default=False, action="store_true", help="Plots per dimension if true"
 )
 
+def plot_dim(images, codes, dim, top_k):
+    fig = plt.figure(figsize=(5,2))
+    gs1 = gridspec.GridSpec(2, 5)
+    gs1.update(wspace=0.0, hspace=0.0)  # set the spacing between axes.
+    weight = codes[:, dim]
+    top_k_samples = np.argsort(-weight)[:top_k]  # this is over the image dimension
+    for k, sample in enumerate(top_k_samples):
+        ax = plt.subplot(gs1[k])
+        ax.imshow(io.imread(images[sample]))
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    return fig
+
 
 def plot_per_dim(args):
     base_path = os.path.dirname(os.path.dirname(args.embedding_path))
@@ -59,30 +73,19 @@ def plot_per_dim(args):
     top_k = 10
     top_j = W.shape[1]
 
-    for dim, w_j in enumerate(W):
-        fig = plt.figure(figsize=(5,2))
-        gs1 = gridspec.GridSpec(2, 5)
-        gs1.update(wspace=0.0, hspace=0.0)  # set the spacing between axes.
-        top_k_samples = np.argsort(-w_j)[:top_k]  # this is over the image dimension
-        for k, sample in enumerate(top_k_samples):
-            ax = plt.subplot(gs1[k])
-            ax.imshow(io.imread(images[sample]))
-            ax.set_xticks([])
-            ax.set_yticks([])
+    for dim in range(len(W)):
+        fig = plot_dim(images, W, dim, top_k)
 
         # fig.suptitle("Dimension: {}".format(dim))
         out_path = os.path.join(results_path, f"{dim:02d}")
         if not os.path.exists(out_path):
             os.makedirs(out_path)
 
-
         fname = os.path.join(out_path, f'{dim:02d}', f"{dim}_topk.png")
         if not os.path.exists(os.path.dirname(fname)):
             os.makedirs(os.path.dirname(fname))
         fig.savefig(fname, dpi=300, bbox_inches='tight', pad_inches=0)
-    
         plt.close(fig)
-
         print(f"Done plotting for dim {dim}")
 
         if dim > top_j:
@@ -118,7 +121,6 @@ def plot_dimensions(args):
             # Set a ylabel per row
             if k == 0:
                 ax.set_ylabel(f"{j}", rotation=0, va="center", ha="right", fontsize=14)
-
 
     # Save figure in predefined embedding path directory
     base_path = os.path.dirname(os.path.dirname(args.embedding_path))

@@ -68,12 +68,11 @@ def extract_features(img_root, out_path, model_name, module_name, batch_size):
     with open(out_path + '/filenames.txt', 'w') as f:
         f.write('\n'.join(filenames))
 
-    batches = DataLoader(dataset=dataset, batch_size=batch_size, backend=extractor.backend)
+    batches = DataLoader(dataset=dataset, batch_size=batch_size, backend=extractor.get_backend())
     features = extractor.extract_features(
                     batches=batches,
                     module_name=module_name,
-                    flatten_acts=True,
-                    clip=True if model_name in ["clip", "OpenCLIP"] else False,
+                    flatten_acts=True
     )
 
     if model_name in ["clip", "OpenCLIP"]:

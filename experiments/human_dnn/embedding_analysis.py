@@ -73,8 +73,6 @@ def compare_modalities(weights_human, weights_dnn, duplicates=False, not_sorted=
         return mod1_dims_sorted, mod2_dims_sorted, corrs
 
 
-  
-
 def get_img_pairs(tril_indices, most_dissimilar):
     """ Returns the most dissimlar image pair indices in the reference images from the lower triangular RSM matrix"""
     tril_inds_i= tril_indices[0][most_dissimilar]
@@ -441,7 +439,7 @@ def run_embedding_analysis(human_embedding, dnn_embedding, behavior_images, out_
     dnn_embedding_sorted = dnn_embedding[:, dnn_sorted_indices]
 
     # plot_most_dissim_dims(out_path, mind_machine_corrs, behavior_images, human_embedding_sorted, dnn_embedding_sorted)
-    find_rank_transformed_dissimilarities(human_embedding_sorted, dnn_embedding_sorted, behavior_images, out_path, topk=4)
+    # find_rank_transformed_dissimilarities(human_embedding_sorted, dnn_embedding_sorted, behavior_images, out_path, topk=4)
 
 
 if __name__ == '__main__':

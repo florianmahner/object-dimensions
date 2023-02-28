@@ -145,62 +145,46 @@ def compare_human_dnn(args):
     if os.path.isfile(args.human_path_comp):
         human_embedding_comp, human_var_comp = load_sparse_codes(args.human_path_comp, with_var=True)
 
-
-    
-
-
-    # Load the image data
+    # # Load the image data
     plot_dir = create_path_from_params(args.dnn_path, "analyses", "human_dnn")
     print("Save all human dnn comparisons to {}".format(plot_dir))
-
-
     image_filenames, indices = load_image_data(args.img_root, filter_behavior=True)
-
-    # TODO Maybe make an additional assert statement to check if the number of images in the embedding match the number of loaded images
-    
     dnn_embedding = dnn_embedding[indices]
     dnn_var = dnn_var[indices]
 
 
-    method = 'correlation'
+    
+    # # TODO Maybe make an additional assert statement to check if the number of images in the embedding match the number of loaded images
+    
+    # method = 'correlation'
+    # rsm_1 = get_rdm(dnn_embedding, method)
+    # rsm_2 = get_rdm(human_embedding, method)
+    # tril_inds = np.tril_indices(len(rsm_1), k=-1)
+    # tril_1 = rsm_1[tril_inds]
+    # tril_2 = rsm_2[tril_inds]
+    # rho = pearsonr(tril_1, tril_2)[0].round(3)
+    # print(f'\nCorrelation between RSMs: {rho:.3f}\n')
+    # rsm_1_km = kmeans(rsm_1, 20)
+    # rsm_2_km = kmeans(rsm_2, 20)
+    # # rsm_1_km = normalise_rdm(rsm_1_km)
+    # # rsm_2_km = normalise_rdm(rsm_1_km)
 
-    rsm_1 = get_rdm(dnn_embedding, method)
-    rsm_2 = get_rdm(human_embedding, method)
+    # import matplotlib.pyplot as plt
 
+    # fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+    # ax1.imshow(rsm_1_km, cmap='viridis_r')
+    # ax1.set_title("Behavior")
+    # ax2.imshow(rsm_2_km, cmap='viridis_r')
+    # ax2.set_title("Deep CNN")
 
-
-    tril_inds = np.tril_indices(len(rsm_1), k=-1)
-    tril_1 = rsm_1[tril_inds]
-    tril_2 = rsm_2[tril_inds]
-    rho = pearsonr(tril_1, tril_2)[0].round(3)
-    print(f'\nCorrelation between RSMs: {rho:.3f}\n')
-
-
-    rsm_1_km = kmeans(rsm_1, 20)
-    rsm_2_km = kmeans(rsm_2, 20)
-
-    # rsm_1_km = normalise_rdm(rsm_1_km)
-    # rsm_2_km = normalise_rdm(rsm_1_km)
-
-    import matplotlib.pyplot as plt
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
-
-
-    ax1.imshow(rsm_1_km, cmap='viridis_r')
-    ax1.set_title("Behavior")
-    ax2.imshow(rsm_2_km, cmap='viridis_r')
-    ax2.set_title("Deep CNN")
-
-    plt.savefig("rdm_test.png", dpi=300)
-
+    # plt.savefig("rdm_test.png", dpi=300)
 
 
 
     # run_embedding_analysis(human_embedding, dnn_embedding, image_filenames, plot_dir)
 
-    # plot_dir = create_path_from_params(args.dnn_path, "analyses", "jackknife_human_dnn")
-    # run_jackknife(human_embedding, human_var, dnn_embedding, dnn_var,  image_filenames, args.triplet_path, plot_dir)
+    plot_dir = create_path_from_params(args.dnn_path, "analyses", "jackknife_human_dnn")
+    run_jackknife(human_embedding, human_var, dnn_embedding, dnn_var,  image_filenames, args.triplet_path, plot_dir)
 
     # if args.human_path_comp:
     #     plot_dir = create_path_from_params(args.dnn_path, "analyses", "jacknife_human_human")

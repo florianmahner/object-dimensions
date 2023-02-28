@@ -48,7 +48,13 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
         print('\n...Creating directories.\n')
         os.makedirs(results_path)
 
-    X = utils.load_deepnet_activations(dnn_path, zscore=True)
+    # Delete all previous sparse codes in the dir
+    print(f'\n...Deleting all previous results in {results_path} to start fresh.\n')
+    for file in os.listdir(results_path):
+        if file.endswith(".joblib"):
+            os.remove(os.path.join(results_path, file))
+
+    X = utils.load_deepnet_activations(dnn_path, center=True, zscore=False, relu=True)
     Y = utils.load_sparse_codes(embedding_path)
 
     print(f'\nShape of embedding matrix: {Y.shape}')
@@ -60,7 +66,7 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
     for dim, y in enumerate(Y.T):
     # for dim, y in reversed(list(enumerate(Y.T))):
 
-        cv_outer = KFold(n_splits=k_folds, shuffle=True, random_state=1)
+        cv_outer = KFold(n_splits=k_folds, shuffle=True, random_state=0)
         outer_alphas = []
         outer_l1_ratios = []
         outer_r2_scores = []
@@ -76,13 +82,11 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
             # model = ElasticNet(random_state=1)
 
             space = dict()
-            space['alpha'] = np.arange(1000,10000,1000)
+            space['alpha'] = np.arange(100,3000,20)
             # space['alpha'] = np.arange(0.1, 0.5, 0.02)
             # space['alpha'] = [0.001, 0.01, 0.1, 0.2]
             # space['alpha'] = [0.01, 0.05, 0.1, 0.2, 1.0]
-
             # space['l1_ratio'] = np.arange(0.1, 1.0, 0.1)
-
 
             # Evluate the model on the inner loop
             search = GridSearchCV(model, space, scoring='r2', cv=cv_inner, refit=True, n_jobs=num_workers)
@@ -105,15 +109,12 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
 
         r2_scores.append(np.mean(outer_r2_scores))
         print(f'Best alpha for dimension {dim}: {np.mean(outer_alphas)}')
-
         print(f'R2 score for dimension {dim}: {np.mean(outer_r2_scores)}\n')
-
         # print(f'Best l1_ratio for dimension {dim}: {np.mean(outer_l1_ratios)}')
-
-        # breakpoint()
         best_model = outer_models[np.argmax(outer_r2_scores)]
-
         joblib.dump(best_model, os.path.join(results_path, f'predictor_{dim:02d}.joblib'))
+
+
 
     with open(os.path.join(results_path, 'r2_scores.npy'), 'wb') as f:
         np.save(f, r2_scores)

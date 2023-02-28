@@ -188,6 +188,8 @@ class EmbeddingTrainer(object):
         pos_pen = torch.sum(F.relu(-embedding)) #positivity constraint to enforce non-negative values in embedding matrix
         complexity_loss = (self.params.beta/n_items) * l1_pen 
         complexity_loss = 0.01 * pos_pen + complexity_loss  
+
+        
         
         return complexity_loss
 
@@ -253,10 +255,10 @@ class EmbeddingTrainer(object):
                 loss.backward()
                 self.optim.step()
 
-                print(
-                    f"Train Batch {k}/{n_batches}",
-                    end="\r",
-                )
+                # print(
+                #     f"Train Batch {k}/{n_batches}",
+                #     end="\r",
+                # )
             # Do a variational evaluation if we are not training
             if self.model.training == False:
                 if self.method == "variational":
@@ -265,10 +267,10 @@ class EmbeddingTrainer(object):
                     embedding = self.model()
                     nll, accuracy = self.calculate_likelihood(embedding, indices)
                 
-                print(
-                    f"Val Batch {k}/{n_batches}",
-                    end="\r",
-                )
+                    # print(
+                    #     f"Val Batch {k}/{n_batches}",
+                    #     end="\r",
+                    # )
 
             nll_losses[k] = nll.detach()
             triplet_accuracies[k] = accuracy.detach()                

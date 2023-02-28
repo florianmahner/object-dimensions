@@ -5,14 +5,17 @@ sparse_codes=false
 big_gan=false
 searchlight=false
 gpt3=false
+causal=false
 
-while getopts "vcbgs" opt; do
+while getopts "vcbgsa" opt; do
   case $opt in
     v) vis=true ;;
     c) sparse_codes=true ;;
     b) big_gan=true ;;
     g) gpt3=true ;;
     s) searchlight=true ;;
+    a) causal=true ;;
+
     \?) echo "Invalid option -$OPTARG" >&2 ;;
   esac
 done
@@ -48,4 +51,11 @@ then
     echo "Searchlight analysis"
     python experiments/searchlight/searchlight_one_image.py \
         --config "./configs/interpretability.toml" --section "searchlight"
+fi
+
+if $causal
+then
+    echo "Causal analysis"
+    python experiments/causal/causal_comparison.py \
+        --config "./configs/interpretability.toml" 
 fi

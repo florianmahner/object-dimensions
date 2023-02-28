@@ -9,8 +9,8 @@ modality = "behavior"
 load_model = false
 fresh = false
 tensorboard = true
-params_interval = 1
-checkpoint_interval = 250  # we dont save the model in principle!
+params_interval = 200
+checkpoint_interval = 50  # we dont save the model in principle!
 device_id = 0
 
 # Model parameters
@@ -19,7 +19,7 @@ init_dim = 500
 n_epochs = 10000
 stability_time = 500
 seed = 42
-batch_size = 16384
+batch_size = 256
 non_zero_weights = 5
 mc_samples = 20
 beta = 1.0

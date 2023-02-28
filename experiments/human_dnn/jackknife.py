@@ -21,7 +21,7 @@ import seaborn as sns
 import matplotlib.gridspec as gridspec
 
 from deep_embeddings import build_triplet_dataset
-from deep_embeddings import Embedding as model
+from deep_embeddings import VariationalEmbedding as model
 
 
 def compute_softmax_per_batch(q_mu, q_var, indices, device):

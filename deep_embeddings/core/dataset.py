@@ -6,7 +6,7 @@ import os
 import numpy as np
 
 
-def build_triplet_dataset(triplet_path, n_train=None, n_val=None, device="cpu"):
+def build_triplet_dataset(triplet_path, n_train=None, n_val=None, device="cpu", modality="deep"):
     """Build a triplet dataset from a triplet directory containing sample triplets for all objects"""
 
     # Find all files ending .npy or .txt and containing train or val
@@ -14,14 +14,21 @@ def build_triplet_dataset(triplet_path, n_train=None, n_val=None, device="cpu"):
     if len(files) == 0:
         raise ValueError("No training or test files found in {}".format(triplet_path))
 
+    if modality == "behavior":
+        val_name = "test_10"
+        train_name = "train_90"
+    elif modality == "deep":
+        val_name = "test_10"
+        train_name = "train_90"
+
     for file in files:
-        if file.endswith(".npy") and "train_90" in file:
+        if file.endswith(".npy") and train_name in file:
             train = np.load(os.path.join(triplet_path, file))
-        elif file.endswith(".npy") and "test_10" in file:
+        elif file.endswith(".npy") and val_name in file:
             test = np.load(os.path.join(triplet_path, file))
-        elif file.endswith(".txt") and "train_90" in file:
+        elif file.endswith(".txt") and train_name in file:
             train = np.loadtxt(os.path.join(triplet_path, file))
-        elif file.endswith(".txt") and "test_10" in file:
+        elif file.endswith(".txt") and val_name in file:
             test = np.loadtxt(os.path.join(triplet_path, file))
 
     # maybe need to do train/val split here beforehand and test=test?

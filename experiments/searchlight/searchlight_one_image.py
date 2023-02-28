@@ -16,7 +16,7 @@ from deep_embeddings import ExperimentParser
 
 from deep_embeddings.utils.searchlight_utils import mask_img
 from deep_embeddings.utils.utils import load_deepnet_activations, img_to_uint8
-from deep_embeddings.analyses.image_generation.latent_predictor import LatentPredictor
+from deep_embeddings.utils.latent_predictor import LatentPredictor
 
 parser = ExperimentParser(description='Searchlight analysis for one image.')
 parser.add_argument('--embedding_path', type=str, help='Path to the embedding file.')
@@ -37,10 +37,13 @@ parser.add_argument('--seed', type=int, default=42, help='Random seed to use for
 # ] 
 
 
-QUERIES =  [
-    ('ball_01b', [34, 54])
-] 
+# QUERIES =  [
+#     ('ball_01b', [34, 54])
+# ] 
 
+QUERIES =  [
+    ('toilet_plus', [18])
+] 
 
 def searchlight_(img, regression_predictor, window_size, stride=1, latent_dim=1):
     H, W = img.shape[-2:]
@@ -49,7 +52,9 @@ def searchlight_(img, regression_predictor, window_size, stride=1, latent_dim=1)
     # NOTE we could also index previous feature mat but dont need to do this for now!
     # TODO Check if I really only want to do this for one dimension at a time?
     dim_original = regression_predictor.predict_codes_from_img(img)
+
     dim_original = dim_original[latent_dim]
+
 
     with torch.no_grad():
         for i in np.arange(0, H, stride):
@@ -79,7 +84,12 @@ def search_image_spaces(base_path, regression_predictor, dataset, img_idx, windo
     for dim in latent_dims:
         print(f'\n...Currently performing searchlight analysis for latent dimension {dim}.\n')
         img = dataset[img_idx].to(device).unsqueeze(0)
-        img = img.squeeze().mT.cpu().numpy()
+
+        # breakpoint()
+        # img = img.squeeze().mT.cpu().numpy()
+        # img = img_to_uint8(img)
+
+
         diffs = searchlight_(img, regression_predictor, window_size, stride, dim)
         img = img.squeeze().mT.cpu().numpy()
         save_dict = {'diffs': diffs, 'img': img, 'dim': dim}
@@ -115,7 +125,7 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     extractor = get_extractor(model_name=args.model_name, pretrained=True, device=device, source='torchvision')
-    dataset = ImageDataset(root=args.img_root, out_path='', backend=extractor.backend, transforms=extractor.get_transformations())
+    dataset = ImageDataset(root=args.img_root, out_path='./', backend=extractor.get_backend(), transforms=extractor.get_transformations())
 
     base_path = os.path.dirname(os.path.dirname(args.embedding_path))
     regression_path = os.path.join(base_path, 'analyses', 'sparse_codes')

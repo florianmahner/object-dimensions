@@ -14,7 +14,7 @@ from deep_embeddings.core.model import VariationalEmbedding, DeterministicEmbedd
 from deep_embeddings.core.priors import SpikeSlabPrior, LogGaussianPrior
 
 from deep_embeddings import ExperimentParser, build_triplet_dataset
-from deep_embeddings import EmbeddingLogger
+from deep_embeddings import DeepEmbeddingLogger
 
 
 parser = ExperimentParser(description="Main training script for deep embeddings")
@@ -202,7 +202,7 @@ def train(args):
     g = torch.Generator()
     g.manual_seed(args.seed)
 
-    train_dataset, val_dataset = build_triplet_dataset(args.triplet_path, device=device)
+    train_dataset, val_dataset = build_triplet_dataset(args.triplet_path, device=device, modality=args.modality)
     
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
@@ -267,7 +267,7 @@ def train(args):
     model.to(device)
 
     # Build loggers and train the model!
-    logger = EmbeddingLogger(
+    logger = DeepEmbeddingLogger(
         log_path,
         model,
         args.fresh,

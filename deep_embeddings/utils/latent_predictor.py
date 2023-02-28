@@ -11,92 +11,97 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def load_regression_weights(path, in_features, out_features):
-    # this loads the regression weight in the decoding layer!
-    W = torch.zeros(out_features, in_features)
-    b = torch.zeros(out_features)    
-    files = glob.glob(os.path.join(path, '*.joblib'), recursive=True)
+def load_regression_weights(path, in_features, out_features, to_numpy=False):
+    # This loads the regression weight in the decoding layer!
+    W = torch.zeros(out_features, in_features, dtype=torch.float32)
+    b = torch.zeros(out_features, dtype=torch.float32)
+    # Dims are sorted when saving, so joblib_00 is the dimension with largest magnitude and so on.
+    files = glob.glob(os.path.join(path, "*.joblib"), recursive=True)
+    # Sort the fileendings to get the correct order of dimensions.
+    files = sorted(files, key=lambda x: int(x.split("_")[-1].split(".")[0]))
+
     for i, f in enumerate(files):
-        W[i] += joblib.load(os.path.join(path, f)).coef_
-        b[i] += joblib.load(os.path.join(path, f)).intercept_
+        W[i] += joblib.load(f).coef_
+        b[i] += joblib.load(f).intercept_
+
+    if to_numpy:
+        W = W.numpy()
+        b = b.numpy()
+        
     return W, b
 
 
 class LatentPredictor(nn.Module):
-    """ Predicts Sparse Codes  (i.e. embedding dimensions) from a collection of sampled images.""" 
+    """Predicts Sparse Codes  (i.e. embedding dimensions) from a collection of sampled images."""
 
-    def __init__(self, model_name='vgg16_bn', module_name='classifier.3', device='cpu', regression_path=""):
+    def __init__(
+        self,
+        model_name="vgg16_bn",
+        module_name="classifier.3",
+        device="cpu",
+        regression_path="",
+    ):
         super().__init__()
-        extractor = get_extractor(model_name=model_name, pretrained=True, device=device, source='torchvision')
-        model = extractor.model
-        model = model.eval()
-        self.feature_extractor = model.features
-        self.classifier = model.classifier
-        self.classifier_trunc = model.classifier[:int(module_name[-1])+1] # we only compute up to the classifying layer that we want to use 
-        self.pooling = model.avgpool
-        self.transforms = extractor.get_transformations() # Image transformations of the model!
+        self.extractor = get_extractor(
+            model_name=model_name, pretrained=True, device=device, source="torchvision"
+        )
+        self.module_name = module_name
+        for m in self.extractor.model.named_modules():
+            if m[0] == module_name:
+                self.n_features = m[1].in_features
+                break
 
         # Find the number of regression weights, we have one regression weight per dimension.
-        self.embedding_dim = len(glob.glob(os.path.join(regression_path, '*.joblib')))
+        self.embedding_dim = len(glob.glob(os.path.join(regression_path, "*.joblib")))
+        self.regression = nn.Linear(self.n_features, self.embedding_dim)
 
+        self.transforms = (
+            self.extractor.get_transformations()
+        )  # Image transformations of the model!
         self.device = device
-
-        n_clf_features = self.classifier_trunc[-1].out_features
-        self.regression = nn.Linear(n_clf_features, self.embedding_dim)
-
         self._update_weights(regression_path)
-        
+
     def _update_weights(self, path):
-        W, b = load_regression_weights(path, self.regression.in_features, 
-                                            self.regression.out_features)
+        W, b = load_regression_weights(
+            path, self.regression.in_features, self.regression.out_features
+        )
         self.regression.weight.data = W.to(self.device)
         self.regression.bias.data = b.to(self.device)
 
-    def forward(self, x):
-        """ Forward pass of the model give an image. First extracts VGG feature representations and then predicts the sparse codes from these
-        using the learned regression weights. """
+    def forward(self, x, transform=True):
+        """Forward pass of the model give an image. First extracts VGG feature representations and then 
+        predicts the sparse codes from these using the learned regression weights."""
 
-        assert x.dtype == torch.uint8, "Image data must be uint8 in range (0,255)"
-
-        # First do the transformations as has been done for the feature extractions
-        x = self.transforms(x)
-
-        features = self.feature_extractor(x)
-        features = self.pooling(features).reshape(x.shape[0], -1)
-
-        # gives class probabilities on imagenet for that image?
-        logits = self.classifier_trunc(features)
-        probas = F.softmax(logits, dim=1)
-        
-        behavior_features = self.classifier_trunc(features)
+        # First do the transformations as has been done for the feature extraction, if not done in the dataloader
+        probas, features = self.extract_features_from_img(x, transform=transform)
 
         # NOTE Negative valus are also discared when building the triplets and for the sparse code predictions
-        behavior_features = F.relu(behavior_features) 
-        latent_codes = self.regression(behavior_features)
-        latent_codes = F.relu(latent_codes)
-        
+        latent_codes = self.predict_codes_from_features(features)
         return probas, latent_codes
 
     @torch.no_grad()
     def predict_codes_from_features(self, features):
+        features = F.relu(features)
         latent_codes = self.regression(features)
         latent_codes = F.relu(latent_codes)
-        
         return latent_codes.squeeze()
 
     @torch.no_grad()
-    def extract_features_from_img(self, img):
-        features = self.feature_extractor(img)
-        features = self.pooling(features).reshape(img.shape[0], -1)
-        logits = self.classifier_trunc(features)
-        probas = F.softmax(logits, dim=1)
+    def extract_features_from_img(self, img, transform=True):
+        if transform:
+            img = self.transforms(img)
+            img = img.view(1, 1, *img.shape) if img.dim() == 3 else img
 
-        return logits, probas
+        features = self.extractor.extract_features(
+            img, self.module_name, flatten_acts=True, output_type="tensor"
+        )
+
+        probas = F.softmax(features, dim=1)
+        features = F.relu(features)  # use non linearity after softmax
+
+        return probas, features
 
     @torch.no_grad()
     def predict_codes_from_img(self, img):
-        logits, _ = self.extract_features_from_img(img)
-        latent_codes = self.predict_codes_from_features(logits)
-        latent_codes = F.relu(latent_codes)
-
+        _, latent_codes = self.forward(img)
         return latent_codes
