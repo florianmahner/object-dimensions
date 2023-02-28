@@ -1,4 +1,4 @@
-name: /u/fmahner/conda-envs/deep
+name: deep
 channels:
   - defaults
 dependencies:
@@ -99,9 +99,9 @@ dependencies:
     - tifffile==2023.2.3
     - timm==0.6.12
     - toml==0.10.2
-    - torch==1.13.1
+    - torch==1.12.*
     - torchtyping==0.1.4
-    - torchvision==0.14.1
+    - torchvision==0.13.*
     - tqdm==4.64.0
     - typeguard==2.13.3
     - typing-extensions==4.5.0
@@ -110,5 +110,5 @@ dependencies:
     - werkzeug==2.2.3
     - wrapt==1.14.1
     - zipp==3.14.0
-prefix: /u/fmahner/conda-envs/deep
+prefix: deep
 
