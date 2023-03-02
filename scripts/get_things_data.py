@@ -3,6 +3,7 @@ import os
 import shutil
 import random
 import numpy as np
+import sys
 
 # Change this to a preferred locations
 FOLDER = "./data/things"
@@ -65,13 +66,14 @@ for file in os.listdir(f"{FOLDER}/images"):
         os.rename(f"{FOLDER}/images/{file}", f"{FOLDER}/images/{base}/{file}")
 
 
-# Create a train val split of the data in things
+# Create a train val split of the data in things. This is due to a misnomer
+# of the original data. The validation set is actually a split of the trainset.txt
 train_split = 0.9
-train_data = np.loadtxt(f"{FOLDER}/triplets/trainset.txt")
+data = np.loadtxt(os.path.join(FOLDER, "triplets", "trainset.txt"))
 random.seed(0)
-train_data = random.shuffle(train_data)
-split_idx = int(train_split * len(train_data))
-train_data = train_data[:split_idx]
-val_data = train_data[split_idx:]
+random.shuffle(data)
+split_idx = int(train_split * len(data))
+train_data = data[:split_idx]
+val_data = data[split_idx:]
 np.savetxt(os.path.join(FOLDER, "triplets", "train_90.txt"), train_data)
 np.savetxt(os.path.join(FOLDER, "triplets", "test_10.txt"), val_data)
