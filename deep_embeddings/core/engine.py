@@ -122,7 +122,6 @@ class EmbeddingTrainer(object):
             params = checkpoint["params"]
             params.stability_time = self.params.stability_time
             self.params = params
-            self.params.n_epochs = checkpoint["epoch"] + self.params.n_epochs
             self.params.start_epoch = checkpoint["epoch"] + 1
             self.logger = checkpoint["logger"]  # only if exists!
 
