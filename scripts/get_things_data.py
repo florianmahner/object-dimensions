@@ -18,18 +18,52 @@ if not os.path.exists(FOLDER):
 else:
     print("Skipping download, folder {} already exists.".format(FOLDER))
     shutil.rmtree(FOLDER)
-    # sys.exit(0)
-
+    sys.exit(0)
 
 print("Downloading things data (around 5gb, takes a while)...")
 wget_commands = [
-    ["wget", "https://osf.io/download/6kzat/", "-O", "{}/images/A-C.zip".format(FOLDER)],
-    ["wget", "https://osf.io/download/whm5p/", "-O", "{}/images/D-K.zip".format(FOLDER)],
-    ["wget", "https://osf.io/download/ay8mv/", "-O", "{}/images/L-Q.zip".format(FOLDER)],
-    ["wget", "https://osf.io/download/qm6gh/", "-O", "{}/images/R-S.zip".format(FOLDER)],
-    ["wget", "https://osf.io/download/c2spb/", "-O", "{}/images/T-Z.zip".format(FOLDER)],
-    ["wget", "https://osf.io/download/ce9km/", "-O", "{}/plus.zip".format(FOLDER)],
-    ["wget", "https://files.osf.io/v1/resources/f5rn6/providers/osfstorage/62d6b34bc79a4c38719e62fa/?view_only=3eca2c272c4643e5b7c3f9a875fa9dc7&zip=", "-O", "{}/triplets/behavior_triplets.zip".format(FOLDER)]
+    [
+        "wget",
+        "https://osf.io/download/6kzat/",
+        "-O",
+        "{}/images/A-C.zip".format(FOLDER),
+    ],
+    [
+        "wget",
+        "https://osf.io/download/whm5p/",
+        "-O",
+        "{}/images/D-K.zip".format(FOLDER),
+    ],
+    [
+        "wget",
+        "https://osf.io/download/ay8mv/",
+        "-O",
+        "{}/images/L-Q.zip".format(FOLDER),
+    ],
+    [
+        "wget",
+        "https://osf.io/download/qm6gh/",
+        "-O",
+        "{}/images/R-S.zip".format(FOLDER),
+    ],
+    [
+        "wget",
+        "https://osf.io/download/c2spb/",
+        "-O",
+        "{}/images/T-Z.zip".format(FOLDER),
+    ],
+    [
+        "wget",
+        "https://osf.io/download/ce9km/",
+        "-O",
+        "{}/images/plus.zip".format(FOLDER),
+    ],
+    [
+        "wget",
+        "https://files.osf.io/v1/resources/f5rn6/providers/osfstorage/62d6b34bc79a4c38719e62fa/?view_only=3eca2c272c4643e5b7c3f9a875fa9dc7&zip=",
+        "-O",
+        "{}/triplets/behavior_triplets.zip".format(FOLDER),
+    ],
 ]
 
 for cmd in wget_commands:
