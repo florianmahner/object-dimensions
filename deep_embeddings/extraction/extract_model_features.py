@@ -45,8 +45,7 @@ def extract_features(img_root, out_path, model_name, module_name, batch_size):
         f.write('\n'.join(filenames))
 
     batches = DataLoader(dataset=dataset, batch_size=batch_size, backend=extractor.get_backend())
-
-    breakpoint()
+    
     features = extractor.extract_features(
                     batches=batches,
                     module_name=module_name,
