@@ -225,7 +225,7 @@ def train(args):
     n_samples = _convert_samples_to_string(train_dataset, val_dataset)
 
     # If we are training a deterministic embedding using MLE this is the same as a variational point estimate with a uniform prior
-    if args.method == "deterministc":
+    if args.method == "deterministic":
         args.prior = "uniform"
 
     # Build the logpath
