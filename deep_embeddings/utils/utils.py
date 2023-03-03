@@ -19,7 +19,6 @@ import numpy as np
 
 from numba import njit, prange
 from scipy.spatial.distance import pdist, squareform
-from deep_embeddings.utils.image_dataset import ImageDataset
 
 
 class ExperimentParser:
