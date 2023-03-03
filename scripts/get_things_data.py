@@ -6,6 +6,18 @@ import numpy as np
 import sys
 import subprocess
 
+"""
+This script downloads the things and things plus image datasets from 
+https://osf.io/6kzat/ and https://osf.io/ce9km/ and unzips them.
+
+It merges the things plus images into the things images by renaming each
+things plus image to <object_name>_plus.jpg and moving it to the object folder
+of the things images.
+
+This script also downloads the things behavior triplets from and creates
+a train val split of the data from the provided trainset.txt file.
+"""
+
 # Change this to a preferred locations
 FOLDER = "./data/things"
 
