@@ -203,14 +203,15 @@ def train(args):
     g.manual_seed(args.seed)
 
     train_dataset, val_dataset = build_triplet_dataset(args.triplet_path, device=device, modality=args.modality)
-    
+
+    num_workers = torch.cuda.device_count() * 2 # make dependent on gpu count
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
         pin_memory=False,
         generator=g,
-        num_workers=16,
+        num_workers=num_workers,
         worker_init_fn=_set_global_seed,
     )
     val_loader = torch.utils.data.DataLoader(
@@ -218,7 +219,7 @@ def train(args):
         batch_size=args.batch_size,
         shuffle=False,
         pin_memory=False,
-        num_workers=16,
+        num_workers=num_workers,
         generator=g,
         worker_init_fn=_set_global_seed
     )
