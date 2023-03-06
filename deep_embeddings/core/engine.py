@@ -121,6 +121,7 @@ class EmbeddingTrainer(object):
             self.model.load_state_dict(checkpoint["model_state_dict"])
             params = checkpoint["params"]
             params.stability_time = self.params.stability_time
+            params.n_epochs = self.params.n_epochs
             self.params = params
             self.params.start_epoch = checkpoint["epoch"] + 1
             self.logger = checkpoint["logger"]  # only if exists!
