@@ -254,10 +254,11 @@ class EmbeddingTrainer(object):
                 loss.backward()
                 self.optim.step()
 
-                # print(
-                #     f"Train Batch {k}/{n_batches}",
-                #     end="\r",
-                # )
+                print(
+                    f"Train Batch {k}/{n_batches}",
+                    end="\r",
+                )
+
             # Do a variational evaluation if we are not training
             if self.model.training == False:
                 if self.method == "variational":
@@ -266,10 +267,10 @@ class EmbeddingTrainer(object):
                     embedding = self.model()
                     nll, accuracy = self.calculate_likelihood(embedding, indices)
                 
-                    # print(
-                    #     f"Val Batch {k}/{n_batches}",
-                    #     end="\r",
-                    # )
+                    print(
+                        f"Val Batch {k}/{n_batches}",
+                        end="\r",
+                    )
 
             nll_losses[k] = nll.detach()
             triplet_accuracies[k] = accuracy.detach()                
@@ -330,6 +331,7 @@ class EmbeddingTrainer(object):
         if self.prior:
             self.prior.to(self.device)
         self.batch_size = self.train_loader.batch_size
+        print("Start training the model")
 
         try:
             for self.epoch in range(self.params.start_epoch, self.params.n_epochs + 1):
