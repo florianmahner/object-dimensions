@@ -11,6 +11,6 @@ setup(
     license="LICENSE",
     long_description=open("docs/README.md").read(),
     packages=find_packages(),
-    scripts=["scripts/train_model.sh"],
-    python_requires=">=3.9"
+    scripts=["deep_embeddings/main.py", "deep_embeddings/tripletize.py"],
+    python_requires=">=3.9",
 )

@@ -3,10 +3,8 @@ import numpy as np
 import os
 
 
-# Deep 256 Batch size 
+# Deep 256 Batch size
 # BETAS = list(np.arange(0.1, 1.05, 0.05).round(2))
-
-
 
 
 # Reproducbility seed comparison!
@@ -37,8 +35,6 @@ SEEDS = range(4)
 # SEEDS = range(5)
 
 
-
-
 # Fine grained spose behavior
 # BETAS = np.arange(0.0031, 0.0043, 0.0001).round(4)
 # SEEDS = range(5)
@@ -60,8 +56,9 @@ for seed in SEEDS:
         with open("./scripts/slurm/slurm_script.txt") as f:
             slurm = f.readlines()
 
-
-        cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_256_bs.toml" --beta {} --seed {} --load_model'.format(beta, seed)
+        cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_256_bs.toml" --beta {} --seed {} --load_model'.format(
+            beta, seed
+        )
 
         # cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_behavior.toml" --beta {} --seed {} --batch_size 256 --init_dim 300 --load_model'.format(beta, seed)
 
@@ -73,27 +70,29 @@ for seed in SEEDS:
         # cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_deep.toml" --beta {} --seed {} --init_dim 500 --batch_size 256 --load_model'.format(beta, seed)
         # cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_deep.toml" --beta {} --seed {} --init_dim 300 --batch_size 256 --load_model'.format(beta, seed)
         # cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_deep.toml" --beta {} --seed {} --init_dim 300 --batch_size 16384 --identifier "reproducibility" --stability_time 1000 --load_model'.format(beta, seed)
-        
 
         # cmd = "srun --time=00:05:00 --nodes=1 --tasks-per-node=1 --cpus-per-task=40 --partition=gpudev --gres=gpu:v100:2 "
 
         slurm.append(cmd)
 
-        slurm_fn = './scripts/slurm/beta_{}_seed_{}_slurm.sh'.format(beta, seed)
-        with open(slurm_fn, 'w') as f:
+        slurm_fn = "./scripts/slurm/beta_{}_seed_{}_slurm.sh".format(beta, seed)
+        with open(slurm_fn, "w") as f:
             f.writelines(slurm)
- 
+
         # Call the bash script and get the job id
-        job_id = subprocess.check_output(['sbatch',  '{}'.format(slurm_fn)])
-        job_id = job_id.decode('utf-8').split()[-1]
+        job_id = subprocess.check_output(["sbatch", "{}".format(slurm_fn)])
+        job_id = job_id.decode("utf-8").split()[-1]
 
         # Submit the walltime limit, by sumitting the job n times
         for i in range(N_RESUB):
-            job_id = subprocess.check_output(['sbatch', '--dependency=afterany:{}'.format(job_id), '{}'.format(slurm_fn)])
-            job_id = job_id.decode('utf-8').split()[-1]
-            
+            job_id = subprocess.check_output(
+                [
+                    "sbatch",
+                    "--dependency=afterany:{}".format(job_id),
+                    "{}".format(slurm_fn),
+                ]
+            )
+            job_id = job_id.decode("utf-8").split()[-1]
 
         # Remove the slurm script
         os.remove(slurm_fn)
-
-

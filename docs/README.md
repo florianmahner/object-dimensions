@@ -10,6 +10,14 @@ make install
 
 We learn interpretable object embeddings using a triplet task. We therefore need to either extract triplets or use human generated ones.
 
+## Example Data
+
+We provide an example script to download all the things and things+ data. Execute it as 
+
+```bash
+bash scripts/get_things_data.sh
+```
+
 ## Extracting Triplets
 
 We can pass arguments to the all python scripts using a `config.toml` file. A couple of example config files are provided in `/configs`. To extract triplets from DNN representations we can for example call:
@@ -29,7 +37,7 @@ python main.py --help
 
 Most importantly, we can train the model determinstically using MLE as introduced with [SPoSE](https://www.nature.com/articles/s41562-020-00951-3) or variationally as in [VICE](https://arxiv.org/abs/2205.00756). We enable these through the flags `--method {deterministic, variational}`.
 
-To simplify recreating the experiments, we have summarized example configurations in `.toml` files. The arguments in the file are passed onto the argument parser and can be used for training (see [here](https://github.com/florianmahner/toml_argparse) for the corresponding repo). We can execute a model run using the configuration files as follows:
+To simplify recreating the experiments, we have summarized example configurations in `.toml` files. The arguments in the file are passed onto the argument parser and can be used for training (see [here](https://github.com/florianmahner/toml-argparse) for the corresponding repo). We can execute a model run using the configuration files as follows:
 
 
 ```bash

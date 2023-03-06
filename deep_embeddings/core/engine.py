@@ -84,7 +84,7 @@ class EmbeddingTrainer(object):
             mc_samples=mc_samples,
             stability_time=stability_time,
             load_model=load_model,
-            method=method
+            method=method,
         )
 
         self.log_path = logger.log_path
@@ -164,7 +164,7 @@ class EmbeddingTrainer(object):
         https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians"""
         kl = (
             torch.log(scale_p / scale_q)
-            + (scale_q**2 + (mu_q - mu_prior) ** 2) / (2 * scale_p**2)
+            + (scale_q ** 2 + (mu_q - mu_prior) ** 2) / (2 * scale_p ** 2)
             - 0.5
         )
 
@@ -184,22 +184,21 @@ class EmbeddingTrainer(object):
         """Compute the complexity loss for the SPOSE model"""
         l1_pen = self.model.l1_regularization()
         n_items = self.model.n_objects
-        pos_pen = torch.sum(F.relu(-embedding)) #positivity constraint to enforce non-negative values in embedding matrix
-        complexity_loss = (self.params.beta/n_items) * l1_pen 
-        complexity_loss = 0.01 * pos_pen + complexity_loss  
+        pos_pen = torch.sum(
+            F.relu(-embedding)
+        )  # positivity constraint to enforce non-negative values in embedding matrix
+        complexity_loss = (self.params.beta / n_items) * l1_pen
+        complexity_loss = 0.01 * pos_pen + complexity_loss
 
-        
-        
         return complexity_loss
 
     def get_nitems(self):
         train_triplets = self.train_loader.dataset.triplet_indices
-        #number of unique items in the data matrix
+        # number of unique items in the data matrix
         n_items = torch.max(train_triplets).item()
         if torch.min(train_triplets).item() == 0:
             n_items += 1
         return n_items
-
 
     def step_triplet_batch(self, indices):
         """Step the model for a single batch of data and extract embedding triplets"""
@@ -226,7 +225,7 @@ class EmbeddingTrainer(object):
 
         nll = torch.mean(sampled_likelihoods)
         accuracy = torch.mean(sampled_accuracies)
-        
+
         return nll, accuracy
 
     def step_dataloader(self, dataloader):
@@ -266,14 +265,14 @@ class EmbeddingTrainer(object):
                 else:
                     embedding = self.model()
                     nll, accuracy = self.calculate_likelihood(embedding, indices)
-                
+
                     print(
                         f"Val Batch {k}/{n_batches}",
                         end="\r",
                     )
 
             nll_losses[k] = nll.detach()
-            triplet_accuracies[k] = accuracy.detach()                
+            triplet_accuracies[k] = accuracy.detach()
 
         if self.model.training:
             epoch_loss = nll_losses.mean().item() + complex_losses.mean().item()
@@ -309,7 +308,7 @@ class EmbeddingTrainer(object):
         frame of epochs"""
         signal = self.model.prune_dimensions()[0]
         dimensions = len(signal)
-    
+
         self.params.update(dim_over_time=dimensions)
 
         stability = self.params.dim_over_time[-self.params.stability_time :]

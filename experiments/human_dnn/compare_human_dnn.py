@@ -8,21 +8,53 @@ from glob import glob
 import toml
 
 import numpy as np
-from deep_embeddings.utils.utils import load_sparse_codes, load_image_data, create_path_from_params, compute_rdm, fill_diag
+from deep_embeddings.utils.utils import (
+    load_sparse_codes,
+    load_image_data,
+    create_path_from_params,
+    compute_rdm,
+    fill_diag,
+)
 from experiments.human_dnn.jackknife import run_jackknife
 from experiments.human_dnn.embedding_analysis import run_embedding_analysis
 from deep_embeddings import ExperimentParser
 from scipy.stats import pearsonr, rankdata
 
 
-parser = ExperimentParser(description='Analysis and comparison of embeddings')
-parser.add_argument("--dnn_path", type=str, help="Path to the base directory of the experiment runs")
-parser.add_argument("--human_path_base", type=str, help="Path to the base directory of the human embedding")
-parser.add_argument("--human_path_comp", type=str, help="Path to the base directory of the human embedding")
-parser.add_argument("--img_root", type=str, help="Path to the image root directory used for training the DNN. Contains behavior images and plus")
-parser.add_argument("--triplet_path", type=str, help="Path to the behavior triplets used for jackknife analysis")
-parser.add_argument("--evaluation_key", type=str, help="Key to aggregate over that is contained in the path")
-parser.add_argument("--analysis_key", type=str, help="Key to analyze that is contained in the parameters.npz file")
+parser = ExperimentParser(description="Analysis and comparison of embeddings")
+parser.add_argument(
+    "--dnn_path", type=str, help="Path to the base directory of the experiment runs"
+)
+parser.add_argument(
+    "--human_path_base",
+    type=str,
+    help="Path to the base directory of the human embedding",
+)
+parser.add_argument(
+    "--human_path_comp",
+    type=str,
+    help="Path to the base directory of the human embedding",
+)
+parser.add_argument(
+    "--img_root",
+    type=str,
+    help="Path to the image root directory used for training the DNN. Contains behavior images and plus",
+)
+parser.add_argument(
+    "--triplet_path",
+    type=str,
+    help="Path to the behavior triplets used for jackknife analysis",
+)
+parser.add_argument(
+    "--evaluation_key",
+    type=str,
+    help="Key to aggregate over that is contained in the path",
+)
+parser.add_argument(
+    "--analysis_key",
+    type=str,
+    help="Key to analyze that is contained in the parameters.npz file",
+)
 
 
 def aggregate_files(base_dir, eval_key="seed"):
@@ -34,7 +66,9 @@ def aggregate_files(base_dir, eval_key="seed"):
 
     param_dict = {}
     for file in file_list:
-        config_path = os.path.join(os.path.dirname(os.path.dirname(file)), "config.toml")
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(file)), "config.toml"
+        )
         config = toml.load(config_path)
         try:
             key_val = config[eval_key]
@@ -44,8 +78,12 @@ def aggregate_files(base_dir, eval_key="seed"):
         param_dict[key_val] = (np.load(file), file)
 
     if len(param_dict.keys()) != len(file_list):
-        print("""Number of configurations found do not match the number of paramers.npz. Maybe the key
-            {} is not a hyperparameter?""".format(eval_key))
+        print(
+            """Number of configurations found do not match the number of paramers.npz. Maybe the key
+            {} is not a hyperparameter?""".format(
+                eval_key
+            )
+        )
 
     return param_dict
 
@@ -71,8 +109,12 @@ def aggregate_values(file_dict, analysis_key="val_loss", mode="min"):
             best_key = key
             best_file_path = file_path
 
-    print("Best {} for analysis is {} with value {}".format(analysis_key, best_key, best_value))
-    
+    print(
+        "Best {} for analysis is {} with value {}".format(
+            analysis_key, best_key, best_value
+        )
+    )
+
     return best_file, best_file_path
 
 
@@ -84,24 +126,26 @@ def find_best_embedding(path, evaluation_key="seed", analysis_key="val_loss"):
 
 
 def kmeans(mat, K=50):
-    ''' write a function that does k means clustering on an image '''
+    """ write a function that does k means clustering on an image """
     # convert to np.float32
     Z = mat.reshape(-1, 1)
     Z = np.float32(Z)
-    
+
     # Define criteria, number of clusters(K) and apply kmeans()
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
-    ret,label,center= cv2.kmeans(Z, K, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
-    
+    ret, label, center = cv2.kmeans(Z, K, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
+
     # Now convert back into uint8, and make original image
     center = np.uint8(center)
     res = center[label.flatten()]
     res2 = res.reshape((mat.shape))
     return res2
 
+
 def kmeans_sklearn(img, k):
     """ Write a function that segments a 2d grayscale image using kmeans clustering and sklearn """
     from sklearn.cluster import KMeans
+
     img_flat = img.reshape(-1, 1)
     kmeans = KMeans(n_clusters=k, random_state=0).fit(img_flat)
     labels = kmeans.labels_
@@ -118,6 +162,7 @@ def get_rdm(embedding, method="correlation"):
 
     return rsm
 
+
 def normalise_rdm(rdm):
     rdm = rdm / np.max(rdm)
     return rdm
@@ -126,24 +171,31 @@ def normalise_rdm(rdm):
 def compare_human_dnn(args):
     # TODO The RSM Plots
     # TODO The plot comparison with SPoSE
-    
+
     # Check if DNN path is base path points to a trained parameter file
     if os.path.isfile(args.dnn_path):
-        dnn_embedding, dnn_var = load_sparse_codes(args.dnn_path, with_var=True)    
+        dnn_embedding, dnn_var = load_sparse_codes(args.dnn_path, with_var=True)
     else:
-        dnn_params, fpath = find_best_embedding(args.dnn_path, args.evaluation_key, args.analysis_key)
+        dnn_params, fpath = find_best_embedding(
+            args.dnn_path, args.evaluation_key, args.analysis_key
+        )
         args.dnn_path = fpath
         dnn_embedding, dnn_var = load_sparse_codes(dnn_params, with_var=True)
 
     if os.path.isfile(args.human_path_base):
-        human_embedding, human_var = load_sparse_codes(args.human_path_base, with_var=True)
+        human_embedding, human_var = load_sparse_codes(
+            args.human_path_base, with_var=True
+        )
     else:
-        human_params, fpath = find_best_embedding(args.human_path_base, args.evaluation_key, args.analysis_key)
+        human_params, fpath = find_best_embedding(
+            args.human_path_base, args.evaluation_key, args.analysis_key
+        )
         human_embedding, human_var = load_sparse_codes(human_params, with_var=True)
 
-
     if os.path.isfile(args.human_path_comp):
-        human_embedding_comp, human_var_comp = load_sparse_codes(args.human_path_comp, with_var=True)
+        human_embedding_comp, human_var_comp = load_sparse_codes(
+            args.human_path_comp, with_var=True
+        )
 
     # # Load the image data
     plot_dir = create_path_from_params(args.dnn_path, "analyses", "human_dnn")
@@ -152,10 +204,8 @@ def compare_human_dnn(args):
     dnn_embedding = dnn_embedding[indices]
     dnn_var = dnn_var[indices]
 
-
-    
     # # TODO Maybe make an additional assert statement to check if the number of images in the embedding match the number of loaded images
-    
+
     # method = 'correlation'
     # rsm_1 = get_rdm(dnn_embedding, method)
     # rsm_2 = get_rdm(human_embedding, method)
@@ -179,18 +229,24 @@ def compare_human_dnn(args):
 
     # plt.savefig("rdm_test.png", dpi=300)
 
-
-
     # run_embedding_analysis(human_embedding, dnn_embedding, image_filenames, plot_dir)
 
     plot_dir = create_path_from_params(args.dnn_path, "analyses", "jackknife_human_dnn")
-    run_jackknife(human_embedding, human_var, dnn_embedding, dnn_var,  image_filenames, args.triplet_path, plot_dir)
+    run_jackknife(
+        human_embedding,
+        human_var,
+        dnn_embedding,
+        dnn_var,
+        image_filenames,
+        args.triplet_path,
+        plot_dir,
+    )
 
     # if args.human_path_comp:
     #     plot_dir = create_path_from_params(args.dnn_path, "analyses", "jacknife_human_human")
     #     run_jackknife(human_embedding, human_var, human_embedding_comp, human_var_comp, image_filenames, args.triplet_path, plot_dir, 12, "human")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     args = parser.parse_args()
     compare_human_dnn(args)

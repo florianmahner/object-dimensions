@@ -40,8 +40,9 @@ parser.add_argument(
     "--per_dim", default=False, action="store_true", help="Plots per dimension if true"
 )
 
+
 def plot_dim(images, codes, dim, top_k):
-    fig = plt.figure(figsize=(5,2))
+    fig = plt.figure(figsize=(5, 2))
     gs1 = gridspec.GridSpec(2, 5)
     gs1.update(wspace=0.0, hspace=0.0)  # set the spacing between axes.
     weight = codes[:, dim]
@@ -62,8 +63,12 @@ def plot_per_dim(args):
         os.makedirs(results_path)
 
     W = load_sparse_codes(args.embedding_path)
-    images, indices = load_image_data(args.img_root, filter_behavior=args.filter_behavior, filter_plus=args.filter_plus)
-    
+    images, indices = load_image_data(
+        args.img_root,
+        filter_behavior=args.filter_behavior,
+        filter_plus=args.filter_plus,
+    )
+
     if W.shape[0] != len(images):
         W = W[indices]
 
@@ -81,10 +86,10 @@ def plot_per_dim(args):
         if not os.path.exists(out_path):
             os.makedirs(out_path)
 
-        fname = os.path.join(out_path, f'{dim:02d}', f"{dim}_topk.png")
+        fname = os.path.join(out_path, f"{dim:02d}", f"{dim}_topk.png")
         if not os.path.exists(os.path.dirname(fname)):
             os.makedirs(os.path.dirname(fname))
-        fig.savefig(fname, dpi=300, bbox_inches='tight', pad_inches=0)
+        fig.savefig(fname, dpi=300, bbox_inches="tight", pad_inches=0)
         plt.close(fig)
         print(f"Done plotting for dim {dim}")
 
@@ -94,8 +99,12 @@ def plot_per_dim(args):
 
 def plot_dimensions(args):
     W = load_sparse_codes(args.embedding_path)
-    images, indices = load_image_data(args.img_root, filter_behavior=args.filter_behavior, filter_plus=args.filter_plus)
-    
+    images, indices = load_image_data(
+        args.img_root,
+        filter_behavior=args.filter_behavior,
+        filter_plus=args.filter_plus,
+    )
+
     if W.shape[0] != len(images):
         W = W[indices]
 
@@ -137,7 +146,7 @@ def plot_dimensions(args):
         fname = fname.format("_filtered_plus", epoch)
     else:
         fname = fname.format("", epoch)
-    fig.savefig(fname, dpi=50, bbox_inches='tight', pad_inches=0)
+    fig.savefig(fname, dpi=50, bbox_inches="tight", pad_inches=0)
 
 
 if __name__ == "__main__":
