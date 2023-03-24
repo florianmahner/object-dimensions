@@ -35,6 +35,8 @@ def build_triplet_dataset(triplet_path, n_train=None, n_val=None, device="cpu"):
     train_dataset = TripletDataset(train, n_train, device=device)
     val_dataset = TripletDataset(test, n_val, device=device)
 
+    breakpoint()
+
     return train_dataset, val_dataset
 
 

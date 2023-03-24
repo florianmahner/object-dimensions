@@ -3,7 +3,7 @@ log_path = "./results"
 identifier = ""
 
 # General parameters
-triplet_path = "./data/triplets/behavior"
+triplet_path = "./data/things/triplets"
 modality = "behavior" 
 load_model = false
 fresh = false

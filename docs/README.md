@@ -6,6 +6,14 @@ Before using this repository, we recommend to install all packages. We provide a
 make install
 ```
 
+Finally activate the environment and install the package locally
+
+```bash
+conda activate deep
+pip install -e .
+```
+
+
 ## Content of this repository
 
 We learn interpretable object embeddings using a triplet task. We therefore need to either extract triplets or use human generated ones.
@@ -20,10 +28,10 @@ bash scripts/get_things_data.sh
 
 ## Extracting Triplets
 
-We can pass arguments to the all python scripts using a `config.toml` file. A couple of example config files are provided in `/configs`. To extract triplets from DNN representations we can for example call:
+We can pass arguments to the all python scripts using a `config.toml` file. A couple of example config files are provided in `./configs`. To extract triplets from DNN representations we can for example call:
 
 ```bash
-python tripletize.py --config "configs/tripletize.toml"
+python tripletize.py --config "./configs/tripletize.toml"
 ```
 
 ## Training the model
@@ -41,15 +49,18 @@ To simplify recreating the experiments, we have summarized example configuration
 
 
 ```bash
-python main.py --configs "/configs/train_behavior.toml" --method "deterministic"
+python main.py --config "./configs/train_behavior.toml" --method "deterministic"
 ```
 
 
 The model run is stored in different paths, depending on whether the modality are behavior or deep neural net triplets:
 
 ```
-Behavior: "./log_path/identifier/behavior/n_samples/prior/init_dim/batch_size/beta/seed"
-DNN: "./log_path/identifier/deep/model_name/module_name/n_samples/prior/init_dim/batch_size/beta/seed"
+Behavior: 
+    "./log_path/identifier/behavior/n_samples/prior/init_dim/batch_size/beta/seed"
+
+DNN: 
+    "./log_path/identifier/deep/model_name/module_name/n_samples/prior/init_dim/batch_size/beta/seed"
 ```
 
 In each run path the following is stored
