@@ -21,13 +21,14 @@ parser.add_argument("--adaptive", type=bool, default=False, help="If adaptive sa
 
 
 class Sampler(object):
-    def __init__(self, in_path, out_path, n_samples, k=3, train_fraction=0.9, seed=42):
+    def __init__(self, in_path, out_path, n_samples, k=3, train_fraction=0.9, seed=42, similarity="dot"):
         self.in_path = in_path
         self.out_path = out_path
         self.n_samples = int(n_samples)
         self.k = k
         self.train_fraction = train_fraction
         self.seed = seed
+        self.similarity = similarity
 
     def load_domain(self):
         if not re.search(r"(npy)$", self.in_path):
@@ -35,13 +36,11 @@ class Sampler(object):
         if not os.path.exists(self.out_path):
             print(f"\n....Creating output directory: {self.out_path}\n")
             os.makedirs(self.out_path)
-
         random.seed(self.seed)
         np.random.seed(self.seed)
         X = np.load(self.in_path)
         X = self.remove_nans_(X)
         X = self.remove_negatives_(X) # positivity constraint also on vgg features!
-
         return X
 
     @staticmethod
@@ -51,13 +50,11 @@ class Sampler(object):
     @staticmethod
     def remove_nans_(X):
         nan_indices = np.isnan(X[:, :]).any(axis=1)
-        
         return X[~nan_indices]
 
     @staticmethod
     def softmax(z):
-        proba = np.exp(z) / np.sum(np.exp(z))
-        
+        proba = np.exp(z) / np.sum(np.exp(z))        
         return proba
 
     @staticmethod
@@ -113,7 +110,6 @@ class Sampler(object):
         pool = tuple(iterable)
         n = len(pool)
         indices = sorted(random.sample(range(n), r))
-        
         return tuple(pool[i] for i in indices)
         
 
@@ -121,9 +117,7 @@ class Sampler(object):
         """Create similarity judgements."""
         X = self.load_domain()
         M = X.shape[0]
-        # This is a matrix of N x N (i.e. image_features x image_features). 
-        # i.e. The dot product between the corresponding network representations
-        S = X @ X.T 
+        S = self._get_similarity_matrx(X)
         
         # Adaptive sampling of unique triplets
         unique_triplets = set()
@@ -165,21 +159,25 @@ class Sampler(object):
             print(f'Process {i}/{self.n_samples} triplets', end='\r')
             choice = self.get_choice(S, triplet)
             triplets[i] = choice # probably returns a list of indices of shape k where for that image the odd one out is
-
         return triplets
+    
+    def _get_similarity_matrx(self, X):
+        if self.similarity == 'cosine':
+            S = self.cosine_matrix(X)
+        # This is a matrix of N x N (i.e. image_features x image_features). 
+        # i.e. The dot product between the corresponding network representations
+        else:
+            S = X @ X.T 
+        return S
 
     def sample_similarity_judgements(self):
         """Create similarity judgements."""
         X = self.load_domain()
         M = X.shape[0]
-
-        # This is a matrix of N x N (i.e. image_features x image_features). 
-        # i.e. The dot product between the corresponding network representations
-        S = X @ X.T 
-        
+        S = self._get_similarity_matrx(X)
+    
         unique_triplets = set()
         items = list(range(M))
-        n_iter = 0
         n_tri = len(unique_triplets)
         while n_tri < self.n_samples:
             print(f'{n_tri} samples drawn, {n_tri}/{self.n_samples} added', end='\r')
@@ -192,7 +190,6 @@ class Sampler(object):
             print(f'Process {i}/{self.n_samples} triplets', end='\r')
             choice = self.get_choice(S, triplet)
             triplets[i] = choice # probably returns a list of indices of shape k where for that image the odd one out is
-
         return triplets
 
     def create_train_test_split(self, similarity_judgements):
@@ -201,7 +198,6 @@ class Sampler(object):
         rnd_perm = np.random.permutation(N)
         train_split = similarity_judgements[rnd_perm[: int(len(rnd_perm) * self.train_fraction)]]
         test_split = similarity_judgements[rnd_perm[int(len(rnd_perm) * self.train_fraction):]]
-
         return train_split, test_split
 
     def save_similarity_judgements(self, similarity_judgements):
@@ -224,14 +220,15 @@ class Sampler(object):
         with open(os.path.join(args.out_path, f"similarity_matrix_{similarity}.npy"), "wb") as f:
             np.save(f, S)
 
+    def run(self):
+        """Run sampler."""
+        if self.k == 3:
+            self.run_and_save_tripletization()
+        else:
+            self.run_and_save_pairwise()
 
 if __name__ == "__main__":
-    # parse arguments
     args = parser.parse_args()
-    sampler = Sampler(in_path=args.in_path, out_path=args.out_path, n_samples=args.n_samples, k=args.k, seed=args.seed)
-    if args.k == 3:
-        sampler.run_and_save_tripletization(adaptive=args.adaptive)
-    else:
-        assert isinstance(args.similarity, str), '\nSpecify similarity function.\n'
-        sampler.run_and_save_pairwise(similarity=args.similarity)
-        
+    sampler = Sampler(in_path=args.in_path, out_path=args.out_path, n_samples=args.n_samples, k=args.k, 
+                      seed=args.seed, similarity=args.similarity)
+    sampler.run()

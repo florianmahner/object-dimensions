@@ -14,10 +14,11 @@ parser.add_argument('--extract', action="store_true", default=False, help='Extra
 parser.add_argument('--tripletize', action="store_true", default=False, help='Tripletize the features')
 parser.add_argument('--adaptive', action="store_true", default=False, help='Adaptively sample triplets')
 parser.add_argument('--n_samples', type=int, default=int(2e7), help='Number of samples to use for tripletization')
+parser.add_argument('--similarity', type=str, default='dot', choices=['dot', 'cosine'], help='Similarity measure to use for tripletization')
 parser.add_argument('--seed', type=int, default=0, help='Random seed for tripletization')
 
 
-def run_pipeline(img_root, out_path="", extract=False, tripletize=False, n_samples=2e6, seed=42, adaptive=False):
+def run_pipeline(img_root, out_path="", extract=False, tripletize=False, n_samples=2e6, seed=42, adaptive=False, similarity="dot"):
     model_names = ["vgg16_bn"]
     module_names = ['classifier.3']
 
@@ -39,7 +40,8 @@ def run_pipeline(img_root, out_path="", extract=False, tripletize=False, n_sampl
 
         if tripletize:
             print("Start sampling triplets for the model...")
-            sampler = Sampler(feature_path, out_path, n_samples=n_samples, k=3, train_fraction=0.9, seed=seed)
+            sampler = Sampler(feature_path, out_path, n_samples=n_samples, k=3, 
+                              train_fraction=0.9, seed=seed, similarity=similarity)
             sampler.run_and_save_tripletization(adaptive)
             print("... Done!")
 
@@ -52,4 +54,5 @@ if __name__ == '__main__':
                  tripletize=args.tripletize, 
                  n_samples=args.n_samples, 
                  seed=args.seed, 
-                 adaptive=args.adaptive)
+                 adaptive=args.adaptive, 
+                 similarity=args.similarity)
