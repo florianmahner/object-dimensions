@@ -1,47 +1,44 @@
 
 # These are for all 
 [general]
+# embedding_path = "./results/sslab_behavior/behavior/4.12mio/sslab/300/256/0.85/0/params/params_epoch_2000.npz"
 
-# embedding_path="./embedding_256/params/embedding_epoch_500.txt"
-# embedding_path="./embedding/1/params/parameters.npz"
-embedding_path="./results/sslab_final/deep/vgg16_bn/classifier.3/20.mio/sslab/300/256/0.24/0/params/params_epoch_2000.npz"
-dnn_path="./data/triplets/vgg16_bn/classifier.3"
+embedding_path = "./results/sslab_final/deep/vgg16_bn/classifier.3/20.mio/sslab/300/256/0.24/0/params/parameters.npz"
+
+# SPoSE embedding path
+# embedding_path = "./results/spose_split/behavior/4.12mio/sslab/300/256/0.0037/0.0037/1/params/parameters.npz"
+
+dnn_path = "./data/triplets/vgg16_bn/classifier.3"
 seed = 42
 device = "cuda:0"
 img_root = "./data/image_data/images12_plus"
 
 [visualization]
-per_dim = false
+per_dim = true
 filter_behavior = false
 filter_plus = false
+behav_experiment = true # if to viz for the behavioral study (large images)
 
 # Sparse Code parameters
 [sparse_codes]
 k_folds = 5
-feature_norm_path = "./data/feature_norms/feature_object_matrix.csv"
 
 # Big GAN parameters
 [big_gan]
 model_name = "vgg16_bn"
 module_name = "classifier.3"
-n_samples = 2_000_000
-window_size = 50
-batch_size = 16
-truncation = 0.4
+n_samples = 200
+window_size = 40
+batch_size = 64
+truncation = 1.0
 top_k = 16
-sample_latents= true
-max_iter = 200
-dim = [0,1,2,3]
-alpha = 1.0
+sample_latents = false
+max_iter = 100
+dim = [0, 1, 2, 3]
+alpha = 0.1
 beta = 1.0
+lr = 0.002
 
 # GPT3 parameters
 [gpt3]
 feature_norm_path = "./data/feature_norms/feature_object_matrix.csv"
-
-# Searchlight parameters
-[searchlight]
-feature_path = "./data/triplets/vgg16_bn/classifier.3"
-window_size = 20
-stride = 1
-analysis = "regression"

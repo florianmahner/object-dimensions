@@ -6,8 +6,9 @@ big_gan=false
 searchlight=false
 gpt3=false
 causal=false
+style=false
 
-while getopts "vcbgsa" opt; do
+while getopts "vcbgsay" opt; do
   case $opt in
     v) vis=true ;;
     c) sparse_codes=true ;;
@@ -15,6 +16,8 @@ while getopts "vcbgsa" opt; do
     g) gpt3=true ;;
     s) searchlight=true ;;
     a) causal=true ;;
+    y) style=true ;;
+
 
     \?) echo "Invalid option -$OPTARG" >&2 ;;
   esac
@@ -49,8 +52,8 @@ fi
 if $searchlight
 then
     echo "Searchlight analysis"
-    python experiments/searchlight/searchlight_one_image.py \
-        --config "./configs/interpretability.toml" --section "searchlight"
+    python experiments/relevance_maps/grad-cam.py \
+        --config "./configs/interpretability.toml" # does not need a section
 fi
 
 if $causal
@@ -58,4 +61,11 @@ then
     echo "Causal analysis"
     python experiments/causal/causal_comparison.py \
         --config "./configs/interpretability.toml" 
+fi
+
+if $style
+then
+    echo "Style gan analysis"
+    python experiments/image_generation/optimize_and_sample_stylegan.py \
+        --config "./configs/interpretability.toml" --section "big_gan"
 fi
