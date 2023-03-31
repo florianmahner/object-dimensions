@@ -138,25 +138,14 @@ def search_image_spaces(
         cmap = cv2.COLORMAP_JET
         heatmap_img = cv2.applyColorMap(heatmap, cmap)
         super_imposed_img = cv2.addWeighted(heatmap_img, 0.5, img_vis, 0.5, 0)
-        path = os.path.join(out_path, f"./cam_dim_{dim}_superimposed.png")
+        path = os.path.join(out_path, "./cam_dim_{}_superimposed{}")
         fig = plt.figure()
         plt.imshow(super_imposed_img)
         plt.axis("off")
-        plt.savefig(path, bbox_inches="tight", pad_inches=0, dpi=300)
 
-        fig, ax = plt.subplots(1, 1)
-        ax.imshow(heatmap_grads, cmap="RdBu_r")
-        # Turn off all the ticks
-        ax.set_xticks([])
-        ax.set_yticks([])
-        fig.tight_layout()
-        fig.savefig(
-            os.path.join(out_path, f"./cam_dim_{dim}.png"),
-            dpi=300,
-            bbox_inches="tight",
-            pad_inches=0,
-        )
-
+        for ext in [".png", ".pdf"]:
+            plt.savefig(path.format(dim, ext), bbox_inches="tight", pad_inches=0, dpi=300)
+            
     # store save dict as pickle file in directory
     with open(os.path.join(out_path, f"./cam_all.pkl"), "wb") as f:
         pickle.dump(save_dict, f)
