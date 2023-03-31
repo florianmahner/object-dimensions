@@ -10,7 +10,7 @@ embedding_path = "./results/sslab_final/deep/vgg16_bn/classifier.3/20.mio/sslab/
 
 dnn_path = "./data/triplets/vgg16_bn/classifier.3"
 seed = 42
-device = "cuda:0"
+device = "cuda:3"
 img_root = "./data/image_data/images12_plus"
 
 [visualization]
@@ -23,8 +23,14 @@ behav_experiment = true # if to viz for the behavioral study (large images)
 [sparse_codes]
 k_folds = 5
 
-# Big GAN parameters
-[big_gan]
+# activation maximization parameters
+[act_max]
+sample_dataset = false
+find_topk = false
+optimize_topk = true
+
+dim = [0, 21, 47] # dims to optimize
+
 model_name = "vgg16_bn"
 module_name = "classifier.3"
 n_samples = 200
@@ -32,12 +38,11 @@ window_size = 40
 batch_size = 64
 truncation = 1.0
 top_k = 16
-sample_latents = false
 max_iter = 100
-dim = [0, 1, 2, 3]
 alpha = 0.1
 beta = 1.0
 lr = 0.002
+
 
 # GPT3 parameters
 [gpt3]
