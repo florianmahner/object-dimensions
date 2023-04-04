@@ -1,26 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import argparse
+import sys
 import torch
 import torchvision
 
-# from thingsvision.utils.storing import save_features
-# from thingsvision import get_extractor
-# from thingsvision.utils.data import DataLoader
-# from thingsvision.core.extraction import center_features
-
-import sys
-sys.path.append("./deep_embeddings/stylegan_xl")
-sys.path.append("../deep_embeddings/stylegan_xl")
+from thingsvision.utils.storing import save_features
+from thingsvision import get_extractor
+from thingsvision.utils.data import DataLoader
+from thingsvision.core.extraction import center_features
 
 from deep_embeddings.utils.image_dataset import ImageDataset
-# from deep_embeddings.stylegan_xl import legacy
-# from deep_embeddings.stylegan_xl.dnnlib import util
+from deep_embeddings import ExperimentParser
+
+sys.path.append("./stylegan_xl")
+from stylegan_xl import legacy
+from stylegan_xl.dnnlib import util
 
 
-
-parser = argparse.ArgumentParser(description='Extract features from a dataset using a pretrained model')
+parser = ExperimentParser(description='Extract features from a dataset using a pretrained model')
 parser.add_argument('--img_root', type=str, default='./data/THINGS', help='Path to image dataset')
 parser.add_argument('--out_path', type=str, default='./data/vgg_features', help='Path to save features')
 parser.add_argument('--batch_size', type=int, default=64, help='Batch size for the dataloader to extract features')
@@ -77,7 +75,6 @@ def extract_features(img_root, out_path, model_name, module_name, batch_size):
 
     if model_name in ["clip", "OpenCLIP"]:
         features = center_features(features) 
-
     save_features(features, out_path, file_format='npy')
 
 

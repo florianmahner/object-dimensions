@@ -109,10 +109,10 @@ class Sampler(object):
         "Random selection from itertools.combinations(iterable, r)"
         pool = tuple(iterable)
         n = len(pool)
-        indices = sorted(random.sample(range(n), r))
+        # Sorting prevents adding duplicates!
+        indices = sorted(random.sample(range(n), r)) 
         return tuple(pool[i] for i in indices)
         
-
     def sample_adaptive_similarity_judgements(self):
         """Create similarity judgements."""
         X = self.load_domain()
@@ -182,6 +182,7 @@ class Sampler(object):
         while n_tri < self.n_samples:
             print(f'{n_tri} samples drawn, {n_tri}/{self.n_samples} added', end='\r')
             sample = self.random_combination(items, 3)
+            
             unique_triplets.add(sample)
             n_tri = len(unique_triplets)
 
