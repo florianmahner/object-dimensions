@@ -64,23 +64,21 @@ parser.add_argument(
     "--truncation", type=float, default=1.0, help="Truncation value for noise sample"
 )
 parser.add_argument("--top_k", type=int, default=16, help="Top k values to sample from")
+
 parser.add_argument(
     "--sample_dataset",
-    type=bool, 
     default=False,
     action="store_true",
     help="Sample entire dataset",
 )
 parser.add_argument(
     "--find_topk",
-    type=bool, 
     default=False,
     action="store_true",
     help="Find top k latent dimensions",
 )
 parser.add_argument(
     "--optimize_topk",
-    type=bool, 
     default=False,
     action="store_true",
     help="Optimize top k latent dimensions",
@@ -457,7 +455,6 @@ class SparseCodesPredictor(object):
             # topk_indices = torch.argsort(code, descending=True)[: self.top_k]
 
             topk_indices = self._find_topk_not_too_similar(code, top_k=self.top_k)
-
             topk_images, topk_latents = [], []
             for index in topk_indices:
                 img, latent = self.dataset[index]
@@ -577,8 +574,7 @@ class Optimizer(nn.Module):
             img = img.clamp(0, 255)
             img = img / 255    
 
-            img = transforms(img)
-            
+            img = transforms(img)    
             codes = comparator(img, transform=False)[1]
 
             # Calculate loss, increase the absolute value in a dimension

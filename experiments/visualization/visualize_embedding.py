@@ -9,7 +9,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import skimage.io as io
 import numpy as np
-
+import cv2
 from deep_embeddings import ExperimentParser
 from deep_embeddings.utils.utils import load_sparse_codes, load_image_data
 
@@ -40,18 +40,71 @@ parser.add_argument(
     "--per_dim", default=False, action="store_true", help="Plots per dimension if true"
 )
 
-def plot_dim(images, codes, dim, top_k):
-    fig = plt.figure(figsize=(5,2))
-    gs1 = gridspec.GridSpec(2, 5)
-    gs1.update(wspace=0.0, hspace=0.0)  # set the spacing between axes.
-    weight = codes[:, dim]
+parser.add_argument(
+    "--behav-experiment", default=False, action="store_true", help="Plots large images for behavior experiment"
+)
+
+def plot_dim_3x3(images, codes, dim, top_k=10):
+    # Check if codes is 2d or 1d
+    if len(codes.shape) == 1:
+        weight = codes
+    else:
+        weight = codes[:, dim]
+
+    top_k = 9
     top_k_samples = np.argsort(-weight)[:top_k]  # this is over the image dimension
+    fig, axes = plt.subplots(3, 3, figsize=(6, 6))
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0.0, hspace=0.0)
+    
     for k, sample in enumerate(top_k_samples):
-        ax = plt.subplot(gs1[k])
-        ax.imshow(io.imread(images[sample]))
+        ax = axes[k // 3, k % 3]
         ax.set_xticks([])
         ax.set_yticks([])
+        ax.axis("off")
+        img = io.imread(images[sample])
+        
+        ax.imshow(img)
+    return fig
 
+
+def plot_large(images, codes, dim, top_k=16):
+    # Check if codes is 2d or 1d
+    if len(codes.shape) == 1:
+        weight = codes
+    else:
+        weight = codes[:, dim]
+
+    top_k_samples = np.argsort(-weight)[:top_k]  # this is over the image dimension
+    fig, axes = plt.subplots(4, 4, figsize=(16, 16))
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0.0, hspace=0.0)
+    for k, sample in enumerate(top_k_samples):
+        ax = axes[k // 4, k % 4]
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.axis("off")
+        print(images[sample])
+        img = io.imread(images[sample])
+        ax.imshow(img)
+    return fig
+
+
+def plot_dim(images, codes, dim, top_k=10):
+    # Check if codes is 2d or 1d
+    if len(codes.shape) == 1:
+        weight = codes
+    else:
+        weight = codes[:, dim]
+
+    top_k_samples = np.argsort(-weight)[:top_k]  # this is over the image dimension
+    fig, axes = plt.subplots(2, 5, figsize=(5, 2))
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0.0, hspace=0.0)
+    for k, sample in enumerate(top_k_samples):
+        ax = axes[k // 5, k % 5]
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.axis("off")
+        img = io.imread(images[sample])
+        ax.imshow(img)
     return fig
 
 
@@ -62,40 +115,69 @@ def plot_per_dim(args):
         os.makedirs(results_path)
 
     W = load_sparse_codes(args.embedding_path)
-    images, indices = load_image_data(args.img_root, filter_behavior=args.filter_behavior, filter_plus=args.filter_plus)
-    
+    images, indices = load_image_data(
+        args.img_root,
+        filter_behavior=args.filter_behavior,
+        filter_plus=args.filter_plus,
+    )
+
     if W.shape[0] != len(images):
         W = W[indices]
+    append = (
+        "_plus" if args.filter_plus else "_behavior" if args.filter_behavior else ""
+    )
 
     print("Shape of weight Matrix", W.shape)
-    W = W.T
 
     top_k = 10
-    top_j = W.shape[1]
+    n_dims = W.shape[1]
 
-    for dim in range(len(W)):
-        fig = plot_dim(images, W, dim, top_k)
+    for dim in range(n_dims):
+
+        if args.behav_experiment:
+            behav_path = os.path.join(base_path, "analyses", "behavior_experiment", "images")
+            if not os.path.exists(behav_path):
+                os.makedirs(behav_path)
+            fig_large = plot_large(images, W, dim, top_k=16)
+            for ext in ["png", "pdf"]:
+                fname = os.path.join(behav_path, f"{dim}_topk{append}_large.{ext}")
+                fig_large.savefig(fname, dpi=150, bbox_inches="tight", pad_inches=0)
+            plt.close(fig_large)
+            print(f"Done plotting for dim {dim} large")
+            continue
+
+
+        fig_5x2 = plot_dim(images, W, dim, top_k)
+        fig_3x3 = plot_dim_3x3(images, W, dim, top_k)
 
         # fig.suptitle("Dimension: {}".format(dim))
         out_path = os.path.join(results_path, f"{dim:02d}")
         if not os.path.exists(out_path):
             os.makedirs(out_path)
-
-        fname = os.path.join(out_path, f'{dim:02d}', f"{dim}_topk.png")
-        if not os.path.exists(os.path.dirname(fname)):
-            os.makedirs(os.path.dirname(fname))
-        fig.savefig(fname, dpi=300, bbox_inches='tight', pad_inches=0)
-        plt.close(fig)
+    
+        for ext in ["png", "pdf"]:
+            fname = os.path.join(out_path, f"{dim}_topk{append}_5x2.{ext}")
+            fig_5x2.savefig(fname, dpi=300, bbox_inches="tight", pad_inches=0)
+            fname = os.path.join(out_path, f"{dim}_topk{append}_3x3.{ext}")
+            fig_3x3.savefig(fname, dpi=300, bbox_inches="tight", pad_inches=0)
+        plt.close(fig_5x2)
+        plt.close(fig_3x3)
         print(f"Done plotting for dim {dim}")
 
-        if dim > top_j:
-            break
+        
+
+
+    
 
 
 def plot_dimensions(args):
     W = load_sparse_codes(args.embedding_path)
-    images, indices = load_image_data(args.img_root, filter_behavior=args.filter_behavior, filter_plus=args.filter_plus)
-    
+    images, indices = load_image_data(
+        args.img_root,
+        filter_behavior=args.filter_behavior,
+        filter_plus=args.filter_plus,
+    )
+
     if W.shape[0] != len(images):
         W = W[indices]
 
@@ -137,7 +219,7 @@ def plot_dimensions(args):
         fname = fname.format("_filtered_plus", epoch)
     else:
         fname = fname.format("", epoch)
-    fig.savefig(fname, dpi=50, bbox_inches='tight', pad_inches=0)
+    fig.savefig(fname, dpi=50, bbox_inches="tight", pad_inches=0)
 
 
 if __name__ == "__main__":

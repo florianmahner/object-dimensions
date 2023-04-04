@@ -19,4 +19,3 @@ dims = model.W
 dims = dims.cpu().detach().numpy()
 
 np.savetxt("./data/triplets/vgg16_bn/classifier.3/nmf_dims.txt", dims)
-

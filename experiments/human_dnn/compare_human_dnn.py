@@ -101,9 +101,9 @@ def compare_human_dnn(args):
         comparison="dnn",
     )
 
-    if args.human_path_comp:
-        plot_dir = create_path_from_params(args.dnn_path, "analyses", "jacknife_human_human")
-        run_jackknife(human_embedding, human_var, human_embedding_comp, human_var_comp, image_filenames, args.triplet_path, plot_dir, 12, "human")
+    # if args.human_path_comp:
+    #     plot_dir = create_path_from_params(args.dnn_path, "analyses", "jacknife_human_human")
+    #     run_jackknife(human_embedding, human_var, human_embedding_comp, human_var_comp, image_filenames, args.triplet_path, plot_dir, 12, "human")
 
 
 if __name__ == "__main__":

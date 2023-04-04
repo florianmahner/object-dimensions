@@ -3,144 +3,233 @@
 
 import random
 import torch
-import os 
+import os
 import pickle
+import cv2
 
 
 import numpy as np
 import matplotlib.pyplot as plt
 from thingsvision import get_extractor
-from thingsvision.utils.data import ImageDataset
-
+from PIL import Image, ImageDraw
+import torchvision
+import torchvision.transforms as T
+import torch.nn.functional as F
 from deep_embeddings import ExperimentParser
 
-from deep_embeddings.utils.searchlight_utils import mask_img
-from deep_embeddings.utils.utils import load_deepnet_activations, img_to_uint8
+from experiments.visualization.visualize_embedding import plot_dim
+
+from deep_embeddings.utils.utils import img_to_uint8, load_image_data
 from deep_embeddings.utils.latent_predictor import LatentPredictor
 
-parser = ExperimentParser(description='Searchlight analysis for one image.')
-parser.add_argument('--embedding_path', type=str, help='Path to the embedding file.')
-parser.add_argument('--img_root', type=str, default="./data/images", help='Path to the all images used for the embedding.')
-parser.add_argument('--analysis', type=str, default='regression', help='Type of analysis to perform.')
-parser.add_argument('--feature_path', type=str, default="./data/models/vgg16bn/classifier.3", help='Path to the stored features.')
-parser.add_argument('--model_name', type=str, default='vgg16_bn', help='Name of the model to use.')
-parser.add_argument('--module_name', type=str, default='classifier.3', help='Name of the module to use.')
-parser.add_argument('--window_size', type=int, default=20, choices=[15,20,25,30,35], help='Size of the window to use for the searchlight.')
-parser.add_argument('--stride', type=int, default=1, choices=[1,2,3,4,5], help='Stride of the window to use for the searchlight.')
-parser.add_argument('--seed', type=int, default=42, help='Random seed to use for the searchlight.')
+parser = ExperimentParser(description="Searchlight analysis for one image.")
+parser.add_argument("--embedding_path", type=str, help="Path to the embedding file.")
+parser.add_argument(
+    "--img_root",
+    type=str,
+    default="./data/images",
+    help="Path to the all images used for the embedding.",
+)
+parser.add_argument(
+    "--analysis", type=str, default="regression", help="Type of analysis to perform."
+)
+parser.add_argument(
+    "--model_name", type=str, default="vgg16_bn", help="Name of the model to use."
+)
+parser.add_argument(
+    "--module_name", type=str, default="classifier.3", help="Name of the module to use."
+)
+parser.add_argument(
+    "--window_size",
+    type=int,
+    default=20,
+    choices=[15, 20, 25, 30, 35],
+    help="Size of the window to use for the searchlight.",
+)
+parser.add_argument(
+    "--stride",
+    type=int,
+    default=1,
+    choices=[1, 2, 3, 4, 5],
+    help="Stride of the window to use for the searchlight.",
+)
+parser.add_argument(
+    "--seed", type=int, default=42, help="Random seed to use for the searchlight."
+)
 
 # The queries of the database that we want to visualize!
-# QUERIES =  [
-#     ('flashlight_01b', [32, 43]),
-#     ('ball_01b', [13, 34]),
-#     ('wine_01b', [12, 20])
-# ] 
 
+QUERIES = [
+    ("flashlight_01b", [58, 101, 7, 120, 37,9,69 ])
+    # ("basketball_plus", [82, 63, 64, 40, 23, 52, 68])
+    # ("wineglass_plus", [4, 69, 66])
+    # ("wine_01b", [9, 4, 66, 67,36, 69, 4, 47])
+]
 
-# QUERIES =  [
-#     ('ball_01b', [34, 54])
-# ] 
+def searchlight_(img, regression_predictor, window_size, stride=1, latent_dim=1, device="cpu"):    
+    reshape = T.Compose(
+        [T.Resize(256), T.CenterCrop(224), T.ToTensor()]
+    )
+    normalize = T.Compose(
+        [T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])]
+    )
 
-QUERIES =  [
-    ('toilet_plus', [18])
-] 
+    img_reshaped = reshape(img)
+    img_normed = normalize(img_reshaped)
 
-def searchlight_(img, regression_predictor, window_size, stride=1, latent_dim=1):
-    H, W = img.shape[-2:]
-    diffs = torch.zeros((H, W))
-
-    # NOTE we could also index previous feature mat but dont need to do this for now!
-    # TODO Check if I really only want to do this for one dimension at a time?
-    dim_original = regression_predictor.predict_codes_from_img(img)
-
+    dim_original = regression_predictor(img_normed, transform=False)[1]
     dim_original = dim_original[latent_dim]
 
+    # Attach grad to img_normed
+    img_normed.requires_grad = True
 
-    with torch.no_grad():
-        for i in np.arange(0, H, stride):
-            print(f'\n...Currently masking image centered around row position {i}.', end='\r')
-            for j in np.arange(0, W, stride):
-                img_copy = img.clone()
+    # Do a forward pass and preserve gradients
+    with torch.enable_grad():
+        dim_predict = regression_predictor(img_normed, transform=False)[1]
+        latent = dim_predict[latent_dim]
 
-                #mask a window of size ws x ws centered around position (i, j)
-                masked_img = mask_img(img_copy, i, j, window_size)
-                dim_masked = regression_predictor.predict_codes_from_img(masked_img)    
-                dim_masked = dim_masked[latent_dim]                
-                
-                p_explained = torch.abs(dim_original - dim_masked) / (dim_original + 1e-12) # NOTE add this to avoid division by zero                
-                diffs[i:i+stride, j:j+stride] = p_explained
+        # Do a backward pass
+        latent.backward()
 
-    diffs = diffs.cpu().numpy()
-
-    return diffs
+        # Get the gradients of the image
+        gradients = regression_predictor.get_activations_gradient()
 
 
-def search_image_spaces(base_path, regression_predictor, dataset, img_idx, window_size=20, stride=1, latent_dims=[1,2,3], device='cpu'):
-    out_path = os.path.join(base_path, 'analyses', 'searchlights', 'dnn', 'img_{}'.format(img_idx))
+    pooled_gradients = torch.mean(gradients, dim=[0, 2, 3])
+
+    # get the activations of the last convolutional layer
+    activations = regression_predictor.get_activations(img)[0].detach()
+
+    for i in range(512):
+        activations[:, i, :, :] *= pooled_gradients[i]
+
+    heatmap = torch.mean(activations, dim=1).squeeze()
+
+    heatmap = F.relu(heatmap)
+
+    # normalize the heatmap
+    heatmap /= torch.max(heatmap)
+    return heatmap.cpu().numpy()
+
+def search_image_spaces(
+    base_path,
+    regression_predictor,
+    dataset,
+    img_idx,
+    image_name,
+    window_size=20,
+    stride=1,
+    latent_dims=[1, 2, 3],
+    device="cpu",
+):
+    out_path = os.path.join(
+        base_path, "analyses", "searchlights", "{}".format(image_name)
+    )
     if not os.path.exists(out_path):
-        print('\n...Creating directories.\n')
+        print("\n...Creating directories.\n")
         os.makedirs(out_path)
 
+    img = Image.open(dataset[img_idx])
+    # codes = regression_predictor(img, transform=True)[1]
+    # codes = codes.detach().cpu().numpy()
+    reshape = T.Compose(
+        [T.Resize(256), T.CenterCrop(224)]
+    )
+    img_vis = reshape(img)
+    img_vis = np.array(img_vis)
+    fig, ax = plt.subplots(1, 1)
+    
+    ax.imshow(img_vis)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    fig.savefig(
+        os.path.join(out_path, f"img.png"),
+        dpi=300,
+        bbox_inches="tight",
+        pad_inches=0,
+    )
+
     for dim in latent_dims:
-        print(f'\n...Currently performing searchlight analysis for latent dimension {dim}.\n')
-        img = dataset[img_idx].to(device).unsqueeze(0)
+        print(
+            f"\n...Currently performing searchlight analysis for latent dimension {dim}."
+        )
 
-        # breakpoint()
-        # img = img.squeeze().mT.cpu().numpy()
-        # img = img_to_uint8(img)
-
-
-        diffs = searchlight_(img, regression_predictor, window_size, stride, dim)
-        img = img.squeeze().mT.cpu().numpy()
-        save_dict = {'diffs': diffs, 'img': img, 'dim': dim}
+        diffs = searchlight_(img, regression_predictor, window_size, stride, dim, device)
+        save_dict = {"diffs": diffs, "img": img_vis, "dim": dim}
 
         # store save dict as pickle file in directory
-        with open(os.path.join(out_path, f'./searchlight_ws_{window_size}_stride_{stride}_dim_{dim}.pkl'), 'wb') as f:
+        with open(os.path.join(out_path, f"./searchlight_dim_{dim}.pkl"), "wb") as f:
             pickle.dump(save_dict, f)
-
-        # save diffs as image fille
-        fig, ax  = plt.subplots(1,1)
-        ax.imshow(diffs, cmap='RdBu_r')
-        fig.tight_layout()
-        fig.savefig(os.path.join(out_path, f'./searchlight_diffs_dim_{dim}.png'), dpi=300)
-    
-    
-    fig, ax  = plt.subplots(1,1)
-    img = img_to_uint8(img)
-    ax.imshow(img.T)
-    fig.savefig(os.path.join(out_path, f'./searchlight_img.png'), dpi=300)
         
+        heatmap = diffs    
+        heatmap = img_to_uint8(heatmap)
+        heatmap = cv2.resize(heatmap, (img_vis.shape[0], img_vis.shape[1]))
 
-def map_predictions_to_classes(predictions, classes):
-    """ Map predictions to classes """
-    return [classes[pred] for pred in predictions]
+        # Invert heatmap so that 255 is 0 and 0 is 255
+        heatmap = cv2.bitwise_not(heatmap)
+        # heatmap = cv2.GaussianBlur(heatmap, (13, 13), sigmaX=11, sigmaY=11)
+        cmap = cv2.COLORMAP_JET
+        heatmap_img = cv2.applyColorMap(heatmap, cmap)
+        super_imposed_img = cv2.addWeighted(heatmap_img, 0.5, img_vis, 0.5, 0)
+        path = os.path.join(out_path, f"./searchlight_dim_{dim}_superimposed.png")
+        fig = plt.figure()
+        plt.imshow(super_imposed_img)
+        plt.axis("off")
+        plt.savefig(path, bbox_inches="tight", pad_inches=0, dpi=300)
 
-            
-if __name__ == '__main__':
+        fig, ax = plt.subplots(1, 1)
+        ax.imshow(diffs, cmap="RdBu_r")
+        # Turn off all the ticks
+        ax.set_xticks([])
+        ax.set_yticks([])
+        fig.tight_layout()
+        fig.savefig(
+            os.path.join(out_path, f"./searchlight_dim_{dim}.png"),
+            dpi=300,
+            bbox_inches="tight",
+            pad_inches=0,
+        )
+        # fig = plot_dim(dataset, codes, dim, 10)
+        # fig.savefig(
+        #     os.path.join(out_path, f"{dim}_topk.png"),
+        #     dpi=300,
+        #     bbox_inches="tight",
+        #     pad_inches=0
+        # )
+
+
+if __name__ == "__main__":
     args = parser.parse_args()
 
     np.random.seed(args.seed)
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    extractor = get_extractor(model_name=args.model_name, pretrained=True, device=device, source='torchvision')
-    dataset = ImageDataset(root=args.img_root, out_path='./', backend=extractor.get_backend(), transforms=extractor.get_transformations())
+    extractor = get_extractor(
+        model_name=args.model_name, pretrained=True, device=device, source="torchvision"
+    )
+    images, indices = load_image_data(args.img_root)
 
     base_path = os.path.dirname(os.path.dirname(args.embedding_path))
-    regression_path = os.path.join(base_path, 'analyses', 'sparse_codes')
+    regression_path = os.path.join(base_path, "analyses", "sparse_codes")
 
-
-    predictor = LatentPredictor(args.model_name, args.module_name, device, regression_path)
+    predictor = LatentPredictor(
+        args.model_name, args.module_name, device, regression_path
+    )
     predictor.to(device)
-
-    features =  load_deepnet_activations(args.feature_path, to_torch=True)
-    features = features.to(device)
-
-    idx2obj = dataset.idx_to_cls
-    obj2idx = dataset.cls_to_idx
 
     # Find the images in the dataset that correspond to the query!
     for query, latent_dims in QUERIES:
-        img_idx = [i for i, img in enumerate(dataset.images) if query in img][0]
-        search_image_spaces(base_path, predictor, dataset, img_idx, args.window_size, args.stride, latent_dims, device)
+        img_idx = [i for i, img in enumerate(images) if query in img][0]
+        search_image_spaces(
+            base_path,
+            predictor,
+            images,
+            img_idx,
+            query,
+            args.window_size,
+            args.stride,
+            latent_dims,
+            device,
+        )

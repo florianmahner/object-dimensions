@@ -81,13 +81,10 @@ def find_diverging_triplets(softmax_human, softmax_dnn, topk=12):
     diverging, i.e. where the rank is high in one and low in the other."""
     rank_human = rankdata(softmax_human)
     rank_dnn = rankdata(softmax_dnn)
-
     high_both = np.mean([rank_human, rank_dnn], axis=0)
     high_both = np.argsort(-high_both)[:topk]
-
     high_human_low_dnn = np.mean([rank_human, -rank_dnn], axis=0)
     high_human_low_dnn = np.argsort(-high_human_low_dnn)[:topk]
-
     low_human_high_dnn = np.mean([-rank_human, rank_dnn], axis=0)
     low_human_high_dnn = np.argsort(-low_human_high_dnn)[:topk]
 
@@ -215,10 +212,6 @@ def plot_bar(decisions, dimensions, out_path="./rose.png"):
     plt.savefig(out_path, bbox_inches="tight", pad_inches=0)
 
 
-def plot_jackknife():
-    pass
-
-
 def run_jackknife(
     human_weights,
     human_var,
@@ -232,17 +225,6 @@ def run_jackknife(
 ):
     """This function runs the jackknife analysis for a given embedding 
     TODO Write a description for this I will really forget otherwise since its pretty complicated """
-
-    # TODO Show triplets and dimensions where the DNN is sure about the odd one out but actually wrong!
-
-    if comparison == "human":
-        title_1 = "Dimension Human 1"
-        title_2 = "Dimension Human 2"
-    else:
-        title_1 = "Dimension Human"
-        title_2 = "Dimension DNN"
-
-
     save_dict = dict()
 
     # If all data on GPU, num workers need to be 0 and pin memory false
@@ -296,5 +278,3 @@ def run_jackknife(
     # Save the dict into the plot directory
     with open(os.path.join(plot_dir, "jackknife.pkl"), "wb") as f:
         pickle.dump(save_dict, f)
-
-    breakpoint()
