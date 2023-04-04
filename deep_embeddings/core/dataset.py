@@ -9,7 +9,6 @@ import numpy as np
 
 def build_triplet_dataset(triplet_path, n_train=None, n_val=None, device="cpu"):
     """Build a triplet dataset from a triplet directory containing sample triplets for all objects"""
-
     # Find all files ending .npy or .txt and containing train or val
     files = os.listdir(triplet_path)
     if len(files) == 0:
@@ -30,12 +29,8 @@ def build_triplet_dataset(triplet_path, n_train=None, n_val=None, device="cpu"):
     train = func(os.path.join(triplet_path, files[0]))
     test = func(os.path.join(triplet_path, files[1]))
 
-
-    # maybe need to do train/val split here beforehand and test=test?
     train_dataset = TripletDataset(train, n_train, device=device)
     val_dataset = TripletDataset(test, n_val, device=device)
-
-    breakpoint()
 
     return train_dataset, val_dataset
 
