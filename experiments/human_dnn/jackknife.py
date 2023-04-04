@@ -27,6 +27,7 @@ from deep_embeddings import VariationalEmbedding as model
 
 def compute_softmax_per_batch(q_mu, q_var, indices, device):
     """This function extracts the embedding vectors at the indices of the most diverging triplets and computes the
+    """This function extracts the embedding vectors at the indices of the most diverging triplets and computes the
     softmax decision for each of them"""
 
     if not isinstance(indices, torch.Tensor):
@@ -35,6 +36,7 @@ def compute_softmax_per_batch(q_mu, q_var, indices, device):
     indices = indices.type("torch.LongTensor")
     indices = indices.to(device)
     ind_i, ind_j, ind_k = indices.unbind(1)
+
 
     # Reparametrize an embedding
     torch.manual_seed(0)  # fix the seed so that this is not stochastic!
@@ -130,6 +132,7 @@ def jackknife(q_mu, q_var, triplet_indices, device, ooo_index=0):
         softmax_all[:, i] = softmax_per_batch
         softmax_diff[:, i] = np.abs(softmax_per_batch - softmax_default)
 
+
     most_important_dim = np.argmin(softmax_all, axis=1)
 
     return softmax_diff, most_important_dim
@@ -210,6 +213,7 @@ def plot_bar(decisions, dimensions, out_path="./rose.png"):
         )
 
     plt.savefig(out_path, bbox_inches="tight", pad_inches=0)
+    plt.savefig(out_path, bbox_inches="tight", pad_inches=0)
 
 
 def run_jackknife(
@@ -228,6 +232,9 @@ def run_jackknife(
     save_dict = dict()
 
     # If all data on GPU, num workers need to be 0 and pin memory false
+    device = (
+        torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+    )
     device = (
         torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
     )

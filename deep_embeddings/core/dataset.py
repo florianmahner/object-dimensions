@@ -3,10 +3,11 @@
 
 import torch
 import os
+import re
 import numpy as np
 
 
-def build_triplet_dataset(triplet_path, n_train=None, n_val=None, device="cpu", modality="deep"):
+def build_triplet_dataset(triplet_path, n_train=None, n_val=None, device="cpu"):
     """Build a triplet dataset from a triplet directory containing sample triplets for all objects"""
 
     # Find all files ending .npy or .txt and containing train or val
@@ -14,26 +15,27 @@ def build_triplet_dataset(triplet_path, n_train=None, n_val=None, device="cpu", 
     if len(files) == 0:
         raise ValueError("No training or test files found in {}".format(triplet_path))
 
-    if modality == "behavior":
-        val_name = "test_10"
-        train_name = "train_90"
-    elif modality == "deep":
-        val_name = "test_10"
-        train_name = "train_90"
+    # Find all files ending .npy or .txt in triplet path
+    files = [f for f in files if re.search(r"\.npy|\.txt", f)]    
+    # Find all files containing train or val
+    files = [f for f in files if re.search(r"train_|test_", f)]
+    
+    if len(files) == 0:
+        raise ValueError("No training file `train_x` or test files `test_1-x`found in {}, where x denotes the train/val split".format(triplet_path))
 
-    for file in files:
-        if file.endswith(".npy") and train_name in file:
-            train = np.load(os.path.join(triplet_path, file))
-        elif file.endswith(".npy") and val_name in file:
-            test = np.load(os.path.join(triplet_path, file))
-        elif file.endswith(".txt") and train_name in file:
-            train = np.loadtxt(os.path.join(triplet_path, file))
-        elif file.endswith(".txt") and val_name in file:
-            test = np.loadtxt(os.path.join(triplet_path, file))
+    if len(files) != 2:
+        raise ValueError("Found more than two files in {}".format(triplet_path))
+
+    func = np.load if files[0].endswith(".npy") else np.loadtxt
+    train = func(os.path.join(triplet_path, files[0]))
+    test = func(os.path.join(triplet_path, files[1]))
+
 
     # maybe need to do train/val split here beforehand and test=test?
     train_dataset = TripletDataset(train, n_train, device=device)
     val_dataset = TripletDataset(test, n_val, device=device)
+
+    breakpoint()
 
     return train_dataset, val_dataset
 

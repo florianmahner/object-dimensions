@@ -30,7 +30,7 @@ def load_regression_weights(path, in_features, out_features, to_numpy=False):
     if to_numpy:
         W = W.numpy()
         b = b.numpy()
-        
+
     return W, b
 
 
@@ -86,7 +86,7 @@ class LatentPredictor(nn.Module):
         self.regression.bias.data = b.to(self.device)
 
     def forward(self, x, transform=True):
-        """Forward pass of the model give an image. First extracts VGG feature representations and then 
+        """Forward pass of the model give an image. First extracts VGG feature representations and then
         predicts the sparse codes from these using the learned regression weights."""
 
         # First do the transformations as has been done for the feature extraction, if not done in the dataloader

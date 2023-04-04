@@ -40,6 +40,7 @@ parser.add_argument(
     "--per_dim", default=False, action="store_true", help="Plots per dimension if true"
 )
 
+
 parser.add_argument(
     "--behav-experiment", default=False, action="store_true", help="Plots large images for behavior experiment"
 )
@@ -172,6 +173,12 @@ def plot_per_dim(args):
 
 def plot_dimensions(args):
     W = load_sparse_codes(args.embedding_path)
+    images, indices = load_image_data(
+        args.img_root,
+        filter_behavior=args.filter_behavior,
+        filter_plus=args.filter_plus,
+    )
+
     images, indices = load_image_data(
         args.img_root,
         filter_behavior=args.filter_behavior,

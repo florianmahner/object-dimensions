@@ -41,8 +41,10 @@ for i, f in enumerate(files):
     # Sort dimensions by sum in order!
     ind = np.argsort(-q_mu.sum(0))
     q_mu = q_mu[:, ind]
+    q_mu = q_mu[:, ind]
     embeddings.append(q_mu)
 
+    val_loss = params["val_loss"][-1]
     val_loss = params["val_loss"][-1]
     if val_loss < min_val:
         min_val = val_loss
@@ -64,11 +66,13 @@ print("Number of files: {}".format(n_embeddings))
 
 for i in range(n_dimensions):
     embed_i = embeddings[0][:, i]  # this is the base embedding
+    embed_i = embeddings[0][:, i]  # this is the base embedding
 
     k_per_dim = []
     for k in range(1, n_embeddings):
 
         odd_corrs = []
+        for j in range(n_dimensions):
         for j in range(n_dimensions):
             embed_jk = embeddings[k][:, j]
             odd_correlation = pearsonr(embed_i[odd_mask], embed_jk[odd_mask])[0]

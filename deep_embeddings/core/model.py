@@ -7,7 +7,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-from deep_embeddings.core.pruning import NormalDimensionPruning, LogNormalDimensionPruning
+from deep_embeddings.core.pruning import (
+    NormalDimensionPruning,
+    LogNormalDimensionPruning,
+)
 from deep_embeddings.core.priors import SpikeSlabPrior, LogGaussianPrior
 
 
@@ -31,7 +34,6 @@ class QMu(nn.Module):
 
     def forward(self):
         return self.q_mu
-
 
 
 class Embedding(nn.Module):
@@ -141,6 +143,7 @@ class Embedding(nn.Module):
         )
 
         return params
+
 
 class VariationalEmbedding(nn.Module):
     r"""This is the representational embedding for objects that is specified by a variational
@@ -255,6 +258,7 @@ class DeterministicEmbedding(nn.Module):
     r"""This is the representational embedding for objects for SPoSE. The embedding is specified by a point-estimate of our posterior
     distribution where only the mean is used. The mean is a linear transformation of the input data. It is a free parameter
     that is learned during training."""
+
     def __init__(self, n_objects, init_dim, init_weights=True):
         super().__init__()
         self.n_objects = n_objects
@@ -267,15 +271,15 @@ class DeterministicEmbedding(nn.Module):
         return self.fc.weight
 
     def _initialize_weights(self):
-        mean, std = .1, .01
+        mean, std = 0.1, 0.01
         for m in self.modules():
             if isinstance(m, nn.Linear):
                 m.weight.data.normal_(mean, std)
 
     def l1_regularization(self):
-        l1_reg = torch.tensor(0., requires_grad=True)
+        l1_reg = torch.tensor(0.0, requires_grad=True)
         for n, p in self.named_parameters():
-            if re.search(r'weight', n):
+            if re.search(r"weight", n):
                 l1_reg = l1_reg + torch.norm(p, 1)
         return l1_reg
 
@@ -286,9 +290,7 @@ class DeterministicEmbedding(nn.Module):
 
     def sort_weights(self):
         weights = self.fc.weight
-        index = torch.argsort(
-            torch.linalg.norm(weights, dim=0, ord=1), descending=True
-        )
+        index = torch.argsort(torch.linalg.norm(weights, dim=0, ord=1), descending=True)
         weights = weights[:, index]
         return weights
 
@@ -306,14 +308,12 @@ class DeterministicEmbedding(nn.Module):
     @torch.no_grad()
     def prune_dimensions(self, alpha=0.05):
         weights = self.fc.weight
-        index = torch.argsort(
-            torch.linalg.norm(weights, dim=0, ord=1), descending=True
-        )
+        index = torch.argsort(torch.linalg.norm(weights, dim=0, ord=1), descending=True)
         weights = weights[:, index]
         eps = 0.1
         w_max = weights.max(0)[0]
         above_threshold = w_max > eps
-        weights = weights[:, above_threshold]        
+        weights = weights[:, above_threshold]
         dims_included = above_threshold.nonzero().squeeze()
 
         return dims_included, weights

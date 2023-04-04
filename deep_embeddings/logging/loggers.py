@@ -91,7 +91,9 @@ class DeepEmbeddingLogger:
         )
         self.logger.add_logger(
             "params",
-            ParameterLogger(log_path, model, ["sorted_pruned_params", "detached_params"], ext=".npz"),
+            ParameterLogger(
+                log_path, model, ["sorted_pruned_params", "detached_params"], ext=".npz"
+            ),
             update_interval=params_interval,
         )
         if tensorboard:
@@ -269,7 +271,9 @@ class ParameterLogger(Logger):
     def _save_params(self, param_dict, step):
         if self.ext == ".npz":
             key = "params_epoch_" + str(step)
-            np.savez_compressed(os.path.join(self.log_path, key + self.ext), **param_dict)
+            np.savez_compressed(
+                os.path.join(self.log_path, key + self.ext), **param_dict
+            )
         else:
             for key, val in param_dict.items():
                 key = key + "_epoch_" + str(step)

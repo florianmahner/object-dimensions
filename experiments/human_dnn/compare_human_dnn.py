@@ -16,6 +16,13 @@ from deep_embeddings.utils.utils import (
     compute_rdm,
     fill_diag,
 )
+from deep_embeddings.utils.utils import (
+    load_sparse_codes,
+    load_image_data,
+    create_path_from_params,
+    compute_rdm,
+    fill_diag,
+)
 from experiments.human_dnn.jackknife import run_jackknife
 from experiments.human_dnn.embedding_analysis import run_embedding_analysis
 from deep_embeddings import ExperimentParser
@@ -66,6 +73,7 @@ def get_rdm(embedding, method="correlation"):
     rsm = rankdata(rsm).reshape(rsm.shape)
 
     return rsm
+
 
 def normalise_rdm(rdm):
     rdm = rdm / np.max(rdm)

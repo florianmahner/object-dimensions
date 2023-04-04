@@ -20,7 +20,6 @@ import numpy as np
 
 from numba import njit, prange
 from scipy.spatial.distance import pdist, squareform
-from deep_embeddings.utils.image_dataset import ImageDataset
 
 
 class ExperimentParser:
@@ -35,16 +34,17 @@ class ExperimentParser:
             help="Path to the configuration file.",
         )
         self.parser.add_argument(
-            "--section", 
-            type=str, 
+            "--section",
+            type=str,
             default="",
-            help="Section name in the config file to parse arguments from")
+            help="Section name in the config file to parse arguments from",
+        )
 
     def add_argument(self, *args, **kwargs):
         return self.parser.add_argument(*args, **kwargs)
 
     def _extract_args(self):
-        """ Find the default arguments of the argument parser if any and the ones that are passed
+        """Find the default arguments of the argument parser if any and the ones that are passed
         through the command line"""
         sys_defaults = sys.argv.copy()
         sys.argv = []
@@ -65,7 +65,6 @@ class ExperimentParser:
 
         return changed_args
 
-
     def parse_args(self, combined_section="general"):
         """Parse the arguments from the command line and the configuration file.
         If a section name is provided, only the arguments in that section will be parsed from the .toml file"""
@@ -80,15 +79,13 @@ class ExperimentParser:
         try:
             config = toml.load(cmdl_args.config)
         except FileNotFoundError:
-            raise FileNotFoundError(
-                "Config file {} not found".format(cmdl_args.config)
-            )
+            raise FileNotFoundError("Config file {} not found".format(cmdl_args.config))
 
         changed_args = self._find_changed_args(default_args, cmdl_args)
         if cmdl_args.section:
             try:
-                section_name = cmdl_args.section        
-                section_config = config[section_name]                
+                section_name = cmdl_args.section
+                section_config = config[section_name]
             except KeyError:
                 raise KeyError(
                     "Section {} not found in config file".format(section_name)
@@ -100,16 +97,16 @@ class ExperimentParser:
         # Integrate args from a section that counts for all experiments
         if config.get(combined_section):
             section_config.update(config[combined_section])
-            
+
         for key, value in section_config.items():
             if key not in default_args:
                 # raise ValueError(
-                    # "Warning: key '{}' in config file {} not found in argparser".format(
-                        # key, default_args.config
-                    # )
+                # "Warning: key '{}' in config file {} not found in argparser".format(
+                # key, default_args.config
+                # )
                 # )
                 continue
-            # If the key has been passed in the command line, do not overwrite the 
+            # If the key has been passed in the command line, do not overwrite the
             # command line argument with the toml argument, but vice versa.
             if key in changed_args:
                 section_config[key] = changed_args[key]
@@ -135,23 +132,21 @@ def img_to_uint8(img):
 
 def load_image_data(img_root, filter_behavior=False, filter_plus=False):
     """Load image data from a folder"""
-    dataset = ImageDataset(img_root=img_root, out_path="", transforms=get_image_transforms())
+    dataset = ImageDataset(
+        img_root=img_root, out_path="", transforms=get_image_transforms()
+    )
     assert len(dataset) > 0, "No images found in the image root"
-    
+
     image_paths = dataset.images
     indices = np.arange(len(image_paths))
 
     class_names = [os.path.basename(img) for img in image_paths]
 
     if filter_behavior:
-        indices = np.array(
-        [i for i, img in enumerate(class_names) if "01b" in img]
-        )    
+        indices = np.array([i for i, img in enumerate(class_names) if "01b" in img])
     if filter_plus:
-        indices = np.array(
-        [i for i, img in enumerate(class_names) if "plus" in img]
-        )
-    
+        indices = np.array([i for i, img in enumerate(class_names) if "plus" in img])
+
     image_paths = np.array(image_paths)[indices]
 
     return image_paths, indices
@@ -187,7 +182,9 @@ def cosine_similarity(embedding_i, embedding_j):
         )
 
 
-def load_deepnet_activations(activation_path, center=False, zscore=False, to_torch=False, relu=True):
+def load_deepnet_activations(
+    activation_path, center=False, zscore=False, to_torch=False, relu=True
+):
     """Load activations from a .npy file"""
     # Check that not both center and zscore are true
     if center and zscore:
@@ -208,6 +205,7 @@ def load_deepnet_activations(activation_path, center=False, zscore=False, to_tor
 
     return act
 
+
 def transform_activations(act, zscore=False, center=False, relu=False):
     """Transform activations"""
     if center and zscore:
@@ -222,13 +220,16 @@ def transform_activations(act, zscore=False, center=False, relu=False):
 
     return act
 
+
 def center_activations(act):
     return act - act.mean(axis=0)
+
 
 def zscore_activations(act, dim=0, eps=1e-8):
     std = np.std(act, axis=dim) + eps
     mean = np.mean(act, axis=dim)
     return (act - mean) / std
+
 
 def relu_embedding(W):
     return np.maximum(0, W)
@@ -237,6 +238,7 @@ def relu_embedding(W):
 def create_path_from_params(path, *args):
     """Create a path if it does not exist"""
     import os
+
     base_path = os.path.dirname(os.path.dirname(path))
     out_path = os.path.join(base_path, *args)
     try:
@@ -281,7 +283,7 @@ def load_sparse_codes(path, weights=None, vars=None, with_dim=False, with_var=Fa
         if path.endswith(".txt"):
             try:
                 weights = np.loadtxt(path.replace("q_var", "q_mu"))
-                vars = np.loadtxt(path.replace("q_mu", "q_var"))                  
+                vars = np.loadtxt(path.replace("q_mu", "q_var"))
             except OSError:
                 raise OSError("Error loading sparse codes from path {}".format(path))
 
@@ -304,11 +306,13 @@ def load_sparse_codes(path, weights=None, vars=None, with_dim=False, with_var=Fa
             vars = np.zeros_like(weights)
     
     else:
-        raise ValueError("Weights or Vars must be a .txt file path or as numpy array or .npz file")
-    
+        raise ValueError(
+            "Weights or Vars must be a .txt file path or as numpy array or .npz file"
+        )
+
     if "embedding" in os.path.basename(path):
         weights = np.loadtxt(path)
-    
+
     weights, vars, sorted_dims = transform_params(weights, vars, relu=relu)
     if with_dim:
         if with_var:
@@ -319,7 +323,7 @@ def load_sparse_codes(path, weights=None, vars=None, with_dim=False, with_var=Fa
         if with_var:
             return weights, vars
         else:
-            
+
             return weights
 
 
@@ -394,7 +398,6 @@ def matmul(A, B):
     return C
 
 
-
 # ------- Helper Functions for Probability Densities  ------- #
 
 
@@ -413,7 +416,7 @@ def log_normal_pdf(X, loc, scale):
     X = F.relu(X) + 1e-12
     const = 1 / (X * scale * LOG_NORMAL_CONST)
     numerator = -((torch.log(X) - loc) ** 2)
-    denominator = 2 * scale**2
+    denominator = 2 * scale ** 2
     pdf = const * torch.exp(numerator / denominator)
 
     return pdf

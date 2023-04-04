@@ -83,7 +83,7 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
 
     r2_scores = []
     for dim, y in enumerate(Y.T):
-    # for dim, y in reversed(list(enumerate(Y.T))):
+        # for dim, y in reversed(list(enumerate(Y.T))):
 
         cv_outer = KFold(n_splits=k_folds, shuffle=True, random_state=0)
         outer_alphas = []
@@ -101,13 +101,13 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
             model = ElasticNet(random_state=1, max_iter=5000)
 
             space = dict()
-            # space["alpha"] = np.logspace(2, 4, 5, base=10)
-            # space["alpha"] = np.logspace(2, 3, 5, base=10)
-            space["alpha"] = [1.0]
-            space["l1_ratio"] = np.arange(0, 1.2, 0.2)
+            space["alpha"] = np.arange(100, 3000, 20)
+            # space['alpha'] = np.arange(0.1, 0.5, 0.02)
+            # space['alpha'] = [0.001, 0.01, 0.1, 0.2]
+            # space['alpha'] = [0.01, 0.05, 0.1, 0.2, 1.0]
+            # space['l1_ratio'] = np.arange(0.1, 1.0, 0.1)
 
-
-            # Evaluate the model on the inner loop
+            # Evluate the model on the inner loop
             search = GridSearchCV(
                 model, space, scoring="r2", cv=cv_inner, refit=True, n_jobs=num_workers
             )
@@ -116,7 +116,6 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
             # Extract best params and estimators
             best_model = result.best_estimator_
             best_alpha = best_model.alpha
-            best_l1_ratio = best_model.l1_ratio
 
             y_pred = best_model.predict(X_test)
             r2 = r2_score(y_test, y_pred)
@@ -129,7 +128,7 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
         r2_scores.append(np.mean(outer_r2_scores))
         print(f"Best alpha for dimension {dim}: {np.mean(outer_alphas)}")
         print(f"R2 score for dimension {dim}: {np.mean(outer_r2_scores)}\n")
-        print(f'Best l1_ratio for dimension {dim}: {np.mean(outer_l1_ratios)}')
+        # print(f'Best l1_ratio for dimension {dim}: {np.mean(outer_l1_ratios)}')
         best_model = outer_models[np.argmax(outer_r2_scores)]
         joblib.dump(
             best_model, os.path.join(results_path, f"predictor_{dim:02d}.joblib")

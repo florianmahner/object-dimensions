@@ -35,6 +35,25 @@ parser.add_argument(
     type=str,
     help="Path to GPT3 norms",
 )
+parser = ExperimentParser(description="Label dimensions of sparse codes using GPT3")
+parser.add_argument(
+    "--embedding_path",
+    default="./embedding.txt",
+    type=str,
+    help="Path to the embedding txt file",
+)
+parser.add_argument(
+    "--img_root",
+    default="./data/image_data/images12_plus",
+    type=str,
+    help="Path to all vgg features",
+)
+parser.add_argument(
+    "--feature_norm_path",
+    default="./data/feature_norms",
+    type=str,
+    help="Path to GPT3 norms",
+)
 
 
 def normalize_object_dimension_weights(object_dimension_embeddings):
@@ -145,9 +164,12 @@ def generate_gpt3_norms(
 
     topk_indices = topk_descriptions["feature"].tolist()
 
+    topk_indices = topk_descriptions["feature"].tolist()
+
     # Get the first row of the feature norms pd dataframe
     text = feature_norms.iloc[0, :].tolist()
     features = [text[t] for t in topk_indices]
+    topk_descriptions["description"] = features
     topk_descriptions["description"] = features
 
     # Save to file
@@ -162,6 +184,10 @@ def generate_gpt3_norms(
 
     # Create a word cloud for each dimension with its description weights by the weight
     for dim in range(embedding.shape[1]):
+        dim_df = topk_descriptions[topk_descriptions["dimension"] == dim]
+        dim_df = dim_df.sort_values(by="weight", ascending=False)
+        words = dim_df["description"].tolist()
+        weights = dim_df["weight"].tolist()
         dim_df = topk_descriptions[topk_descriptions["dimension"] == dim]
         dim_df = dim_df.sort_values(by="weight", ascending=False)
         words = dim_df["description"].tolist()

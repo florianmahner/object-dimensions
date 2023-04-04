@@ -19,11 +19,11 @@ from deep_embeddings import DeepEmbeddingLogger
 
 parser = ExperimentParser(description="Main training script for deep embeddings")
 parser.add_argument(
-    "--method", 
+    "--method",
     type=str,
     default="variational",
     choices=("variational", "deterministic"),
-    help="Type of embedding to train. Variational = VICE, deterministic = SPoSE"
+    help="Type of embedding to train. Variational = VICE, deterministic = SPoSE",
 )
 parser.add_argument("--triplet_path", type=str, help="Path to the triplet file")
 parser.add_argument(
@@ -182,15 +182,19 @@ def _build_model(args):
     n_objects = _parse_number_of_objects(args.triplet_path, args.modality)
     if args.method == "variational":
         model_prior = _build_prior(args.prior, n_objects, args.init_dim, args.scale)
-        model = VariationalEmbedding(model_prior, n_objects, args.init_dim, args.non_zero_weights)
+        model = VariationalEmbedding(
+            model_prior, n_objects, args.init_dim, args.non_zero_weights
+        )
         return model, model_prior
     else:
         model = DeterministicEmbedding(n_objects, args.init_dim)
         return model, None
 
+
 def _check_args(args):
     if args.fresh and args.load_model:
         raise ValueError("Cannot load a model and train from scratch at the same time")
+
 
 def train(args):
     device = (
@@ -202,15 +206,16 @@ def train(args):
     g = torch.Generator()
     g.manual_seed(args.seed)
 
-    train_dataset, val_dataset = build_triplet_dataset(args.triplet_path, device=device, modality=args.modality)
-    
+    train_dataset, val_dataset = build_triplet_dataset(args.triplet_path, device=device)
+
+    num_workers = torch.cuda.device_count() * 2  # make dependent on gpu count
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
         pin_memory=False,
         generator=g,
-        num_workers=16,
+        num_workers=num_workers,
         worker_init_fn=_set_global_seed,
     )
     val_loader = torch.utils.data.DataLoader(
@@ -218,14 +223,14 @@ def train(args):
         batch_size=args.batch_size,
         shuffle=False,
         pin_memory=False,
-        num_workers=16,
+        num_workers=num_workers,
         generator=g,
-        worker_init_fn=_set_global_seed
+        worker_init_fn=_set_global_seed,
     )
     n_samples = _convert_samples_to_string(train_dataset, val_dataset)
 
     # If we are training a deterministic embedding using MLE this is the same as a variational point estimate with a uniform prior
-    if args.method == "deterministc":
+    if args.method == "deterministic":
         args.prior = "uniform"
 
     # Build the logpath
@@ -262,7 +267,7 @@ def train(args):
         os.makedirs(log_path)
 
     args = load_args(args, log_path, args.fresh)
-    _set_global_seed(args.seed)    
+    _set_global_seed(args.seed)
     model, model_prior = _build_model(args)
     model.to(device)
 
@@ -288,9 +293,10 @@ def train(args):
         args.lr,
         args.beta,
         args.stability_time,
-        args.method
+        args.method,
     )
     trainer.train()
+
 
 if __name__ == "__main__":
     args = parser.parse_args()
