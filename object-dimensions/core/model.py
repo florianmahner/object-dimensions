@@ -7,11 +7,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-from object-dimensions.core.pruning import (
+from object_dimensions.core.pruning import (
     NormalDimensionPruning,
     LogNormalDimensionPruning,
 )
-from object-dimensions.core.priors import SpikeSlabPrior, LogGaussianPrior
+from object_dimensions.core.priors import SpikeSlabPrior, LogGaussianPrior
 
 
 class QLogVar(nn.Module):

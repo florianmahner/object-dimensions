@@ -9,13 +9,13 @@ import random
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-from object-dimensions.utils import utils
+from object_dimensions.utils import utils
 
 from sklearn.linear_model import Ridge, ElasticNet
 from sklearn.model_selection import KFold, GridSearchCV
 from sklearn.metrics import r2_score
 
-from object-dimensions import ExperimentParser
+from object_dimensions import ExperimentParser
 
 
 os.environ["OMP_NUM_THREADS"] = "32"

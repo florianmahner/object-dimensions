@@ -12,9 +12,9 @@ from thingsvision import get_extractor
 import torchvision.transforms as T
 import torch.nn.functional as F
 from PIL import Image
-from object-dimensions import ExperimentParser
-from object-dimensions.utils.utils import img_to_uint8, load_image_data
-from object-dimensions.utils.latent_predictor import LatentPredictor
+from object_dimensions import ExperimentParser
+from object_dimensions.utils.utils import img_to_uint8, load_image_data
+from object_dimensions.utils.latent_predictor import LatentPredictor
 
 parser = ExperimentParser(description="Searchlight analysis for one image.")
 parser.add_argument("--embedding_path", type=str, help="Path to the embedding file.")

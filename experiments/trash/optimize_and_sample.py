@@ -12,11 +12,11 @@ import torch.nn as nn
 import numpy as np
 
 from pytorch_pretrained_biggan import BigGAN, truncated_noise_sample
-from object-dimensions.utils.latent_predictor import LatentPredictor
-from object-dimensions.utils.utils import img_to_uint8
+from object_dimensions.utils.latent_predictor import LatentPredictor
+from object_dimensions.utils.utils import img_to_uint8
 from torch.utils.data import DataLoader
 
-from object-dimensions import ExperimentParser
+from object_dimensions import ExperimentParser
 
 parser = ExperimentParser(description="BigGAN latent space optimization")
 parser.add_argument(

@@ -9,14 +9,14 @@ import toml
 import matplotlib.pyplot as plt
 
 import numpy as np
-from object-dimensions.utils.utils import (
+from object_dimensions.utils.utils import (
     load_sparse_codes,
     load_image_data,
     create_path_from_params,
     compute_rdm,
     fill_diag,
 )
-from object-dimensions.utils.utils import (
+from object_dimensions.utils.utils import (
     load_sparse_codes,
     load_image_data,
     create_path_from_params,
@@ -25,7 +25,7 @@ from object-dimensions.utils.utils import (
 )
 from experiments.human_dnn.jackknife import run_jackknife
 from experiments.human_dnn.embedding_analysis import run_embedding_analysis
-from object-dimensions import ExperimentParser
+from object_dimensions import ExperimentParser
 from scipy.stats import pearsonr, rankdata
 
 

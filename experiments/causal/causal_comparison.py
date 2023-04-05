@@ -2,12 +2,12 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from object-dimensions.utils.utils import (
+from object_dimensions.utils.utils import (
     load_sparse_codes,
     load_image_data,
 )
-from object-dimensions import ExperimentParser
-from object-dimensions.utils.latent_predictor import LatentPredictor
+from object_dimensions import ExperimentParser
+from object_dimensions.utils.latent_predictor import LatentPredictor
 from experiments.visualization.visualize_embedding import plot_dim
 
 from PIL import Image

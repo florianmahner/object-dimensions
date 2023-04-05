@@ -24,9 +24,9 @@ from stylegan_xl.dnnlib import util
 from stylegan_xl.torch_utils import gen_utils
 from stylegan_xl.gen_images import make_transform
 
-from object-dimensions.utils.utils import img_to_uint8
-from object-dimensions import ExperimentParser
-from object-dimensions.utils.latent_predictor import LatentPredictor
+from object_dimensions.utils.utils import img_to_uint8
+from object_dimensions import ExperimentParser
+from object_dimensions.utils.latent_predictor import LatentPredictor
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from PIL import Image

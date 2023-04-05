@@ -9,8 +9,8 @@ from thingsvision import get_extractor
 from thingsvision.utils.data import DataLoader
 from thingsvision.core.extraction import center_features
 
-from object-dimensions.utils.image_dataset import ImageDataset
-from object-dimensions import ExperimentParser
+from object_dimensions.utils.image_dataset import ImageDataset
+from object_dimensions import ExperimentParser
 
 sys.path.append("./stylegan_xl")
 from stylegan_xl import legacy

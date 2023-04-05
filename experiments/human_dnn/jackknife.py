@@ -21,8 +21,8 @@ import itertools
 import pickle
 import matplotlib.gridspec as gridspec
 
-from object-dimensions import build_triplet_dataset
-from object-dimensions import VariationalEmbedding as model
+from object_dimensions import build_triplet_dataset
+from object_dimensions import VariationalEmbedding as model
 
 
 def compute_softmax_per_batch(q_mu, q_var, indices, device):

@@ -3,9 +3,9 @@
 
 import os
 
-from object-dimensions import extract_features
-from object-dimensions import Sampler
-from object-dimensions import ExperimentParser
+from object_dimensions import extract_features
+from object_dimensions import Sampler
+from object_dimensions import ExperimentParser
 
 parser = ExperimentParser(
     description="Extract features and tripletize from a dataset using a pretrained model and module"

@@ -20,7 +20,7 @@ import numpy as np
 
 from numba import njit, prange
 from scipy.spatial.distance import pdist, squareform
-from object-dimensions.utils.image_dataset import ImageDataset
+from object_dimensions.utils.image_dataset import ImageDataset
 
 
 class ExperimentParser:

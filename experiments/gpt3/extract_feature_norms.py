@@ -13,8 +13,8 @@ from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 
 
-from object-dimensions.utils.utils import load_sparse_codes, load_image_data
-from object-dimensions import ExperimentParser
+from object_dimensions.utils.utils import load_sparse_codes, load_image_data
+from object_dimensions import ExperimentParser
 
 parser = ExperimentParser(description="Label dimensions of sparse codes using GPT3")
 parser.add_argument(
