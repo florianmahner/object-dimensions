@@ -1,11 +1,11 @@
 #!/bin/bash
-""" This script clones the stylegan_xl repository and makes it accessible using the python path. """
+# This script clones the stylegan_xl repository and makes it accessible using the python path.
 
 git_repo="git@github.com:autonomousvision/stylegan_xl.git"
-local_repo="object_dimensions" # Define this youself!
+repo_path="./stylegan_xl"
+conda activate objdim
 
-if [ ! -d "$local_repo" ]; then
-    repo_path="${local_repo}/stylegan_xl"
+if [ ! -d "$repo_path" ]; then
     echo "Cloning repository to ${repo_path}"
     git clone $git_repo $repo_path
     export PYTHONPATH="${PYTHONPATH}:${repo_path}"

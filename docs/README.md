@@ -9,7 +9,7 @@ make install
 Finally activate the environment and install the package locally
 
 ```bash
-conda activate deep
+conda activate objdim
 pip install -e .
 ```
 
