@@ -12,11 +12,11 @@ import matplotlib.pyplot as plt
 from thingsvision import get_extractor
 from thingsvision.utils.data import ImageDataset
 
-from deep_embeddings import ExperimentParser
+from object-dimensions import ExperimentParser
 
-from deep_embeddings.utils.searchlight_utils import mask_img
-from deep_embeddings.utils.utils import load_deepnet_activations, img_to_uint8
-from deep_embeddings.utils.latent_predictor import LatentPredictor
+from object-dimensions.utils.searchlight_utils import mask_img
+from object-dimensions.utils.utils import load_deepnet_activations, img_to_uint8
+from object-dimensions.utils.latent_predictor import LatentPredictor
 
 parser = ExperimentParser(description="Searchlight analysis for one image.")
 parser.add_argument("--embedding_path", type=str, help="Path to the embedding file.")

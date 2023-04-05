@@ -2,7 +2,7 @@
 """ This script clones the stylegan_xl repository and makes it accessible using the python path. """
 
 git_repo="git@github.com:autonomousvision/stylegan_xl.git"
-local_repo="deep_embeddings" # Define this youself!
+local_repo="object-dimensions" # Define this youself!
 
 if [ ! -d "$local_repo" ]; then
     repo_path="${local_repo}/stylegan_xl"

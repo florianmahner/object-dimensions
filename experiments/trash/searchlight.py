@@ -10,8 +10,8 @@ import numpy as np
 from thingsvision import Extractor
 from thingsvision.utils.data import ImageDataset
 
-from deep_embeddings.utils.searchlight_utils import mask_img
-from deep_embeddings.analyses.image_generation.latent_predictor import LatentPredictor
+from object-dimensions.utils.searchlight_utils import mask_img
+from object-dimensions.analyses.image_generation.latent_predictor import LatentPredictor
 
 
 class Config:

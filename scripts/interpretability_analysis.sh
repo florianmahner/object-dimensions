@@ -67,5 +67,5 @@ if $style
 then
     echo "Style gan analysis"
     python experiments/image_generation/optimize_and_sample_stylegan.py \
-        --config "./configs/interpretability.toml" --section "big_gan"
+        --config "./configs/interpretability.toml" --section "act_max"
 fi

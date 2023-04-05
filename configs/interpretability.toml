@@ -33,13 +33,13 @@ dim = [0, 21, 47] # dims to optimize
 
 model_name = "vgg16_bn"
 module_name = "classifier.3"
-n_samples = 200
+n_samples = 100_000
 window_size = 40
 batch_size = 64
 truncation = 1.0
 top_k = 16
 max_iter = 100
-alpha = 0.1
+alpha = 1.0
 beta = 1.0
 lr = 0.002
 

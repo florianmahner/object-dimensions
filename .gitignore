@@ -1,9 +1,11 @@
 
 results
-data/feature_norms
-data/image_data
-data/models
+data
+misc
+jobs
 plots
+stylegan_xl
+NOTES.md
 .vscode
 scripts/*.ipynb
 

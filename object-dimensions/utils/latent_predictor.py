@@ -117,7 +117,6 @@ class LatentPredictor(nn.Module):
         
     def extract_features_from_img(self, img, transform=True):
         features, img = self.get_activations(img, transform=transform)
-
         # We register the hook before the maxpool layer of the feature extractor, 
         # so that the resulting heatmap is twice the size
         h = features.register_hook(self.activations_hook)

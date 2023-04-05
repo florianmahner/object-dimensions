@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 import skimage.io as io
 import numpy as np
 import cv2
-from deep_embeddings import ExperimentParser
-from deep_embeddings.utils.utils import load_sparse_codes, load_image_data
+from object-dimensions import ExperimentParser
+from object-dimensions.utils.utils import load_sparse_codes, load_image_data
 
 
 parser = ExperimentParser(description="Visualize embedding")

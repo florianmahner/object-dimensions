@@ -15,12 +15,12 @@ from PIL import Image, ImageDraw
 import torchvision
 import torchvision.transforms as T
 import torch.nn.functional as F
-from deep_embeddings import ExperimentParser
+from object-dimensions import ExperimentParser
 
 from experiments.visualization.visualize_embedding import plot_dim
 
-from deep_embeddings.utils.utils import img_to_uint8, load_image_data
-from deep_embeddings.utils.latent_predictor import LatentPredictor
+from object-dimensions.utils.utils import img_to_uint8, load_image_data
+from object-dimensions.utils.latent_predictor import LatentPredictor
 
 parser = ExperimentParser(description="Searchlight analysis for one image.")
 parser.add_argument("--embedding_path", type=str, help="Path to the embedding file.")

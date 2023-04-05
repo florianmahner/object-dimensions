@@ -3,9 +3,9 @@ import torch
 import toml
 import numpy as np
 import matplotlib.pyplot as plt
-from deep_embeddings.main import build_model
-from deep_embeddings.utils.utils import load_image_data
-from deep_embeddings.core.pruning import NormalDimensionPruning
+from object-dimensions.main import build_model
+from object-dimensions.utils.utils import load_image_data
+from object-dimensions.core.pruning import NormalDimensionPruning
 
 
 checkpoint = "./embedding/1/checkpoints/epoch_22800.tar"

@@ -1,8 +1,8 @@
 import numpy as np
-from deep_embeddings.utils.utils import load_sparse_codes, load_deepnet_activations
-from deep_embeddings.utils.latent_predictor import load_regression_weights
+from object-dimensions.utils.utils import load_sparse_codes, load_deepnet_activations
+from object-dimensions.utils.latent_predictor import load_regression_weights
 from sklearn.metrics import r2_score
-from deep_embeddings.utils.utils import correlate_rsms
+from object-dimensions.utils.utils import correlate_rsms
 
 
 def invert_regression(B, X, y, dtype=np.float64):

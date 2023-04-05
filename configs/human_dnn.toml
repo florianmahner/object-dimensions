@@ -1,16 +1,11 @@
 # These are the configurations for the human DNN comparison!
 
+# human_path_base = "./data/misc/vice_embedding_lukas_66d.txt"
 
-# dnn_path = "./results/50mio/16396/0.4/0.25/1.0/0.5/42/params/pruned_q_mu_epoch_5200.txt"
-# dnn_path = "./results/sslab/deep/20mio/sslab/100/16384/2.0/0.25/0/params/pruned_q_mu_epoch_2000.txt"
+human_path_base = "./results/sslab_behavior/behavior/4.12mio/sslab/300/256/0.85/0/params/params_epoch_2000.npz"
+human_path_comp = "./results/sslab_behavior/behavior/4.12mio/sslab/300/256/0.85/1/params/params_epoch_2000.npz"
 
-human_path_base = "./results/sslab_behavior/behavior/4.58mio/sslab/300/256/0.85/0/params/parameters.npz"
-dnn_path = "./results/sslab_final/deep/vgg16_bn/classifier.3/20.mio/sslab/300/256/0.24/0/params/params_epoch_2000.npz"
-
-# human_path_base = "./results/4096_nll_pruned"
-# human_path_base = "./results/sslab/vgg16_bn/4mio/behavior/sslab/100/256/0.5/0.5/2/params/pruned_q_mu_epoch_1200.txt"
-# human_path_comp = "./results/sslab/vgg16_bn/4mio/behavior/sslab/100/256/0.5/0.5/1/params/pruned_q_mu_epoch_1200.txt"
-human_path_comp = ""
+dnn_path = "results/sslab_final/deep/vgg16_bn/classifier.3/20.mio/sslab/300/256/0.24/0/params/parameters.npz"
 
 triplet_path =  "./data/triplets/behavior"
 img_root = "./data/image_data/images12_plus"

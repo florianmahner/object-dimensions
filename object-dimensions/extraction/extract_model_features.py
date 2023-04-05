@@ -3,15 +3,14 @@
 
 import sys
 import torch
-import torchvision
 
 from thingsvision.utils.storing import save_features
 from thingsvision import get_extractor
 from thingsvision.utils.data import DataLoader
 from thingsvision.core.extraction import center_features
 
-from deep_embeddings.utils.image_dataset import ImageDataset
-from deep_embeddings import ExperimentParser
+from object-dimensions.utils.image_dataset import ImageDataset
+from object-dimensions import ExperimentParser
 
 sys.path.append("./stylegan_xl")
 from stylegan_xl import legacy
@@ -41,7 +40,6 @@ def load_model(model_name):
             source="custom",
             model_parameters={"variant": "ViT-H-14", "dataset": "laion2b_s32b_b79k"},
         )
-
     else:
         model = get_extractor(
             model_name, pretrained=True, device=device, source="torchvision"

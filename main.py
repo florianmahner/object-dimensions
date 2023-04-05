@@ -9,12 +9,12 @@ import argparse
 
 import numpy as np
 
-from deep_embeddings.core.engine import EmbeddingTrainer
-from deep_embeddings.core.model import VariationalEmbedding, DeterministicEmbedding
-from deep_embeddings.core.priors import SpikeSlabPrior, LogGaussianPrior
+from object-dimensions.core.engine import EmbeddingTrainer
+from object-dimensions.core.model import VariationalEmbedding, DeterministicEmbedding
+from object-dimensions.core.priors import SpikeSlabPrior, LogGaussianPrior
 
-from deep_embeddings import ExperimentParser, build_triplet_dataset
-from deep_embeddings import DeepEmbeddingLogger
+from object-dimensions import ExperimentParser, build_triplet_dataset
+from object-dimensions import DeepEmbeddingLogger
 
 
 parser = ExperimentParser(description="Main training script for deep embeddings")

@@ -13,7 +13,7 @@ import seaborn as sns
 from skimage.transform import resize
 import skimage.io as io
 
-from deep_embeddings.utils.utils import correlate_rsms, correlation_matrix
+from object-dimensions.utils.utils import correlate_rsms, correlation_matrix
 from scipy.stats import rankdata, pearsonr
 
 

@@ -4,7 +4,7 @@ except ImportError:
     from distutils.core import setup, find_packages
 
 setup(
-    name="deep_embeddings",
+    name="object-dimensions",
     version="0.0.1",
     author="Florian P. Mahner",
     author_email="florian.mahner@gmail.com",

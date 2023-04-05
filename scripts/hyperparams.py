@@ -56,20 +56,20 @@ for seed in SEEDS:
         with open("./scripts/slurm/slurm_script.txt") as f:
             slurm = f.readlines()
 
-        cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_256_bs.toml" --beta {} --seed {} --load_model'.format(
+        cmd = '\nsrun python3 ~/object-dimensions/object-dimensions/main.py --config "./configs/train_256_bs.toml" --beta {} --seed {} --load_model'.format(
             beta, seed
         )
 
-        # cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_behavior.toml" --beta {} --seed {} --batch_size 256 --init_dim 300 --load_model'.format(beta, seed)
+        # cmd = '\nsrun python3 ~/object-dimensions/object-dimensions/main.py --config "./configs/train_behavior.toml" --beta {} --seed {} --batch_size 256 --init_dim 300 --load_model'.format(beta, seed)
 
-        # cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_spose_behavior.toml" --beta {} --seed {} --init_dim 300 --batch_size 256 --method "deterministic" --load_model'.format(beta, seed)
+        # cmd = '\nsrun python3 ~/object-dimensions/object-dimensions/main.py --config "./configs/train_spose_behavior.toml" --beta {} --seed {} --init_dim 300 --batch_size 256 --method "deterministic" --load_model'.format(beta, seed)
 
-        # cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_spose_behavior.toml" --beta {} --seed {} --init_dim 90 --method "deterministic" --load_model'.format(beta, seed)
+        # cmd = '\nsrun python3 ~/object-dimensions/object-dimensions/main.py --config "./configs/train_spose_behavior.toml" --beta {} --seed {} --init_dim 90 --method "deterministic" --load_model'.format(beta, seed)
 
-        # cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_deep.toml" --beta {} --seed {} --init_dim 200 --batch_size 256 --load_model'.format(beta, seed)
-        # cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_deep.toml" --beta {} --seed {} --init_dim 500 --batch_size 256 --load_model'.format(beta, seed)
-        # cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_deep.toml" --beta {} --seed {} --init_dim 300 --batch_size 256 --load_model'.format(beta, seed)
-        # cmd = '\nsrun python3 ~/deep_embeddings/deep_embeddings/main.py --config "./configs/train_deep.toml" --beta {} --seed {} --init_dim 300 --batch_size 16384 --identifier "reproducibility" --stability_time 1000 --load_model'.format(beta, seed)
+        # cmd = '\nsrun python3 ~/object-dimensions/object-dimensions/main.py --config "./configs/train_deep.toml" --beta {} --seed {} --init_dim 200 --batch_size 256 --load_model'.format(beta, seed)
+        # cmd = '\nsrun python3 ~/object-dimensions/object-dimensions/main.py --config "./configs/train_deep.toml" --beta {} --seed {} --init_dim 500 --batch_size 256 --load_model'.format(beta, seed)
+        # cmd = '\nsrun python3 ~/object-dimensions/object-dimensions/main.py --config "./configs/train_deep.toml" --beta {} --seed {} --init_dim 300 --batch_size 256 --load_model'.format(beta, seed)
+        # cmd = '\nsrun python3 ~/object-dimensions/object-dimensions/main.py --config "./configs/train_deep.toml" --beta {} --seed {} --init_dim 300 --batch_size 16384 --identifier "reproducibility" --stability_time 1000 --load_model'.format(beta, seed)
 
         # cmd = "srun --time=00:05:00 --nodes=1 --tasks-per-node=1 --cpus-per-task=40 --partition=gpudev --gres=gpu:v100:2 "
 
