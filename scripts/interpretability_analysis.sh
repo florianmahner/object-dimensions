@@ -52,7 +52,7 @@ fi
 if $searchlight
 then
     echo "Searchlight analysis"
-    python experiments/relevance_maps/grad-cam.py \
+    python experiments/relevance_maps/grad_cam.py \
         --config "./configs/interpretability.toml" # does not need a section
 fi
 
