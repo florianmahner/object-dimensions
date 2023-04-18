@@ -1,0 +1,112 @@
+<html data-lt-installed="true" data-arp-injected="true">
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+    <title>Instructions</title>
+    <script language="javascript" type="text/javascript">
+        function closeWindow() {
+            window.open('', '_parent', '');
+            window.close();
+        }
+    </script>
+</head>
+
+<style>
+    .image-container {
+        display: flex;
+        margin: 50px auto;
+        padding: 0px;
+    }
+
+    .shaded-bar {
+        background: linear-gradient(to bottom, #7e7c7c, #f2f2f2);
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 20;
+        margin-right: 20px;
+    }
+
+    .shaded-bar-text {
+        font-weight: bold;
+        font-size: 30px;
+        color: #333;
+    }
+
+    .image-wrapper {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        padding: -10px;
+    }
+
+    .image-wrapper img {
+        padding: 0px;
+    }
+</style>
+
+<body style="font-family:verdana ;width: 1000px; margin: 0 auto; text-align: center; font-size: 20px;">
+    <center>
+        <h1>Instructions</h1>
+    </center>
+    <form method="GET" action="{{ url_for('index') }}">
+
+        <div class="main">
+
+            <p>In the following experiment we present you with a series of image samples. Each image sample contains a
+                grid of 5 x 6 images:
+
+
+            <div class="image-container">
+                <div class="shaded-bar">
+                    <span class="shaded-bar-text">High</span>
+                    <span class="shaded-bar-text">Low</span>
+                </div>
+                <div class="image-wrapper">
+                    <img src="https://fmahner.pythonanywhere.com/static/images/instructions.jpg" alt="Image"
+                        width="800">
+                </div>
+            </div>
+
+            <p>The purpose of this study is to identify the most important images in a collection. The images are ranked
+                from
+                <span style="color:red">high</span> to <span style="color:red">low</span> importance. The images in the
+                top row
+                are the most important, while the images in the bottom row are the least important.
+            </p>
+
+            <p>Your task is to describe each collection with 3 to 5 specific words that capture the essence of the
+                images. For
+                example, instead of saying "houses" or "buildings," try to be more specific, such as "residential,"
+                "commercial,"
+                "industrial," "historic," "modern," "traditional," "abandoned," "ruins," "skyscrapers," "tall
+                buildings," or "small."</p>
+
+
+            <p>For example, one possible description for the image sample above could be:</p>
+
+            <ul style="display: inline-block; text-align: left; margin: 0 auto; padding-left: 0;">
+                <li>Many small things</li>
+                <li>Made of wood</li>
+                <li>Coarse pattern</li>
+                <li>Horizontal orientation</li>
+                <li>Piles</li>
+            </ul>
+
+            <p>After describing each collection, we ask that you rate its interpretability on a scale from 1 to 10, with
+                1 being the
+                least interpretable and 10 being the most interpretable.</p>
+
+            <br><br>
+
+            <br><br>
+
+            <input type="submit" value="Start" style="font-size: 20px;">
+
+        </div>
+
+
+    </form>
+</body>
+
+</html>
