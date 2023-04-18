@@ -1,13 +1,22 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for
-from werkzeug.utils import secure_filename
+import glob
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    session,
+    make_response,
+)
 from pathlib import Path
-
+import uuid
+import pandas as pd
+from datetime import datetime, timedelta
 
 app = Flask(__name__, template_folder="templates")
 
 # Configure the folder to store uploaded images
-
 THIS_FOLDER = Path(__file__).parent.resolve()
 UPLOAD_FOLDER = os.path.join(THIS_FOLDER, "static", "images")
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
@@ -18,48 +27,124 @@ app.config["STATIC_FOLDER"] = os.path.join(THIS_FOLDER, "static")
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
-# Only allow certain file types to be uploaded
-ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
+if not os.path.exists(os.path.join(THIS_FOLDER, "results")):
+    os.makedirs(os.path.join(THIS_FOLDER, "results"))
 
 
-def allowed_file(filename):
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+image_files = glob.glob(os.path.join(UPLOAD_FOLDER, "**", "*.jpg"), recursive=True)
+image_files = [os.path.basename(f) for f in image_files]
+image_files.remove("instructions.jpg")
+
+# I have the image file in the format num_topk_large.png. sort by number
+image_files = sorted(image_files, key=lambda x: int(x.split("_")[0]))
+
+descriptions = [f"description_{i}" for i in range(1, 6)]
+output = pd.DataFrame(columns=["image_file", *descriptions, "interpretability"])
 
 
-image_files = [f for f in os.listdir(app.config["UPLOAD_FOLDER"]) if allowed_file(f)]
+def generate_id():
+    id = str(uuid.uuid4())
+    time = datetime.now().strftime("%d-%m-%Y-%H%M%S")
+    session_id = time + "_" + id
+    return session_id
 
-image_files.sort()
+
+SESSION_ID = generate_id()
+app.secret_key = SESSION_ID
+
+
+@app.route("/consent", methods=["GET", "POST"])
+def consent():
+    return render_template("consent.html")
+
+
+@app.route("/data", methods=["GET", "POST"])
+def data():
+    return render_template("data.html")
+
+
+@app.route("/instructions", methods=["GET", "POST"])
+def instructions():
+    return render_template("instructions.html")
+
+
+@app.route("/index", methods=["GET", "POST"])
+def show_index():
+    image_filepath = session["filepath"]
+    index = session["index"]
+    return render_template("index.html", image_filepath=image_filepath, index=index)
 
 
 @app.route("/", methods=["GET", "POST"])
 def index():
-    # Get a list of all image files in the upload folder
-    image_files = [
-        f for f in os.listdir(app.config["UPLOAD_FOLDER"]) if allowed_file(f)
-    ]
+    session_id = request.args.get("session_id")
+    if not session_id:
+        # Generate a new session ID
+        session_id = generate_id()
+        session["session_id"] = session_id
+    else:
+        # Check if the session ID matches the current session
+        if session_id != session.get("session_id"):
+            # Reset the session data if the session ID is different
+            session.clear()
+        # Store the current session ID in the session object
+        session["session_id"] = session_id
 
-    image_files.sort()
+    if not session.get("consent_given"):
+        session["consent_given"] = True
+        return redirect(url_for("consent", session_id=session_id))
+
+    if not session.get("data_given"):
+        session["data_given"] = True
+        return redirect(url_for("data", session_id=session_id))
+
+    # Check if consent has been given
+    if not session.get("instructions_given"):
+        session["instructions_given"] = True
+        return redirect(url_for("instructions", session_id=session_id))
 
     # If there are no image files in the folder, return an error message
     if not image_files:
         return "No image files found in the upload folder."
 
+    index = session.get("index", 0)
+
     # Determine the index of the current image based on the 'index' form parameter
     if request.method == "POST":
         if request.form["submit_button"] == "Next":
-            index = int(request.form["index"]) + 1
+            descriptions = request.form["descriptions"]
+            interpretability = request.form["interpretability"]
+
+            fname = image_files[index]
+            # Split the descriptions with a comma
+            descriptions = descriptions.split(",")
+            descriptions = descriptions + [""] * (5 - len(descriptions))
+
+            # Add the descriptions to the output dataframe at the index
+            output.loc[index] = [fname, *descriptions, interpretability]
+
+            # Save the results to a CSV file
+            output.to_csv(
+                os.path.join(THIS_FOLDER, "results", f"{SESSION_ID}.csv"), index=False
+            )
+
+            index += 1
+
             if index == len(image_files):
-                return redirect(url_for("end"))
-        else:
-            index = int(request.form["index"]) - 1
-    else:
-        index = 0
+                if index == len(image_files):
+                    return redirect(url_for("end"))
 
-    # Load the current image and render the template
+        elif request.form["submit_button"] == "Previous":
+            index -= 1
+
     filename = image_files[index]
-    filepath = os.path.join("static", "images", filename)
+    filepath = os.path.join(
+        "https://fmahner.pythonanywhere.com/static/images/", filename
+    )
+    session["filepath"] = filepath
+    session["index"] = index
 
-    return render_template("index.html", image_filepath=filepath, index=index)
+    return redirect(url_for("show_index", session_id=session_id))
 
 
 @app.route("/end")
@@ -68,4 +153,4 @@ def end():
 
 
 if __name__ == "__main__":
-    app.run()
+    app.run(port=3000)
