@@ -1,90 +1,100 @@
-import time
 import torch
 import numpy as np
-import random
 from object_dimensions import ExperimentParser
-from object_dimensions.utils.utils import load_sparse_codes
+from object_dimensions.utils.utils import (
+    load_sparse_codes,
+    load_image_data,
+    correlate_rsms,
+)
 from scipy.stats import pearsonr
+from tqdm import tqdm
+from typing import Tuple
+
 
 parser = ExperimentParser()
 parser.add_argument("--human_embedding", type=str, default="./results/human")
 parser.add_argument("--dnn_embedding", type=str, default="./results/dnn")
+parser.add_argument(
+    "--img_root",
+    type=str,
+    default="./data/reference_images",
+    help="Path to image root directory",
+)
 
 
-def compute_argmax_accuracy(similarity_matrix, device):
-    """Compute the accuracy of the argmax of the similarity matrix. The accuracy is
-    computed by counting the number of times the argmax of the similarity matrix is
-    (i,j) for a random (i,j) tuple and all (i,k) and (k,j) tuples.)"""
-    n_objects = similarity_matrix.shape[0]
-    similarity_matrix = torch.from_numpy(similarity_matrix).to(device)
+def rsm_reconstructed(embedding: np.ndarray) -> Tuple[np.ndarray, float]:
+    """Compute the reconstruction similarity matrix for a given embedding."""
+    sim_matrix = embedding @ embedding.T
+    sim_matrix = torch.tensor(sim_matrix).double()
+    sim_matrix = sim_matrix.exp().cuda()
 
-    # Set the diagonal to zero
-    similarity_matrix = similarity_matrix - torch.diag(torch.diag(similarity_matrix))
+    n_objects = len(sim_matrix)
+    indices = torch.tril_indices(n_objects, n_objects, offset=-1)
+    batch_size = 10_000
+    n_indices = indices.shape[1]
+    n_batches = (indices.shape[1] + batch_size - 1) // batch_size
+    n_batches = min(1000, n_batches)
 
-    # Create tuples for only the lower triangular part, offset by -1 to exclude the diagonal
-    indices = torch.tril_indices(n_objects, n_objects, offset=-1).T
-    indices = indices.to(device)
+    rsm = torch.zeros_like(sim_matrix).double()
+    ooo_accuracy = 0.0
+    pbar = tqdm(total=n_batches, miniters=1)
 
-    # Select a random subset of the indices
-    random.seed(0)
-    indices = indices[random.sample(range(len(indices)), 1_000_000)]
+    for batch_idx in range(n_batches):
+        start_idx = batch_idx * batch_size
+        end_idx = min(start_idx + batch_size, n_indices)
 
-    n_ij = len(indices)
-    cell_accuracy = torch.zeros(n_ij, device=device)
+        batch_indices = indices[:, start_idx:end_idx]
+        i, j = batch_indices[0], batch_indices[1]
 
-    start_time = time.time()
-    for ctr in range(n_ij):
-        i, j = indices[ctr]
+        s_ij = sim_matrix[i, j]
+        s_jk = sim_matrix[:, j]
+        s_ik = sim_matrix[i, :]
 
-        s_ij = similarity_matrix[i, j]
-        s_kj = similarity_matrix[:, j]
-        s_ik = similarity_matrix[i, :]
-        values = torch.stack([s_ij.repeat(n_objects), s_kj, s_ik], dim=1)
+        # I want at each column to set the value of s_ik to zero at index i
+        # and the value of s_jk to zero at index j. Using this the softmax
+        # will be 1 for the i and j indices.
+        n = end_idx - start_idx
+        n_range = np.arange(n)
+        s_ik[n_range, i] = 0
+        s_jk[j, n_range] = 0
+        softmax_ij = s_ij / (s_ij + s_jk + s_ik.T)
 
-        # Use torch.argmax to get the indices of the max values along the first dimension.
-        argmax_indices = torch.argmax(values, dim=1)
+        # We take the mean over all k, but we need to exclude the i and j that is
+        # why we subtract 2 from each column
+        proba_sum = softmax_ij.sum(0) - 2
+        mean_proba = proba_sum / (n_objects - 2)
+        rsm[i, j] = mean_proba
+        ooo_accuracy += mean_proba.mean()
 
-        # Count the number of times the argmax is (i,j)
-        # This give me the probability of the argmax being (i,j) for a random (i,j) tuple given all k
-        argmax_ij = (argmax_indices == 0).sum()
+        pbar.set_description(f"Batch {batch_idx+1}/{n_batches}")
+        pbar.update(1)
 
-        # Compute the accuracy by dividing by the number of objects (k)
-        argmax_accuracy = argmax_ij / n_objects
-        cell_accuracy[ctr] = argmax_accuracy
+    pbar.close()
+    rsm = rsm.cpu().numpy()
+    rsm += rsm.T  # make similarity matrix symmetric
+    np.fill_diagonal(rsm, 1)
+    ooo_accuracy = ooo_accuracy.item() / n_batches
 
-        print("Ctr: ", ctr, end="\r")
-
-        # Print time used for 1 million iterations
-        if ctr + 1 % 1_000_000 == 0:
-            print(f"Time used for 1 million iterations: {time.time() - start_time}")
-            start_time = time.time()
-
-    cell_accuracy = cell_accuracy.cpu().numpy()
-    return cell_accuracy
+    return rsm, ooo_accuracy
 
 
 def main(args):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
     human_embedding = load_sparse_codes(args.human_embedding)
     dnn_embedding = load_sparse_codes(args.dnn_embedding)
-    sim_human = human_embedding @ human_embedding.T
-    sim_dnn = dnn_embedding @ dnn_embedding.T
-
-    accuracy_dnn = compute_argmax_accuracy(sim_dnn, device)
-    accuracy_human = compute_argmax_accuracy(sim_human, device)
-
-    print("DNN accuracy: ", accuracy_dnn.mean())
-    print("Human accuracy: ", accuracy_human.mean())
-
-    breakpoint()
-
-    corr = pearsonr(accuracy_dnn, accuracy_human)[0]
-    print("Correlation: ", corr)
+    indices = load_image_data(args.img_root, filter_behavior=True)[1]
+    dnn_embedding = dnn_embedding[indices]
+    rsm_dnn, ooo_dnn = rsm_reconstructed(dnn_embedding)
+    rsm_human, ooo_human = rsm_reconstructed(human_embedding)
+    rho = correlate_rsms(rsm_dnn, rsm_human)
+    print(
+        f"RSM correlation: {rho:.9f}, OOO DNN: {ooo_dnn:.5f}, OOO human: {ooo_human:.5f}",
+    )
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
     args.human_embedding = "./data/misc/vice_embedding_lukas_66d.txt"
+    args.img_root = "./data/image_data/images12_plus"
     args.dnn_embedding = "results/sslab_final/deep/vgg16_bn/classifier.3/20.mio/sslab/300/256/0.24/0/params/parameters.npz"
     main(args)
