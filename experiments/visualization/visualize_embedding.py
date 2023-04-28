@@ -42,8 +42,12 @@ parser.add_argument(
 
 
 parser.add_argument(
-    "--behav-experiment", default=False, action="store_true", help="Plots large images for behavior experiment"
+    "--behav-experiment",
+    default=False,
+    action="store_true",
+    help="Plots large images for behavior experiment",
 )
+
 
 def plot_dim_3x3(images, codes, dim, top_k=10):
     # Check if codes is 2d or 1d
@@ -56,36 +60,76 @@ def plot_dim_3x3(images, codes, dim, top_k=10):
     top_k_samples = np.argsort(-weight)[:top_k]  # this is over the image dimension
     fig, axes = plt.subplots(3, 3, figsize=(6, 6))
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0.0, hspace=0.0)
-    
+
     for k, sample in enumerate(top_k_samples):
         ax = axes[k // 3, k % 3]
         ax.set_xticks([])
         ax.set_yticks([])
         ax.axis("off")
         img = io.imread(images[sample])
-        
+
         ax.imshow(img)
     return fig
 
 
-def plot_large(images, codes, dim, top_k=16):
+def plot_dim_1x8(images, codes, dim, top_k=10):
     # Check if codes is 2d or 1d
     if len(codes.shape) == 1:
         weight = codes
     else:
         weight = codes[:, dim]
 
+    top_k = 8
     top_k_samples = np.argsort(-weight)[:top_k]  # this is over the image dimension
-    fig, axes = plt.subplots(4, 4, figsize=(16, 16))
-    fig.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0.0, hspace=0.0)
+    fig, axes = plt.subplots(1, 8, figsize=(8, 1))
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0.05, hspace=0.0)
+
     for k, sample in enumerate(top_k_samples):
-        ax = axes[k // 4, k % 4]
+        ax = axes[k % 8]
         ax.set_xticks([])
         ax.set_yticks([])
         ax.axis("off")
-        print(images[sample])
         img = io.imread(images[sample])
+
         ax.imshow(img)
+    return fig
+
+
+def plot_large(images, codes, dim, top_k=6):
+    # Check if codes is 2d or 1d
+    if len(codes.shape) == 1:
+        weight = codes
+    else:
+        weight = codes[:, dim]
+
+    weight_indices = np.argsort(-weight)
+    # Shape of weight_indices is (n_samples, ) usually 24102
+    n = int(len(weight_indices))
+
+    n_rows = 7
+    n_cols = 12
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(24, 15))
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0.05, hspace=0.0)
+    for i, p in enumerate(np.arange(0, n_rows * 8, 8)):
+        middle_idx = int(n * ((p / 100)))
+        start_idx = max(0, middle_idx - 6)  # for the lowest 20 percentile
+        end_idx = min(n, middle_idx + 12)  # for the highest 20 percentile
+        weight_percentile = weight_indices[start_idx:end_idx]
+
+        for j, sample in enumerate(weight_percentile):
+            ax = axes[i, j]
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.axis("off")
+            ax.set_ylabel(str(p))
+            img = io.imread(images[sample])
+            ax.imshow(img)
+
+            if j == 11:
+                # breakpoint()
+                break
+
     return fig
 
 
@@ -134,41 +178,40 @@ def plot_per_dim(args):
     n_dims = W.shape[1]
 
     for dim in range(n_dims):
-
         if args.behav_experiment:
-            behav_path = os.path.join(base_path, "analyses", "behavior_experiment", "images")
+            behav_path = os.path.join(
+                base_path, "analyses", "behavior_experiment", "images"
+            )
             if not os.path.exists(behav_path):
                 os.makedirs(behav_path)
             fig_large = plot_large(images, W, dim, top_k=16)
-            for ext in ["png", "pdf"]:
+            for ext in ["jpg"]:
                 fname = os.path.join(behav_path, f"{dim}_topk{append}_large.{ext}")
-                fig_large.savefig(fname, dpi=150, bbox_inches="tight", pad_inches=0)
+                fig_large.savefig(fname, dpi=100, bbox_inches="tight", pad_inches=0)
             plt.close(fig_large)
             print(f"Done plotting for dim {dim} large")
             continue
 
-
         fig_5x2 = plot_dim(images, W, dim, top_k)
         fig_3x3 = plot_dim_3x3(images, W, dim, top_k)
+        fig_1x8 = plot_dim_1x8(images, W, dim, top_k)
 
         # fig.suptitle("Dimension: {}".format(dim))
         out_path = os.path.join(results_path, f"{dim:02d}")
         if not os.path.exists(out_path):
             os.makedirs(out_path)
-    
+
         for ext in ["png", "pdf"]:
             fname = os.path.join(out_path, f"{dim}_topk{append}_5x2.{ext}")
             fig_5x2.savefig(fname, dpi=300, bbox_inches="tight", pad_inches=0)
             fname = os.path.join(out_path, f"{dim}_topk{append}_3x3.{ext}")
             fig_3x3.savefig(fname, dpi=300, bbox_inches="tight", pad_inches=0)
+            fname = os.path.join(out_path, f"{dim}_topk{append}_1x8.{ext}")
+            fig_1x8.savefig(fname, dpi=300, bbox_inches="tight", pad_inches=0)
         plt.close(fig_5x2)
         plt.close(fig_3x3)
+        plt.close(fig_1x8)
         print(f"Done plotting for dim {dim}")
-
-        
-
-
-    
 
 
 def plot_dimensions(args):
@@ -191,6 +234,24 @@ def plot_dimensions(args):
     print("Shape of weight Matrix", W.shape)
     W = W.T
 
+    base_path = os.path.dirname(os.path.dirname(args.embedding_path))
+    filename = os.path.basename(args.embedding_path)
+    epoch = filename.split("_")[-1].split(".")[0]
+    out_path = os.path.join(base_path, "analyses")
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
+
+    # Plot W as a matrix with dots in black and white
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ax.imshow(W, cmap="gray", interpolation="nearest")
+    ax.axis("off")
+    fig.savefig(
+        os.path.join(out_path, "weight_matrix.pdf"),
+        dpi=300,
+        bbox_inches="tight",
+        pad_inches=0,
+    )
+
     top_k = 12
     n_rows = W.shape[0]
     n_cols = top_k
@@ -211,13 +272,6 @@ def plot_dimensions(args):
             if k == 0:
                 ax.set_ylabel(f"{j}", rotation=0, va="center", ha="right", fontsize=14)
 
-    # Save figure in predefined embedding path directory
-    base_path = os.path.dirname(os.path.dirname(args.embedding_path))
-    filename = os.path.basename(args.embedding_path)
-    epoch = filename.split("_")[-1].split(".")[0]
-    out_path = os.path.join(base_path, "analyses")
-    if not os.path.exists(out_path):
-        os.makedirs(out_path)
     fname = os.path.join(out_path, "all_dimensions{}_epoch_{}.png")
 
     if args.filter_behavior:
