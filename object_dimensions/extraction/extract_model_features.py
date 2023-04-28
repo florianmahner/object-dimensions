@@ -21,12 +21,33 @@ from thingsvision import get_extractor
 from thingsvision.utils.data import DataLoader, ImageDataset
 from thingsvision.core.extraction import center_features
 
-parser = ExperimentParser(description='Extract features from a dataset using a pretrained model')
-parser.add_argument('--img_root', type=str, default='./data/THINGS', help='Path to image dataset')
-parser.add_argument('--out_path', type=str, default='./data/vgg_features', help='Path to save features')
-parser.add_argument('--batch_size', type=int, default=64, help='Batch size for the dataloader to extract features')
-parser.add_argument('--model_name', type=str, default='vgg16_bn', help='Name of the pretrained model to use')
-parser.add_argument('--module_name', type=str, default='classifier.3', help='Name of the layer to extract features from')
+parser = ExperimentParser(
+    description="Extract features from a dataset using a pretrained model"
+)
+parser.add_argument(
+    "--img_root", type=str, default="./data/THINGS", help="Path to image dataset"
+)
+parser.add_argument(
+    "--out_path", type=str, default="./data/vgg_features", help="Path to save features"
+)
+parser.add_argument(
+    "--batch_size",
+    type=int,
+    default=64,
+    help="Batch size for the dataloader to extract features",
+)
+parser.add_argument(
+    "--model_name",
+    type=str,
+    default="vgg16_bn",
+    help="Name of the pretrained model to use",
+)
+parser.add_argument(
+    "--module_name",
+    type=str,
+    default="classifier.3",
+    help="Name of the layer to extract features from",
+)
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -49,7 +70,7 @@ def load_model(model_name):
 
 
 def extract_features(img_root, out_path, model_name, module_name, batch_size):
-    """ Extract features from a dataset using a pretrained model """
+    """Extract features from a dataset using a pretrained model"""
     extractor = load_model(model_name)
     dataset = ImageDataset(
         root=img_root,
@@ -72,8 +93,8 @@ def extract_features(img_root, out_path, model_name, module_name, batch_size):
     )
 
     if model_name in ["clip", "OpenCLIP"]:
-        features = center_features(features) 
-    save_features(features, out_path, file_format='npy')
+        features = center_features(features)
+    save_features(features, out_path, file_format="npy")
 
 
 if __name__ == "__main__":
