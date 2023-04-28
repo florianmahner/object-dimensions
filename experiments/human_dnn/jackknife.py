@@ -27,7 +27,6 @@ from object_dimensions import VariationalEmbedding as model
 
 def compute_softmax_per_batch(q_mu, q_var, indices, device):
     """This function extracts the embedding vectors at the indices of the most diverging triplets and computes the
-    """This function extracts the embedding vectors at the indices of the most diverging triplets and computes the
     softmax decision for each of them"""
 
     if not isinstance(indices, torch.Tensor):
@@ -36,7 +35,6 @@ def compute_softmax_per_batch(q_mu, q_var, indices, device):
     indices = indices.type("torch.LongTensor")
     indices = indices.to(device)
     ind_i, ind_j, ind_k = indices.unbind(1)
-
 
     # Reparametrize an embedding
     torch.manual_seed(0)  # fix the seed so that this is not stochastic!
@@ -51,29 +49,35 @@ def compute_softmax_per_batch(q_mu, q_var, indices, device):
     sim_ik = torch.sum(embedding_i * embedding_k, dim=1)
     sim_jk = torch.sum(embedding_j * embedding_k, dim=1)
 
-    # compute the log softmax loss, i.e. we just look at the argmax anyways!
-    sims = torch.stack([sim_ij, sim_ik, sim_jk])
-    softmax = F.softmax(sims, dim=0)  # i.e. BS x 3
+    sims = torch.stack([sim_ij, sim_ik, sim_jk], 1)
+    softmax = F.softmax(sims, dim=1)  # i.e. BS x 3
 
     return softmax
 
 
 def compute_softmax_decisions(q_mu, q_var, val_loader, device):
     """We compute the softmax choices for all triplets"""
-    n_val = len(val_loader)
-    softmax_decisions = []
-    ooo_indices = []
+
     q_mu = torch.tensor(q_mu).to(device)
     q_var = torch.tensor(q_var).to(device)
 
-    for k, indices in enumerate(val_loader):
-        print("Batch {}/{}".format(k, n_val), end="\r")
-        softmax = compute_softmax_per_batch(q_mu, q_var, indices, device)        
-        softmax_decisions.append(softmax.detach().cpu().numpy())
-        ooo_indices.append(indices.detach().cpu().numpy())
+    n_batch = len(val_loader)
+    n_val = len(val_loader.dataset)
+    bs = val_loader.batch_size
 
-    softmax_decisions = np.concatenate(softmax_decisions, 1)
-    ooo_indices = np.concatenate(ooo_indices).astype(int)
+    softmax_decisions = torch.zeros(n_val, 3, device=device)
+    ooo_indices = torch.zeros(n_val, 3, device=device)
+
+    for k, indices in enumerate(val_loader):
+        print("Batch {}/{}".format(k, n_batch), end="\r")
+        softmax = compute_softmax_per_batch(q_mu, q_var, indices, device)
+        # Add the softmax at the correct index
+        softmax_decisions[k * bs : (k + 1) * bs] = softmax.detach()
+        ooo_indices[k * bs : (k + 1) * bs] = indices.detach()
+
+    softmax_decisions = softmax_decisions.detach().cpu().numpy()
+    ooo_indices = ooo_indices.detach().cpu().numpy()
+    ooo_indices = ooo_indices.astype(int)
 
     return softmax_decisions, ooo_indices
 
@@ -106,12 +110,10 @@ def jackknife(q_mu, q_var, triplet_indices, device, ooo_index=0):
 
     n_dims = q_mu.shape[1]
     softmax_diff = np.ones((len(triplet_indices), n_dims)) * float("inf")
-    most_important_dim = np.zeros(len(triplet_indices), dtype=int)
-
-    softmax_all = np.ones((len(triplet_indices), n_dims))
 
     # Without jackknifing for that triplet
-    softmax_default = compute_softmax_per_batch(q_mu, q_var, triplet_indices, device)[0]
+    softmax_default = compute_softmax_per_batch(q_mu, q_var, triplet_indices, device)
+    softmax_default = softmax_default[:, ooo_index]
     softmax_default = softmax_default.detach().cpu().numpy()
 
     for i in range(n_dims):
@@ -123,19 +125,15 @@ def jackknife(q_mu, q_var, triplet_indices, device, ooo_index=0):
         softmax_per_batch = compute_softmax_per_batch(
             q_mu_i, q_var_i, triplet_indices, device
         )
-        # softmax_per_batch = softmax_per_batch[-1] # This is the odd one out probability (at index k)
-        softmax_per_batch = softmax_per_batch[
-            ooo_index
-        ]  # This is the similarity of object i,j (k) is the odd one out
 
+        # This is the odd one out probability (at the index of the odd one out)
+        softmax_per_batch = softmax_per_batch[:, ooo_index]
         softmax_per_batch = softmax_per_batch.detach().cpu().numpy()
-        softmax_all[:, i] = softmax_per_batch
         softmax_diff[:, i] = np.abs(softmax_per_batch - softmax_default)
 
+    most_important_dim = np.argmax(softmax_diff, axis=1)
 
-    most_important_dim = np.argmin(softmax_all, axis=1)
-
-    return softmax_diff, most_important_dim
+    return softmax_default, softmax_diff, most_important_dim
 
 
 def build_dataloader(triplet_path):
@@ -144,7 +142,6 @@ def build_dataloader(triplet_path):
     val_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=64, shuffle=False, num_workers=8
     )
-
     return val_loader
 
 
@@ -188,7 +185,6 @@ def plot_bar(decisions, dimensions, out_path="./rose.png"):
 
     # Add labels
     for bar, angle, height, label in zip(bars, angles, df["softmax"], df["dim"]):
-
         # Labels are rotated. Rotation must be specified in degrees :(
         rotation = np.rad2deg(angle)
 
@@ -213,7 +209,6 @@ def plot_bar(decisions, dimensions, out_path="./rose.png"):
         )
 
     plt.savefig(out_path, bbox_inches="tight", pad_inches=0)
-    plt.savefig(out_path, bbox_inches="tight", pad_inches=0)
 
 
 def run_jackknife(
@@ -225,24 +220,25 @@ def run_jackknife(
     triplet_path,
     plot_dir,
     topk=12,
-    comparison="dnn",
 ):
-    """This function runs the jackknife analysis for a given embedding 
-    TODO Write a description for this I will really forget otherwise since its pretty complicated """
+    """This function runs the jackknife analysis for a given embedding
+    TODO Write a description for this I will really forget otherwise since its pretty complicated
+    """
     save_dict = dict()
 
     # If all data on GPU, num workers need to be 0 and pin memory false
     device = (
         torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
     )
-    device = (
-        torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-    )
+
     val_loader = build_dataloader(triplet_path)
 
-    softmax_human, triplets = compute_softmax_decisions(human_weights, human_var, val_loader, device)
-    softmax_dnn, triplets = compute_softmax_decisions(dnn_weights, dnn_var, val_loader, device)
-
+    softmax_human, triplets = compute_softmax_decisions(
+        human_weights, human_var, val_loader, device
+    )
+    softmax_dnn, triplets = compute_softmax_decisions(
+        dnn_weights, dnn_var, val_loader, device
+    )
 
     # All combinations of softmax probabilities for the odd one out
     numbers = [0, 1, 2]
@@ -256,24 +252,45 @@ def run_jackknife(
         str_1, str_2 = [lookup_table[i] for i in comb]
         identifiers.append((str_1, str_2))
 
-    for (comb, iden) in zip(combinations, identifiers):
+    for comb, iden in zip(combinations, identifiers):
         str_1, str_2 = iden
         index_1, index_2 = comb
 
-        softmax_human_choice = softmax_human[index_1]
-        softmax_dnn_choice = softmax_dnn[index_2]
+        softmax_human_choice = softmax_human[:, index_1]
+        softmax_dnn_choice = softmax_dnn[:, index_2]
 
-        most_diverging_indices = find_diverging_triplets(softmax_human_choice, softmax_dnn_choice, topk)
- 
+        most_diverging_indices = find_diverging_triplets(
+            softmax_human_choice, softmax_dnn_choice, topk
+        )
+
         # For each triplet, find the most important dimension by jackknifing it iteratively
-        jackknife_results = dict()    
+        jackknife_results = dict()
         for name, diverging_triplets in most_diverging_indices.items():
             interesting_triplets = triplets[diverging_triplets]
-            important_human = jackknife(human_weights, human_var, interesting_triplets, device, ooo_index=index_1)[1]
-            important_dnn = jackknife(dnn_weights, dnn_var, interesting_triplets, device, ooo_index=index_2)[1]
-            jackknife_results[name] = {"triplets": interesting_triplets, "dims_human": important_human, "dims_dnn": important_dnn}
 
-        iden = "dnn_{}_human_{}".format(str_1, str_2)
+            softmax_default_human, softmax_diff_human, important_human = jackknife(
+                human_weights,
+                human_var,
+                interesting_triplets,
+                device,
+                ooo_index=index_1,
+            )
+
+            softmax_default_dnn, softmax_diff_dnn, important_dnn = jackknife(
+                dnn_weights, dnn_var, interesting_triplets, device, ooo_index=index_2
+            )
+
+            jackknife_results[name] = {
+                "triplets": interesting_triplets,
+                "softmax_diff_human": softmax_diff_human,
+                "softmax_default_human": softmax_default_human,
+                "softmax_diff_dnn": softmax_diff_dnn,
+                "softmax_default_dnn": softmax_default_dnn,
+                "dims_human": important_human,
+                "dims_dnn": important_dnn,
+            }
+
+        iden = "human_{}_dnn_{}".format(str_1, str_2)
         save_dict[iden] = jackknife_results
 
     save_dict["softmax_human"] = softmax_human

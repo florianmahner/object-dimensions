@@ -65,7 +65,6 @@ parser.add_argument(
 )
 
 
-
 def get_rdm(embedding, method="correlation"):
     embedding = np.maximum(0, embedding)
     rsm = compute_rdm(embedding, method)
@@ -81,11 +80,12 @@ def normalise_rdm(rdm):
 
 
 def compare_human_dnn(args):
-
     dnn_embedding, dnn_var = load_sparse_codes(args.dnn_path, with_var=True)
     human_embedding, human_var = load_sparse_codes(args.human_path_base, with_var=True)
-    human_embedding_comp, human_var_comp = load_sparse_codes(args.human_path_comp, with_var=True)
-    
+    human_embedding_comp, human_var_comp = load_sparse_codes(
+        args.human_path_comp, with_var=True
+    )
+
     # # Load the image data
     plot_dir = create_path_from_params(args.dnn_path, "analyses", "human_dnn")
     print("Save all human dnn comparisons to {}".format(plot_dir))
@@ -95,9 +95,17 @@ def compare_human_dnn(args):
 
     run_embedding_analysis(human_embedding, dnn_embedding, image_filenames, plot_dir)
 
-    plot_dir = create_path_from_params(args.dnn_path, "analyses", "jackknife_human_dnn")
+    base_path = os.path.dirname(os.path.dirname(args.dnn_path))
 
-    
+    plot_dir = os.path.join(
+        base_path,
+        "analyses",
+        "jackknife_human_dnn",
+    )
+
+    if not os.path.exists(plot_dir):
+        os.makedirs(plot_dir)
+
     run_jackknife(
         human_embedding,
         human_var,
@@ -106,12 +114,25 @@ def compare_human_dnn(args):
         image_filenames,
         args.triplet_path,
         plot_dir,
-        comparison="dnn",
     )
 
-    # if args.human_path_comp:
-    #     plot_dir = create_path_from_params(args.dnn_path, "analyses", "jacknife_human_human")
-    #     run_jackknife(human_embedding, human_var, human_embedding_comp, human_var_comp, image_filenames, args.triplet_path, plot_dir, 12, "human")
+    if args.human_path_comp:
+        plot_dir = os.path.join(
+            base_path,
+            "analyses",
+            "jackknife_human_human",
+        )
+        if not os.path.exists(plot_dir):
+            os.makedirs(plot_dir)
+        run_jackknife(
+            human_embedding,
+            human_var,
+            human_embedding_comp,
+            human_var_comp,
+            image_filenames,
+            args.triplet_path,
+            plot_dir,
+        )
 
 
 if __name__ == "__main__":
