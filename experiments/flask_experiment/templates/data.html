@@ -125,4 +125,22 @@
 
 </body>
 
+<script>
+	(function () {
+		var links = document.getElementsByTagName('a');
+		for (var i = 0; i < links.length; i++) {
+			var link = links[i];
+			var href = link.getAttribute('href');
+			var random = Math.random();
+			if (href.indexOf('?') > -1) {
+				href += '&random=' + random;
+			} else {
+				href += '?random=' + random;
+			}
+			link.setAttribute('href', href);
+		}
+	})();
+</script>
+
+
 </html>

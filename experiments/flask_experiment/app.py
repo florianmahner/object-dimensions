@@ -75,6 +75,15 @@ def show_index():
     return render_template("index.html", image_filepath=image_filepath, index=index)
 
 
+@app.after_request
+def add_header(response):
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    response.headers["Cache-Control"] = "public, max-age=0"
+    return response
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     session_id = request.args.get("session_id")

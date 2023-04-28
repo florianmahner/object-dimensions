@@ -31,7 +31,7 @@
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            padding: 40;
+            padding: 30;
             margin-right: 20px;
         }
 
@@ -108,22 +108,21 @@
                 <span class="shaded-bar-text">Low</span>
             </div>
             <div class="image-wrapper">
-                <img src="{{ image_filepath }}" alt="Image" width="800">
+                <img src="{{ image_filepath }}" alt="Image" width="1000">
             </div>
         </div>
         <form action="/" method="POST">
             <br>
             <input type="text" name="descriptions" placeholder="Enter up to 5 descriptions (separated by commas)"
-                pattern=^([a-zA-Z]+\s*,\s*){0,4}[a-zA-Z]+$ required>
-
+                pattern="^([a-zA-Z-]+\s*,\s*){0,4}[a-zA-Z-]+$" required>
             <br>
 
             <br>
 
             <!-- # Make a field that says rate the interpretability from     1-10 -->
             <input type="number" name="interpretability"
-                placeholder="Rate the interpretability from 1 (not interpretable) - 10 (very interpretable)" min="1"
-                max="10" required>
+                placeholder="Rate collection from 1 (not interpretable) - 10 (very interpretable)" min="1" max="10"
+                required>
             <br>
             <br>
 
@@ -153,6 +152,21 @@
                 }
             });
         });
+        (function () {
+            var links = document.getElementsByTagName('a');
+            for (var i = 0; i < links.length; i++) {
+                var link = links[i];
+                var href = link.getAttribute('href');
+                var random = Math.random();
+                if (href.indexOf('?') > -1) {
+                    href += '&random=' + random;
+                } else {
+                    href += '?random=' + random;
+                }
+                link.setAttribute('href', href);
+            }
+        })();
+
     </script>
 </body>
 

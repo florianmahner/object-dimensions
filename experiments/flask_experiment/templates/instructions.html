@@ -23,7 +23,7 @@
         display: flex;
         flex-direction: column;
         justify-content: space-between;
-        padding: 20;
+        padding: 0;
         margin-right: 20px;
     }
 
@@ -68,22 +68,17 @@
                 </div>
             </div>
 
-            <p>The purpose of this study is to identify the most important images in a collection. The images are ranked
-                from
-                <span style="color:red">high</span> to <span style="color:red">low</span> importance. The images in the
-                top row
-                are the most important, while the images in the bottom row are the least important.
-            </p>
+            <p>The purpose of this study is to identify common features that describe a collection of images (186 in
+                total). In each collection, we show images ranked by their relevance to the collection. Images in the
+                top have <span style="color:red">high</span>
+                relevance whereas images in the bottom row have <span style="color:red">low</span> relevance
 
             <p>Your task is to describe each collection with 3 to 5 specific words that capture the essence of the
-                images. For
-                example, instead of saying "houses" or "buildings," try to be more specific, such as "residential,"
-                "commercial,"
-                "industrial," "historic," "modern," "traditional," "abandoned," "ruins," "skyscrapers," "tall
-                buildings," or "small."</p>
+                images. For example, instead of saying "houses" or "buildings," try to be more specific, such as
+                "residential," "commercial," "industrial," "historic," "modern," "traditional," "abandoned," "ruins,"
+                "skyscrapers," "tall-buildings," or "small-buildings."</p>
 
-
-            <p>For example, one possible description for the image sample above could be:</p>
+            <p>One possible description for the image sample above could be:</p>
 
             <ul style="display: inline-block; text-align: left; margin: 0 auto; padding-left: 0;">
                 <li>Many small things</li>
@@ -93,9 +88,10 @@
                 <li>Piles</li>
             </ul>
 
-            <p>After describing each collection, we ask that you rate its interpretability on a scale from 1 to 10, with
-                1 being the
-                least interpretable and 10 being the most interpretable.</p>
+            <p>After describing each collection, please rate its interpretability on a scale from 1 to
+                10, with 1 being the <span style="color:red">least</span> interpretable and 10 being the <span
+                    style="color:red">most</span>
+                interpretable.</p>
 
             <br><br>
 
@@ -108,5 +104,23 @@
 
     </form>
 </body>
+
+<script>
+    (function () {
+        var links = document.getElementsByTagName('a');
+        for (var i = 0; i < links.length; i++) {
+            var link = links[i];
+            var href = link.getAttribute('href');
+            var random = Math.random();
+            if (href.indexOf('?') > -1) {
+                href += '&random=' + random;
+            } else {
+                href += '?random=' + random;
+            }
+            link.setAttribute('href', href);
+        }
+    })();
+</script>
+
 
 </html>
