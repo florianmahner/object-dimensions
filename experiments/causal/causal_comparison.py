@@ -25,26 +25,33 @@ parser.add_argument(
 
 # Each entry of dims is sorted by increase, decrease, relevant control, irrelevant control
 CAUSAL_DIMS = dict()
-CAUSAL_DIMS["toilet.jpg"] = {"increase": 37, 
-                             "decrease": 12, 
-                             "relevant_control": 14, 
-                             "irrelevant_control": 70}
+CAUSAL_DIMS["toilet.jpg"] = {
+    "increase": 37,
+    "decrease": 12,
+    "relevant_control": 14,
+    "irrelevant_control": 70,
+}
 
-CAUSAL_DIMS["bottle.jpg"] = {"increase": 58, 
-                             "decrease": 66, 
-                             "relevant_control": 22, 
-                             "irrelevant_control": 71}
+CAUSAL_DIMS["bottle.jpg"] = {
+    "increase": 58,
+    "decrease": 66,
+    "relevant_control": 22,
+    "irrelevant_control": 71,
+}
 
-CAUSAL_DIMS["basketball.jpg"] = {"increase": 2, 
-                                 "decrease": 100, 
-                                 "relevant_control": 52, 
-                                 "irrelevant_control": 78}
+CAUSAL_DIMS["basketball.jpg"] = {
+    "increase": 2,
+    "decrease": 100,
+    "relevant_control": 52,
+    "irrelevant_control": 78,
+}
 
-CAUSAL_DIMS["lemon.jpg"] = {"increase": 86, 
-                            "decrease": 171, 
-                            "relevant_control": 52, 
-                            "irrelevant_control": 49}
-
+CAUSAL_DIMS["lemon.jpg"] = {
+    "increase": 86,
+    "decrease": 171,
+    "relevant_control": 52,
+    "irrelevant_control": 49,
+}
 
 
 def load_img_and_predict_codes(path, predictor):
@@ -64,8 +71,8 @@ def run_causal_comparison(embedding_path, img_root):
     out_path = os.path.join(base_path, "analyses", "causal_comparison")
     if not os.path.exists(out_path):
         os.makedirs(out_path)
-        
-    images, indices = load_image_data(img_root, filter_plus=False)
+
+    images, indices = load_image_data(img_root, filter_plus=True)
     Y = load_sparse_codes(embedding_path)
     Y = Y[indices]
 
@@ -91,7 +98,12 @@ def run_causal_comparison(embedding_path, img_root):
         ax.set_xlabel("Dimension")
         ax.set_ylabel("Difference in prediction")
         ax.set_xticks(np.arange(0, len(all_diffs), 10))
-        fig.savefig(os.path.join(out_path, img_name.split(".")[0] + "_histogram.png"), dpi=300, bbox_inches="tight", pad_inches=0)
+        fig.savefig(
+            os.path.join(out_path, img_name.split(".")[0] + "_histogram.png"),
+            dpi=300,
+            bbox_inches="tight",
+            pad_inches=0,
+        )
         plt.close(fig)
 
         dims = [*dim_order.values()]
@@ -104,37 +116,37 @@ def run_causal_comparison(embedding_path, img_root):
         sns.set_style("whitegrid")
 
         # Create a barplot and dont sort the values on the x-axis, but take the order from the dims
-        ax = sns.barplot(x=dims, y=diff_predictions, order=dims)
+
+        ax = sns.barplot(y=dims, x=diff_predictions, order=dims)
 
         # Set the labels to [Increase, Decrease, Relevant Control, Irrelevant Control]
-        labels = ["Increase", "Decrease", "Control A", "Control B"]
-        ax.set_xticklabels(labels)
-        ax.set_ylabel("Difference in prediction")
+        # labels = ["Increase", "Decrease", "Control A", "Control B"]
+        # ax.set_xticklabels(labels)
+        # ax.set_ylabel("Difference in prediction")
 
         img_base = img_name.split(".")[0]
-        f_path = os.path.join(out_path, img_base) 
+        f_path = os.path.join(out_path, img_base)
         if os.path.exists(f_path):
             for f in os.listdir(f_path):
                 os.remove(os.path.join(f_path, f))
         else:
             os.makedirs(f_path)
 
-        for name, index in dim_order.items():      
+        for name, index in dim_order.items():
             fig_img = plot_dim(images, Y, index, top_k=10)
-            fig_name = os.path.join(f_path, img_base + "_{}_dim_{}.png").format(name, index)
-            fig_img.savefig(fig_name, dpi=300, bbox_inches="tight", pad_inches=0)
+            for ext in ["pdf", "png"]:
+                fname = os.path.join(f_path, f"{img_base}_{name}_dim_{index}.{ext}")
+                fig_img.savefig(fname, bbox_inches="tight", dpi=300)
             plt.close(fig_img)
 
         for ext in ["pdf", "png"]:
             fname = os.path.join(f_path, f"{img_base}_histogram.{ext}")
             fig.savefig(fname, bbox_inches="tight", dpi=300)
 
-    
         orig_img = Image.open(orig_path)
         orig_img.save(os.path.join(f_path, img_name.replace(".jpg", ".pdf")))
         manip_img = Image.open(manip_path)
         manip_img.save(os.path.join(f_path, img_name.replace(".jpg", "_manip.pdf")))
-        
 
 
 if __name__ == "__main__":
