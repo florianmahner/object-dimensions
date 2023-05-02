@@ -8,7 +8,7 @@ from object_dimensions.utils.utils import (
 )
 from object_dimensions import ExperimentParser
 from object_dimensions.utils.latent_predictor import LatentPredictor
-from experiments.visualization.visualize_embedding import plot_dim
+from experiments.visualization.visualize_embedding import plot_dim_3x2
 
 from PIL import Image
 
@@ -77,6 +77,15 @@ def run_causal_comparison(embedding_path, img_root):
     Y = Y[indices]
 
     for img_name, dim_order in CAUSAL_DIMS.items():
+        # Create path
+        img_base = img_name.split(".")[0]
+        f_path = os.path.join(out_path, img_base)
+        if os.path.exists(f_path):
+            for f in os.listdir(f_path):
+                os.remove(os.path.join(f_path, f))
+        else:
+            os.makedirs(f_path)
+
         print("Running for ", img_name)
         orig_path = os.path.join(causal_root, "original", img_name)
         codes_orig = load_img_and_predict_codes(orig_path, predictor)
@@ -111,38 +120,36 @@ def run_causal_comparison(embedding_path, img_root):
         codes_manip = codes_manip[dims]
         diff_predictions = codes_manip - codes_orig
 
-        fig = plt.figure(figsize=(10, 4))
-        sns.set_context("paper", font_scale=1.0)
-        sns.set_style("whitegrid")
+        fig, ax = plt.subplots(figsize=(6, 3))
+        sns.set_context("paper", font_scale=0.8)
+        sns.set_style("white")
+
+        custom_colors = ["#3399CC", "#FF6666", "#3CB371", "#DAA520"]
+        sns.set_palette(custom_colors)
 
         # Create a barplot and dont sort the values on the x-axis, but take the order from the dims
+        sns.barplot(y=diff_predictions, x=dims, order=dims, ax=ax)
+        sns.despine()
 
-        ax = sns.barplot(y=dims, x=diff_predictions, order=dims)
+        ax.grid(False)
 
-        # Set the labels to [Increase, Decrease, Relevant Control, Irrelevant Control]
-        # labels = ["Increase", "Decrease", "Control A", "Control B"]
-        # ax.set_xticklabels(labels)
-        # ax.set_ylabel("Difference in prediction")
-
-        img_base = img_name.split(".")[0]
-        f_path = os.path.join(out_path, img_base)
-        if os.path.exists(f_path):
-            for f in os.listdir(f_path):
-                os.remove(os.path.join(f_path, f))
-        else:
-            os.makedirs(f_path)
-
-        for name, index in dim_order.items():
-            fig_img = plot_dim(images, Y, index, top_k=10)
-            for ext in ["pdf", "png"]:
-                fname = os.path.join(f_path, f"{img_base}_{name}_dim_{index}.{ext}")
-                fig_img.savefig(fname, bbox_inches="tight", dpi=300)
-            plt.close(fig_img)
+        Set the labels to [Increase, Decrease, Relevant Control, Irrelevant Control]
+        labels = ["Increase", "Decrease", "Control A", "Control B"]
+        ax.set_xticklabels(labels, fontsize=10)
+        ax.set_ylabel("Difference in prediction")
 
         for ext in ["pdf", "png"]:
             fname = os.path.join(f_path, f"{img_base}_histogram.{ext}")
-            fig.savefig(fname, bbox_inches="tight", dpi=300)
+            fig.savefig(fname, bbox_inches="tight", dpi=300, pad_inches=0)
 
+        plt.close(fig)
+
+        for (name, index), color in zip(dim_order.items(), custom_colors):
+            fig_img = plot_dim_3x2(images, Y, index, top_k=10)
+            for ext in ["pdf", "png"]:
+                fname = os.path.join(f_path, f"{img_base}_{name}_dim_{index}.{ext}")
+                fig_img.savefig(fname, bbox_inches="tight", dpi=300, pad_inches=0)
+            plt.close(fig_img)
         orig_img = Image.open(orig_path)
         orig_img.save(os.path.join(f_path, img_name.replace(".jpg", ".pdf")))
         manip_img = Image.open(manip_path)
