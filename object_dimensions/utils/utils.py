@@ -68,7 +68,8 @@ class ExperimentParser:
 
     def parse_args(self, combined_section="general"):
         """Parse the arguments from the command line and the configuration file.
-        If a section name is provided, only the arguments in that section will be parsed from the .toml file"""
+        If a section name is provided, only the arguments in that section will be parsed from the .toml file
+        """
         default_args, cmdl_args = self._extract_args()
 
         # These are the default arguments options updated by the command line
@@ -115,7 +116,7 @@ class ExperimentParser:
                 setattr(cmdl_args, key, value)
 
         return cmdl_args
-    
+
 
 # ------- Helper Functions for images ------- #
 
@@ -162,6 +163,7 @@ def get_image_transforms():
         ]
     )
     return transforms
+
 
 def save_figure(fig, out_path, dpi=300, extensions=["pdf", "png"], **kwargs):
     """Save a figure to disk"""
@@ -274,11 +276,14 @@ def transform_params(weights, scale, relu=True):
     return weights, scale, sorted_dims
 
 
-
-def load_sparse_codes(path, weights=None, vars=None, with_dim=False, with_var=False, relu=True):
+def load_sparse_codes(
+    path, weights=None, vars=None, with_dim=False, with_var=False, relu=True
+):
     """Load sparse codes from a directory. Can either be a txt file or a npy file or a loaded array of shape (n_images, n_dims)"""
     if weights is not None and vars is not None:
-        assert isinstance(weights, np.ndarray) and isinstance(vars, np.ndarray), "Weights and var must be numpy arrays"
+        assert isinstance(weights, np.ndarray) and isinstance(
+            vars, np.ndarray
+        ), "Weights and var must be numpy arrays"
 
     elif isinstance(path, str):
         if path.endswith(".txt"):
@@ -305,7 +310,7 @@ def load_sparse_codes(path, weights=None, vars=None, with_dim=False, with_var=Fa
         else:
             weights = path["pruned_weights"]
             vars = np.zeros_like(weights)
-    
+
     else:
         raise ValueError(
             "Weights or Vars must be a .txt file path or as numpy array or .npz file"
@@ -324,7 +329,6 @@ def load_sparse_codes(path, weights=None, vars=None, with_dim=False, with_var=Fa
         if with_var:
             return weights, vars
         else:
-
             return weights
 
 
@@ -417,7 +421,7 @@ def log_normal_pdf(X, loc, scale):
     X = F.relu(X) + 1e-12
     const = 1 / (X * scale * LOG_NORMAL_CONST)
     numerator = -((torch.log(X) - loc) ** 2)
-    denominator = 2 * scale ** 2
+    denominator = 2 * scale**2
     pdf = const * torch.exp(numerator / denominator)
 
     return pdf

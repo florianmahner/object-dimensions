@@ -7,7 +7,8 @@ from PIL import Image
 
 
 class ImageDataset:
-    """ Loads all images in a given directory and stores its filenames and paths """
+    """Loads all images in a given directory and stores its filenames and paths"""
+
     def __init__(self, img_root, out_path, transforms=None):
         self.img_root = img_root
         self.out_path = out_path
@@ -15,7 +16,7 @@ class ImageDataset:
         self.transforms = transforms
 
     def _find_image_paths(self):
-        """ Find all images ending with .jpg in image_root recursively """
+        """Find all images ending with .jpg in image_root recursively"""
         path = os.path.join(self.img_root, "**", "*.jpg")
         self.samples = glob.glob(path, recursive=True)
         self.samples = sorted(self.samples)

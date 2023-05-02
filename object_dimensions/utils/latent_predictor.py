@@ -14,6 +14,7 @@ import torchvision.models as models
 import torch.nn as nn
 import torchvision.transforms as T
 
+
 def load_regression_weights(path, in_features, out_features, to_numpy=False):
     # This loads the regression weight in the decoding layer!
     W = torch.zeros(out_features, in_features, dtype=torch.float32)
@@ -45,26 +46,34 @@ class LatentPredictor(nn.Module):
         regression_path="",
     ):
         super().__init__()
-        extractor = get_extractor(model_name=model_name, pretrained=True, device=device, source='torchvision')
+        extractor = get_extractor(
+            model_name=model_name, pretrained=True, device=device, source="torchvision"
+        )
         model = extractor.model
-        model = model.eval() 
+        model = model.eval()
         # model = model.train()
 
         self.feature_extractor = model.features
 
         # Get up the second to last element of the featrue extractor
-        self.feature_extractor = nn.Sequential(*list(self.feature_extractor.children())[:-1])
-        
+        self.feature_extractor = nn.Sequential(
+            *list(self.feature_extractor.children())[:-1]
+        )
+
         # Get the maxpooling layer
         self.maxpool = model.features[-1]
 
         self.classifier = model.classifier
-        self.classifier_trunc = model.classifier[:int(module_name[-1])+1] # we only compute up to the classifying layer that we want to use 
+        self.classifier_trunc = model.classifier[
+            : int(module_name[-1]) + 1
+        ]  # we only compute up to the classifying layer that we want to use
         self.pooling = model.avgpool
-        self.transforms = extractor.get_transformations() # Image transformations of the model!
+        self.transforms = (
+            extractor.get_transformations()
+        )  # Image transformations of the model!
 
         # Find the number of regression weights, we have one regression weight per dimension.
-        self.embedding_dim = len(glob.glob(os.path.join(regression_path, '*.joblib')))
+        self.embedding_dim = len(glob.glob(os.path.join(regression_path, "*.joblib")))
         assert self.embedding_dim > 0, "No regression weights found!"
 
         self.device = device
@@ -102,22 +111,22 @@ class LatentPredictor(nn.Module):
         latent_codes = self.regression(features)
         latent_codes = F.relu(latent_codes)
         return latent_codes.squeeze()
-    
+
     def get_activations(self, img, transform=True):
-        """ Extracts the activations of the last layer of the feature extractor prior 
+        """Extracts the activations of the last layer of the feature extractor prior
         to pooling and classification etc."""
         if transform:
             img = self.transforms(img)
         if img.dim() == 3:
-            img = img.view(1, *img.shape) 
+            img = img.view(1, *img.shape)
         img = img.to(self.device)
         features = self.feature_extractor(img)
 
         return features, img
-        
+
     def extract_features_from_img(self, img, transform=True):
         features, img = self.get_activations(img, transform=transform)
-        # We register the hook before the maxpool layer of the feature extractor, 
+        # We register the hook before the maxpool layer of the feature extractor,
         # so that the resulting heatmap is twice the size
         h = features.register_hook(self.activations_hook)
         self.maxpool(features)
@@ -127,8 +136,7 @@ class LatentPredictor(nn.Module):
         features = F.relu(logits)
         probas = F.softmax(logits, dim=1)
         return probas, features
-    
+
     def predict_codes_from_img(self, img, transform=True):
         _, latent_codes = self.forward(img, transform=transform)
         return latent_codes
-
