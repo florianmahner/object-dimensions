@@ -34,27 +34,6 @@ from PIL import Image
 
 parser = ExperimentParser(description="Optimize and sample StyleGAN")
 parser.add_argument(
-    "--embedding_path",
-    type=str,
-    default="./weights/params/pruned_q_mu_epoch_300.txt",
-    help="Path to weights directory",
-)
-parser.add_argument(
-    "--model_name", type=str, default="vgg16_bn", help="Model to load from THINGSvision"
-)
-parser.add_argument(
-    "--module_name",
-    type=str,
-    default="classifier.3",
-    help="Layer of the model to load from THINGSvision",
-)
-parser.add_argument(
-    "--n_samples",
-    type=int,
-    default=2_000_000,
-    help="Number of latent samples to generate",
-)
-parser.add_argument(
     "--window_size",
     type=int,
     default=50,
@@ -80,12 +59,6 @@ parser.add_argument(
     type=int,
     default=2_000_000,
     help="Number of latent samples to generate",
-)
-parser.add_argument(
-    "--window_size",
-    type=int,
-    default=50,
-    help="Window size of trainer to check convergence of latent dimenisonality",
 )
 parser.add_argument("--batch_size", type=int, default=8, help="Batch size for sampling")
 parser.add_argument(
@@ -140,9 +113,12 @@ transforms = torchvision.transforms.Compose(
         torchvision.transforms.ToTensor(),
         torchvision.transforms.Resize((256, 256)),
         torchvision.transforms.CenterCrop(224),
-        torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        torchvision.transforms.Normalize(
+            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+        ),
     ]
 )
+
 
 def load_style_gan():
     # Load the generator from style gan xl
@@ -166,27 +142,12 @@ def find_topk_latents(
     top_k,
     device,
 ):
-
-def find_topk_latents(
-    model_name,
-    module_name,
-    embedding_path,
-    n_samples,
-    batch_size,
-    truncation,
-    top_k,
-    device,
-):
     device = torch.device(device)
     base_path = os.path.dirname(os.path.dirname(embedding_path))
     regression_path = os.path.join(base_path, "analyses", "sparse_codes")
     out_path = os.path.join(base_path, "analyses", "per_dim")
 
     if not os.path.exists(regression_path):
-        raise FileNotFoundError(
-            f"Regression path {regression_path} does not exist. Run sparse code predictions \
-                                              first before optimizing latents."
-        )
         raise FileNotFoundError(
             f"Regression path {regression_path} does not exist. Run sparse code predictions \
                                               first before optimizing latents."
@@ -202,31 +163,8 @@ def find_topk_latents(
         out_path=out_path,
         device=device,
     )
-    predictor = SparseCodesPredictor(
-        n_samples=n_samples,
-        n_dims=latent_predictor.embedding_dim,
-        batch_size=batch_size,
-        truncation=truncation,
-        top_k=top_k,
-        out_path=out_path,
-        device=device,
-    )
     predictor.predict_latent(latent_predictor)
 
-
-def optimize_latents(
-    model_name,
-    module_name,
-    embedding_path,
-    dim,
-    lr,
-    max_iter,
-    truncation,
-    alpha,
-    beta,
-    window_size,
-    device,
-):
 
 def optimize_latents(
     model_name,
@@ -301,7 +239,8 @@ class StyleGanGenerator(object):
         class_idx=None,
     ):
         """Get the dlatent from a list of random seeds, using the truncation trick (this could be optional)
-        Florian: Adapted this from the original repository to add noise on the centroids!"""
+        Florian: Adapted this from the original repository to add noise on the centroids!
+        """
         dim = G.c_dim
         # dim = 0
         if dim != 0:
@@ -332,7 +271,6 @@ class StyleGanGenerator(object):
 
         # multimodal truncation
         if centroids_path is not None:
-
             with util.open_url(centroids_path, verbose=False) as f:
                 w_centroids = np.load(f)
             w_centroids = torch.from_numpy(w_centroids).to(device)
@@ -358,7 +296,6 @@ class StyleGanGenerator(object):
         translate = (0, 0)
         translate = (0, 0)
         rotate = 0
-        if hasattr(self.generator.synthesis, "input"):
         if hasattr(self.generator.synthesis, "input"):
             m = make_transform(translate, rotate)
             m = np.linalg.inv(m)
@@ -425,35 +362,32 @@ class StyleGanGenerator(object):
 
 class StyleGanDataset(torch.utils.data.Dataset):
     def __init__(
-        self, base_path="./data/stylegan_dataset", transform=None, return_latent=True
+        self,
+        base_path="./data/stylegan_dataset",
+        transform=None,
+        return_latent=True,
+        n_samples=None,
     ):
-        self.latent_paths = glob.glob(os.path.join(base_path, "latents", "*.npz"))
-        self.image_paths = glob.glob(os.path.join(base_path, "images", "*.jpg"))
-
+        self.latent_paths = sorted(
+            glob.glob(os.path.join(base_path, "latents", "*.npz"))
+        )
+        self.image_paths = sorted(glob.glob(os.path.join(base_path, "images", "*.jpg")))
         random.seed(0)
         random.shuffle(self.latent_paths)
+        random.seed(0)
         random.shuffle(self.image_paths)
-
-
-        # self.latent_paths.sort()
-        # self.image_paths.sort()
-        # assert len(self.latent_paths) == len(self.image_paths), "Latent and image paths do not match"
-
+        self.n_samples = n_samples if n_samples else len(self.latent_paths)
         self.transform = transform
         self.return_latent = return_latent
 
     def __len__(self):
-        return 100_000
-        # return len(self.latent_paths)
+        return self.n_samples
 
     def __getitem__(self, idx):
         image = Image.open(self.image_paths[idx])
         image = image.convert("RGB")
-
-
         if self.transform:
             image = self.transform(image)
-
         if self.return_latent:
             latent = np.load(self.latent_paths[idx])
             return image, latent
@@ -464,14 +398,8 @@ class StyleGanDataset(torch.utils.data.Dataset):
 class SparseCodesPredictor(object):
     """Generate n latent samples a priori for optimization of latent embeddings
     We generate n images for this using the pretrained style gan and then select the topk images that maximally
-    activate each of the embedding dimension. We then optimize for these topk latents!"""
-
-    def __init__(
-        self, n_samples, n_dims, batch_size, truncation, top_k, out_path, device
-    ):
-    """Generate n latent samples a priori for optimization of latent embeddings
-    We generate n images for this using the pretrained style gan and then select the topk images that maximally
-    activate each of the embedding dimension. We then optimize for these topk latents!"""
+    activate each of the embedding dimension. We then optimize for these topk latents!
+    """
 
     def __init__(
         self, n_samples, n_dims, batch_size, truncation, top_k, out_path, device
@@ -484,17 +412,15 @@ class SparseCodesPredictor(object):
         self.out_path = out_path
         self.device = device
         self.dataset = StyleGanDataset(
-            base_path="./data/stylegan_dataset_centroids", transform=transforms
+            base_path="./data/stylegan_dataset_centroids",
+            transform=transforms,
+            n_samples=n_samples,
         )
-
         if not os.path.exists(self.out_path):
             print("Creating directories...\n")
             print("Creating directories...\n")
             os.makedirs(self.out_path)
 
-    def predict_latent(self, comparator):
-        """Sample latent using StyleGAN Xl batch wise and generate sparse code predictions for all images.
-        Store the top k latents and images for each dimension to disk."""
     def predict_latent(self, comparator):
         """Sample latent using StyleGAN Xl batch wise and generate sparse code predictions for all images.
         Store the top k latents and images for each dimension to disk."""
@@ -529,7 +455,7 @@ class SparseCodesPredictor(object):
         # Filter out codes that are too similar
         prev = topk_codes[0]
         filtered_indices = []
-        eps = 0.01
+        eps = 0.05
         for i in range(1, len(topk_codes)):
             if torch.abs((prev - topk_codes[i])) > eps:
                 filtered_indices.append(i)
@@ -554,9 +480,7 @@ class SparseCodesPredictor(object):
                 img, latent = self.dataset[index]
                 topk_images.append(img)
                 topk_latents.append(latent)
-                topk_latents.append(latent)
 
-            out_path = os.path.join(self.out_path, f"{j:02d}", "sampled_latents")
             out_path = os.path.join(self.out_path, f"{j:02d}", "sampled_latents")
             if not os.path.exists(out_path):
                 os.makedirs(out_path)
@@ -601,24 +525,13 @@ class SparseCodesPredictor(object):
         out_path = os.path.dirname(out_path)
         for ext in ["png", "pdf"]:
             fname = os.path.join(out_path, f"{dim}_stylegan.{ext}")
-            fig.savefig(fname, dpi=300, bbox_inches="tight")
+            fig.savefig(fname, dpi=300, bbox_inches="tight", pad_inches=0)
         plt.close(fig)
 
 
-
 class Optimizer(nn.Module):
-    def __init__(
-        self,
-        lr,
-        max_iter,
-        dim,
-        in_path,
-        truncation,
-        device,
-        alpha=0.15,
-        beta=2.0,
-        window_size=50,
-    ):
+    """Optimize the latent topk latent codes for selected dimensions"""
+
     def __init__(
         self,
         lr,
@@ -645,7 +558,6 @@ class Optimizer(nn.Module):
         self.window_size = window_size
         self.threshold = 2e-4
 
-
     def optimize_latents(self, generator, comparator):
         sampled_latents = self._load_latents()
         latent_shape = (len(sampled_latents),) + sampled_latents[0].shape
@@ -655,13 +567,14 @@ class Optimizer(nn.Module):
         comparator.to(self.device)
         for k, latent in enumerate(sampled_latents):
             print(f"Optimization: {(k):02d}\n")
-            optimized_latent, optimized_image = self.train(latent, generator, comparator)
+            optimized_latent, optimized_image = self.train(
+                latent, generator, comparator
+            )
             optimized_latents[k] += optimized_latent.cpu()
             optimized_images.append(optimized_image.cpu().squeeze(0))
             # optimized_images.append(gen÷erator(optimized_latent, self.truncation).detach().cpu().squeeze(0))
         self._save_latents(optimized_latents)
         self._save_images(optimized_images)
-
 
     def train(self, sampled_latent, generator, comparator):
         sampled_latent = torch.from_numpy(sampled_latent)
@@ -674,26 +587,28 @@ class Optimizer(nn.Module):
             param.requires_grad = True
 
         transforms = torchvision.transforms.Compose(
-            [   torchvision.transforms.Resize((256, 256)),
+            [
+                torchvision.transforms.Resize((256, 256)),
                 torchvision.transforms.CenterCrop(224),
-                torchvision.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                torchvision.transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
             ]
-        )   
-    
+        )
+
         for i in range(self.max_iter):
             # Get sparse codes from latent
             img = gen_utils.w_to_img(generator, latent.to(self.device), to_np=False)
             img = img.clamp(0, 255)
-            img = img / 255    
-
-            img = transforms(img)    
+            img = img / 255
+            img = transforms(img)
             codes = comparator(img, transform=False)[1]
 
             # Calculate loss, increase the absolute value in a dimension
             # and decrease the NLL in that dimension
-            log_code = F.log_softmax(codes, dim=0)[self.dim]      
+            log_code = F.log_softmax(codes, dim=0)[self.dim]
             abs_loss = -self.alpha * codes[self.dim]
-            nll = (-self.beta * log_code)  
+            nll = -self.beta * log_code
             loss = abs_loss + nll
 
             optim.zero_grad()
@@ -705,15 +620,6 @@ class Optimizer(nn.Module):
                 f"Iteration: {(i+1):02d}, Abs loss: {abs_loss:.3f}, NLL: {nll:.3f}",
                 end="\r",
             )
-
-            if (i + 1) % self.window_size == 0 and (i + 1) > self.min_iter:
-                window = losses[(i + 1 - self.window_size) : i + 1]
-                print("Checking convergence criterion...\n")
-            print(
-                f"Iteration: {(i+1):02d}, Abs loss: {abs_loss:.3f}, NLL: {nll:.3f}",
-                end="\r",
-            )
-
             if (i + 1) % self.window_size == 0 and (i + 1) > self.min_iter:
                 window = losses[(i + 1 - self.window_size) : i + 1]
                 print("Checking convergence criterion...\n")
@@ -726,7 +632,6 @@ class Optimizer(nn.Module):
         return latent.data.detach(), img.detach()
 
     def _load_latents(self):
-        in_path = os.path.join(self.in_path, f"{self.dim:02d}", "sampled_latents")
         in_path = os.path.join(self.in_path, f"{self.dim:02d}", "sampled_latents")
         if not os.path.exists(in_path):
             raise Exception(f"No latent vectors sampled for dimension: {self.dim:02d}")
@@ -763,7 +668,6 @@ class Optimizer(nn.Module):
         fig.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0.0, hspace=0.0)
         topk = 10
         for k, img in enumerate(images):
-
             img = img.permute(1, 2, 0).numpy()
             img = img_to_uint8(img)
 
@@ -771,7 +675,6 @@ class Optimizer(nn.Module):
             ax_im.axis("off")
             ax_im.imshow(img)
             for ext in ["png", "pdf"]:
-
                 fig_im.savefig(
                     os.path.join(img_path, f"optimized_image_{k:02d}.{ext}"),
                     dpi=300,
@@ -789,11 +692,10 @@ class Optimizer(nn.Module):
 
         for ext in ["png", "pdf"]:
             fname = os.path.join(out_path, f"{self.dim}_stylegan_optimized.{ext}")
-            fig.savefig(fname, dpi=300, bbox_inches="tight")
+            fig.savefig(fname, dpi=300, bbox_inches="tight", pad_inches=0)
         plt.close(fig)
 
 
-if __name__ == "__main__":
 if __name__ == "__main__":
     args = parser.parse_args()
     np.random.seed(args.seed)
@@ -802,12 +704,17 @@ if __name__ == "__main__":
 
     if args.sample_dataset:
         print("Sampling latents...\n")
-        generator = StyleGanGenerator(out_path="./data/stylegan_dataset_centroids", n_samples=args.n_samples, truncation=args.truncation,
-                                           batch_size=args.batch_size, device=args.device)
+        generator = StyleGanGenerator(
+            out_path="./data/stylegan_dataset_centroids",
+            n_samples=args.n_samples,
+            truncation=args.truncation,
+            batch_size=args.batch_size,
+            device=args.device,
+        )
         generator.sample_dataset()
 
     # We can either sample latents again or optimize previously stored ones
-    if args.find_topk:    
+    if args.find_topk:
         find_topk_latents(
             args.model_name,
             args.module_name,
@@ -819,7 +726,7 @@ if __name__ == "__main__":
             args.device,
         )
 
-    if args.optimize_topk:    
+    if args.optimize_topk:
         for dim in args.dim:
             print("Optimizing dimension: {}".format(dim))
             optimize_latents(
