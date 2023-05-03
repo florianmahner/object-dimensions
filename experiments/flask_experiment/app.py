@@ -14,7 +14,18 @@ import uuid
 import pandas as pd
 from datetime import datetime, timedelta
 
-app = Flask(__name__, template_folder="templates")
+
+def generate_id():
+    id = str(uuid.uuid4())
+    time = datetime.now().strftime("%d-%m-%Y-%H%M%S")
+    session_id = time + "_" + id
+    return session_id
+
+
+app = Flask(__name__)
+SESSION_ID = generate_id()
+app.secret_key = SESSION_ID
+app.permanent_session_lifetime = timedelta(minutes=120)
 
 # Configure the folder to store uploaded images
 THIS_FOLDER = Path(__file__).parent.resolve()
@@ -40,17 +51,6 @@ image_files = sorted(image_files, key=lambda x: int(x.split("_")[0]))
 
 descriptions = [f"description_{i}" for i in range(1, 6)]
 output = pd.DataFrame(columns=["image_file", *descriptions, "interpretability"])
-
-
-def generate_id():
-    id = str(uuid.uuid4())
-    time = datetime.now().strftime("%d-%m-%Y-%H%M%S")
-    session_id = time + "_" + id
-    return session_id
-
-
-SESSION_ID = generate_id()
-app.secret_key = SESSION_ID
 
 
 @app.route("/consent", methods=["GET", "POST"])
@@ -84,12 +84,21 @@ def add_header(response):
     return response
 
 
+@app.route("/start_new_session")
+def start_new_session():
+    session.clear()  # Clear the existing session data
+    return redirect(url_for("index"))
+
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     session_id = request.args.get("session_id")
     if not session_id:
         # Generate a new session ID
         session_id = generate_id()
+        session.permanent = (
+            True  # Set the session to expire after the specified lifetime
+        )
         session["session_id"] = session_id
     else:
         # Check if the session ID matches the current session
@@ -162,4 +171,4 @@ def end():
 
 
 if __name__ == "__main__":
-    app.run(port=3000)
+    app.run(port=2500)

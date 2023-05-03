@@ -121,7 +121,7 @@
 
             <!-- # Make a field that says rate the interpretability from     1-10 -->
             <input type="number" name="interpretability"
-                placeholder="Rate collection from 1 (not interpretable) - 10 (very interpretable)" min="1" max="10"
+                placeholder="Rate collection from 1 (not interpretable) - 5 (very interpretable)" min="1" max="5"
                 required>
             <br>
             <br>
@@ -166,6 +166,12 @@
                 link.setAttribute('href', href);
             }
         })();
+
+        window.addEventListener('load', function () {
+        if (performance.navigation.type === performance.navigation.TYPE_RELOAD) {
+            location.href = "/start_new_session";
+        }
+    });
 
     </script>
 </body>
