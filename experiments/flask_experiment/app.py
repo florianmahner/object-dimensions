@@ -1,5 +1,6 @@
 import os
 import glob
+import random
 from flask import (
     Flask,
     render_template,
@@ -46,8 +47,8 @@ image_files = glob.glob(os.path.join(UPLOAD_FOLDER, "**", "*.jpg"), recursive=Tr
 image_files = [os.path.basename(f) for f in image_files]
 image_files.remove("instructions.jpg")
 
-# I have the image file in the format num_topk_large.png. sort by number
 image_files = sorted(image_files, key=lambda x: int(x.split("_")[0]))
+random.shuffle(image_files)  # Each participant sees a different order
 
 descriptions = [f"description_{i}" for i in range(1, 6)]
 output = pd.DataFrame(columns=["image_file", *descriptions, "interpretability"])

@@ -95,6 +95,14 @@
             padding: 10px;
             font-size: 18px;
         }
+        .sample-counter {
+            position: fixed;
+            bottom: 10px;
+            right: 20px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
     </style>
 
 </head>
@@ -102,6 +110,7 @@
 <body style="font-family:verdana ;width: 1000px; margin: 0 auto; text-align: center; font-size: 20px;">
 
     <div class="all">
+            
         <div class="image-container">
             <div class="shaded-bar">
                 <span class="shaded-bar-text">High</span>
@@ -114,14 +123,15 @@
         <form action="/" method="POST">
             <br>
             <input type="text" name="descriptions" placeholder="Enter up to 5 descriptions (separated by commas)"
-                pattern="^([a-zA-Z-]+\s*,\s*){0,4}[a-zA-Z-]+$" required>
+       pattern="^([a-zA-Z-\s]+\s*,\s*){0,4}[a-zA-Z-\s]+$" required>
+
             <br>
 
             <br>
 
             <!-- # Make a field that says rate the interpretability from     1-10 -->
             <input type="number" name="interpretability"
-                placeholder="Rate collection from 1 (not interpretable) - 5 (very interpretable)" min="1" max="5"
+                placeholder="Rate collection from 1 (not interpretable) - 7 (very interpretable)" min="1" max="7"
                 required>
             <br>
             <br>
@@ -132,6 +142,13 @@
                 <input type="submit" name="submit_button" value="Next">
             </div>
         </form>
+
+        <div class="sample-counter">
+            <!-- Place this in the lower right -->
+            {{ index + 1}}/186
+         </div>
+
+        
     </div>
 
     <!-- Add a key listenser that silences enter -->
