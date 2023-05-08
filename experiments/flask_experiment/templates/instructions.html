@@ -16,6 +16,8 @@
         display: flex;
         margin: 50px auto;
         padding: 0px;
+        text-align: center;
+
     }
 
     .shaded-bar {
@@ -45,7 +47,7 @@
     }
 </style>
 
-<body style="font-family:verdana ;width: 800px; margin: 0 auto; text-align: justify; font-size: 20px;">
+<body style="font-family:verdana ;width: 800px; margin: auto; text-align: center; font-size: 20px;">
     <center>
         <h1>Instructions</h1>
     </center>
@@ -53,31 +55,44 @@
 
         <div class="main">
 
-            <p>In this experiment, we present you with a series of image samples, with each sample containing a grid of 5 x 6 images:</p>
+            <p>In the following experiment, you are asked to provide labels for 186 image collections of object properties. 
+            These labels can be descriptive words or categories. Each of the following slides will show example object images 
+            from high to low values for one of the collections. Your task is to come up with verbal labels for each of the collections. 
+            When providing labels, try not to focus exclusively on the top of the collection but take the full range of objects into account. 
+            You can provide at least one and up to as many verbal labels for each collection as you consider reasonable.
+
+            </p>
+
+            <p>Each collection contains a grid of 5 x 6 images:</p>
+            
             <div class="image-container">
                 <div class="shaded-bar">
                     <span class="shaded-bar-text">High</span>
                     <span class="shaded-bar-text">Low</span>
                 </div>
                 <div class="image-wrapper">
-                    <img src="https://fmahner.pythonanywhere.com/static/images/instructions.jpg" alt="Image"
-                        width="800">
+                    <img src="https://fmahner.pythonanywhere.com/static/images/instructions.jpg" alt="Image" width="800">
                 </div>
             </div>
-            <p>You will be asked to come up with labels for 186 samples like this. The task consists of two steps:</p>
-            <ol style="list-style-position: inside; text-align: center;">
-                <li>Understand the quality represented in the images and how it changes from <span style="color:red">high</span> to <span style="color:red">low</span> values.</li>
-                <li>Generate up to five short labels that describe this quality.</li>
-            </ol>
-            <p>The experiment will begin after this screen. The objects in the images are representative examples of each level along the scale you can see on the left, ranging from <span style="color:red">high</span> to <span style="color:red">low</span>.
-                Even though examples in the middle part of the scale may seem less representative, they are still meaningful and should play a role in your judgment to a certain degree. 
-                In other words, do not solely rely on the commonalities of the top few images, but inspect how the object quality continuously decreases.</p>
-            <p>Your task is to describe each collection with <span style="color:red">up to</span> 5 specific words that capture the essence of the images.
-                 Keep in mind that the dimensions in these collections can represent more than one quality.</p>
-            <p>After labeling each collection, rate its interpretability on a scale from 1 to 7, with 1 being the <span style="color:red">least</span> interpretable 
-                and 7 being the <span style="color:red">most</span> interpretable. Interpretability refers to the ease of understanding the relationship between the images, primarily in the upper rows.</p>
+            
+            <p>Try to be specific when generating labels. For example, for the collection above, one possibility of labels could be:</p>
+
+            <p>
+            
+            <ul style="display: inline-block; text-align: left; margin: 0 auto; padding-left: 0;">
+                <li>vessel</li>
+                <li>round</li>
+                <li>used to cook</li>
+                <li>food-related</li>
+            </ul>
+            </p>    
+            
             <p>Remember, dimensions in these collections may represent multiple qualities. Be as comprehensive as possible when generating your labels.</p>
-            <br><br>
+            
+            <p>After labeling each collection, rate its interpretability on a scale from 1 to 7, with 1 being the <span style="color:red">least</span> 
+                interpretable and 7 being the <span style="color:red">most</span> interpretable. Interpretability refers to the ease of understanding 
+                the relationship between the images, primarily in the upper rows.</p>
+        
 
             <input type="submit" value="Start" style="font-size: 20px;">
 
