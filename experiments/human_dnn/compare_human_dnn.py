@@ -54,32 +54,14 @@ parser.add_argument(
     help="Path to the behavior triplets used for jackknife analysis",
 )
 parser.add_argument(
-    "--evaluation_key",
+    "--concepts",
     type=str,
-    help="Key to aggregate over that is contained in the path",
+    help="Path to the things concept csv",
 )
-parser.add_argument(
-    "--analysis_key",
-    type=str,
-    help="Key to analyze that is contained in the parameters.npz file",
-)
-
-
-def get_rdm(embedding, method="correlation"):
-    embedding = np.maximum(0, embedding)
-    rsm = compute_rdm(embedding, method)
-    rsm = fill_diag(rsm)
-    rsm = rankdata(rsm).reshape(rsm.shape)
-
-    return rsm
-
-
-def normalise_rdm(rdm):
-    rdm = rdm / np.max(rdm)
-    return rdm
 
 
 def compare_human_dnn(args):
+    """Compare the human and DNN embeddings"""
     dnn_embedding, dnn_var = load_sparse_codes(args.dnn_path, with_var=True)
     human_embedding, human_var = load_sparse_codes(args.human_path_base, with_var=True)
     human_embedding_comp, human_var_comp = load_sparse_codes(
@@ -93,7 +75,9 @@ def compare_human_dnn(args):
     dnn_embedding = dnn_embedding[indices]
     dnn_var = dnn_var[indices]
 
-    run_embedding_analysis(human_embedding, dnn_embedding, image_filenames, plot_dir)
+    run_embedding_analysis(
+        human_embedding, dnn_embedding, image_filenames, plot_dir, args.concepts
+    )
 
     base_path = os.path.dirname(os.path.dirname(args.dnn_path))
 
@@ -111,7 +95,6 @@ def compare_human_dnn(args):
         human_var,
         dnn_embedding,
         dnn_var,
-        image_filenames,
         args.triplet_path,
         plot_dir,
     )
@@ -129,7 +112,6 @@ def compare_human_dnn(args):
             human_var,
             human_embedding_comp,
             human_var_comp,
-            image_filenames,
             args.triplet_path,
             plot_dir,
         )
