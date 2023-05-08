@@ -13,31 +13,43 @@ import seaborn as sns
 from skimage.transform import resize
 import skimage.io as io
 
-from object_dimensions.utils.utils import correlate_rsms, correlation_matrix
+from object_dimensions.utils.utils import (
+    correlate_rsms,
+    correlation_matrix,
+    load_sparse_codes,
+    load_image_data,
+    create_path_from_params,
+)
 from scipy.stats import rankdata, pearsonr
+from object_dimensions import ExperimentParser
 
 
-parser = argparse.ArgumentParser(
+parser = ExperimentParser(
     description="Compare human and DNN performance on the same task."
 )
+parser.add_argument("--human_path", type=str, help="Path to human embedding matrix.")
+parser.add_argument("--dnn_path", type=str, help="Path to DNN embedding matrix.")
 parser.add_argument(
-    "--human_embedding_path", type=str, help="Path to human embedding matrix."
+    "--img_root", type=str, help="Path to VGG feature matrix and filenames"
 )
 parser.add_argument(
-    "--dnn_embedding_path", type=str, help="Path to DNN embedding matrix."
-)
-parser.add_argument(
-    "--feature_path", type=str, help="Path to VGG feature matrix and filenames"
+    "--concept_path", type=str, help="Path to concept matrix and filenames"
 )
 
 
-import numpy as np
-from scipy.stats import pearsonr
+def load_concepts(path="./data/misc/category_mat_manual.tsv"):
+    concepts = pd.read_csv(path, encoding="utf-8", sep="\t")
+    return concepts
 
-def compare_modalities(weights_human, weights_dnn, duplicates=False, not_sorted=False, all_dims=False):
+
+def compare_modalities(
+    weights_human, weights_dnn, duplicates=False, not_sorted=False, all_dims=False
+):
     """Compares the Human behavior embedding to the VGG embedding by correlating them."""
-    
-    assert weights_dnn.shape[0] == weights_human.shape[0], "Number of items in weight matrices must align."
+
+    assert (
+        weights_dnn.shape[0] == weights_human.shape[0]
+    ), "Number of items in weight matrices must align."
     dim_human, dim_dnn = weights_human.shape[1], weights_dnn.shape[1]
     if dim_human < dim_dnn:
         dim_smaller, dim_larger = dim_human, dim_dnn
@@ -53,9 +65,9 @@ def compare_modalities(weights_human, weights_dnn, duplicates=False, not_sorted=
         corrs = np.zeros(dim_larger)
         for dim_idx_2, weight_2 in enumerate(mod_2.T):
             corrs[dim_idx_2] = pearsonr(weight_1, weight_2)[0]
-        
+
         corrs_for_all_dims.append([corrs])
-        
+
         if duplicates:
             mod2_dims.append(np.argmax(corrs))
         # If duplicates are not allowed, take the highest correlation that has not been used before
@@ -79,13 +91,17 @@ def compare_modalities(weights_human, weights_dnn, duplicates=False, not_sorted=
     # Return the sorted dimensions and correlations
     if not_sorted:
         if all_dims:
-            return mod1_dims_sorted, mod2_dims_sorted, corrs_between_modalities, corrs_for_all_dims
+            return (
+                mod1_dims_sorted,
+                mod2_dims_sorted,
+                corrs_between_modalities,
+                corrs_for_all_dims,
+            )
         return mod1_dims_sorted, mod2_dims_sorted, corrs_between_modalities
     elif all_dims:
         return mod1_dims_sorted, mod2_dims_sorted, corrs, corrs_for_all_dims
     else:
-        return 
-
+        return
 
 
 def get_img_pairs(tril_indices, most_dissimilar):
@@ -131,6 +147,7 @@ def plot_density_scatters(
         tril_1 = rsm_1_concept[tril_inds]
         tril_2 = rsm_2_concept[tril_inds]
         rho = pearsonr(tril_1, tril_2)[0].round(5)
+
         # rho = spearmanr(tril_1, tril_2)[0].round(5)
 
         # Find object pairs that are most dissimilar between modality one (i.e. behavior) and modality 2 (i.e. VGG 16) for a specific concept
@@ -303,7 +320,7 @@ def plot_most_dissim_pairs(plots_dir, rsm_1, rsm_2, mod_1, mod_2, top_k):
                 ),
             )
         )
-        plt.close()
+        plt.close(fig)
 
 
 def plot_most_dissim_dims(
@@ -329,6 +346,7 @@ def plot_most_dissim_dims(
 
         human_dim = weights_human[dim_idx]
         dnn_dim = weights_dnn[dim_idx]
+
         rank_human = rankdata(human_dim)
         rank_dnn = rankdata(dnn_dim)
 
@@ -353,7 +371,6 @@ def plot_most_dissim_dims(
             ],
             [high_both, high_human_low_dnn, high_dnn_low_human, low_both],
         ):
-
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(4, 4))
 
             path_i = behavior_images[img_indices[0]]
@@ -377,16 +394,13 @@ def plot_most_dissim_dims(
             ax1.imshow(img_i)
             ax2.imshow(img_j)
             # plt.suptitle(iden)
-
             iden = iden.replace(" ", "_")
             fname = os.path.join(path, f"{iden}.png")
             # fig.tight_layout(rect=[0, 0.6, 1.0, 0.95])
             fig.tight_layout()
-
             fig.savefig(fname, dpi=300, bbox_inches="tight")
-            fig.close()
+            plt.close(fig)
 
-        fig, ax = plt.subplots(1, 1)
         plot_dict = {}
         plot_dict["human"] = human_dim
         plot_dict["dnn"] = dnn_dim
@@ -432,7 +446,7 @@ def plot_most_dissim_dims(
             fname = os.path.join(path, f"scatter.png")
             # plt.savefig(fname, dpi=150, bbox_inches='tight')
             g.savefig(fname, bbox_inches="tight", dpi=300)
-            plt.close()
+            plt.close(fig)
 
 
 def find_rank_transformed_dissimilarities(
@@ -443,7 +457,6 @@ def find_rank_transformed_dissimilarities(
     n_dim = min(weights_human.shape[1], weights_dnn.shape[1])
 
     for dim_idx in range(n_dim):
-
         dim_path = os.path.join(
             plots_dir, "human_dnn_comparison", str(dim_idx).zfill(2)
         )
@@ -462,11 +475,10 @@ def find_rank_transformed_dissimilarities(
         high_dnn_low_human = np.mean([rank_dnn, n_objects - rank_human], axis=0)
         high_dnn_low_human = np.argsort(-high_dnn_low_human)[:topk]
 
-        for (img_indices, identifier) in zip(
+        for img_indices, identifier in zip(
             [high_both, high_human_low_dnn, high_dnn_low_human],
             ["High Human High DNN", "High Human Low Dnn", "High DNN Low Human"],
         ):
-
             fig, axes = plt.subplots(1, topk)
 
             for i in range(topk):
@@ -480,83 +492,102 @@ def find_rank_transformed_dissimilarities(
             fname = os.path.join(dim_path, f"{identifier}.png")
             fig.tight_layout()
             fig.savefig(fname, dpi=300, bbox_inches="tight")
-            plt.close()
+            plt.close(fig)
 
 
-def plot_mind_machine_corrs(mind_machine_corrs, out_path, **kwargs):    
-    plt.rc('font', family='sans-serif')
-    plt.rc('xtick', labelsize='x-small')
-    plt.rc('ytick', labelsize='x-small')
-    plt.rc('axes', labelsize=8)
+def plot_mind_machine_corrs(mind_machine_corrs, out_path, **kwargs):
+    plt.rc("font", family="sans-serif")
+    plt.rc("xtick", labelsize="x-small")
+    plt.rc("ytick", labelsize="x-small")
+    plt.rc("axes", labelsize=8)
     fig, ax = plt.subplots(figsize=(3, 2))
     sns.set_context("paper")
     sns.set_style("whitegrid")
     sns.lineplot(x=range(len(mind_machine_corrs)), y=mind_machine_corrs, ax=ax)
     ax.lines[0].set_color("black")
     ax.lines[0].set_linewidth(1)
-    
+
     ax.set_xlabel("Human Embedding Dimension")
     ax.set_ylabel("Highest Pearson's r \nwith DNN")
     fig.tight_layout()
-    fig.savefig(os.path.join(out_path, "human_dnn_dimension_correlation.pdf"), 
-                dpi=450, bbox_inches="tight", pad_inches=0.05)
+    fig.savefig(
+        os.path.join(out_path, "human_dnn_dimension_correlation.pdf"),
+        dpi=450,
+        bbox_inches="tight",
+        pad_inches=0.05,
+    )
 
-def run_embedding_analysis(
-    human_embedding, dnn_embedding, behavior_images, out_path="./plots"
-):
+
+def run_embedding_analysis(human_path, dnn_path, img_root, concept_path=""):
     """Compare human and DNN performance on the same task."""
 
+    """Compare the human and DNN embeddings"""
+    dnn_embedding, dnn_var = load_sparse_codes(dnn_path, with_var=True)
+    human_embedding, human_var = load_sparse_codes(human_path, with_var=True)
+
+    # # Load the image data
+    plot_dir = create_path_from_params(dnn_path, "analyses", "human_dnn")
+    print("Save all human dnn comparisons to {}".format(plot_dir))
+    image_filenames, indices = load_image_data(img_root, filter_behavior=True)
+    dnn_embedding = dnn_embedding[indices]
+    dnn_var = dnn_var[indices]
+
     # # Get rsm matrices
-    # rsm_dnn = correlation_matrix(dnn_embedding)
-    # rsm_human = correlation_matrix(human_embedding)
+    rsm_dnn = correlation_matrix(dnn_embedding)
+    rsm_human = correlation_matrix(human_embedding)
 
-    # rho = correlate_rsms(rsm_dnn, rsm_human, "correlation")
-    # print("Correlation between human and DNN embeddings: {}".format(rho))
+    rho = correlate_rsms(rsm_dnn, rsm_human, "correlation")
+    print("Correlation between human and DNN embeddings: {}".format(rho))
 
-    # Whether to perform mind-machine comparison with VGG 16 dimensions that allow for duplicate or unique latent dimensions
-    human_sorted_indices, dnn_sorted_indices, mind_machine_corrs, all_dims = compare_modalities(human_embedding, dnn_embedding, duplicates=True, all_dims=True)
+    out = compare_modalities(
+        human_embedding, dnn_embedding, duplicates=True, all_dims=True
+    )
+    human_sorted_indices, dnn_sorted_indices, mind_machine_corrs, all_dims = out
 
-
-    plot_mind_machine_corrs(mind_machine_corrs, out_path, color="black", linewidth=2)
-
-
-    # NOTE This does not make sense how I plot it right now
-    # # Make a seaborn heatmap of the correlation matrix all_dims
-    # fig, ax = plt.subplots()
-    # n_human_dims = human_embedding.shape[1]
-    # all_dims = all_dims[:, :n_human_dims]
-
-    # # Generate a mask for the upper triangle
-    # mask = np.triu(np.ones_like(all_dims, dtype=bool))
-
-    # # Generate a custom diverging colormap
-    # cmap = sns.diverging_palette(230, 20, as_cmap=True)
-
-    # sns.heatmap(all_dims, mask=mask, cmap=cmap, center=0,
-    #         square=True, linewidths=.5, cbar_kws={"shrink": .5})
-    # ax.set_xlabel("VGG 16")
-    # ax.set_ylabel("Human")
-    # fig.tight_layout()
-    # fig.savefig(os.path.join(out_path, "human_dnn_dimension_corr_matrix.png"), dpi=300)
-
+    # plot_mind_machine_corrs(mind_machine_corrs, plot_dir, color="black", linewidth=2)
 
     # print("Plot density scatters for each object category")
-    # plot_density_scatters(plots_dir=plot_dir_comparison, behavior_images=ref_images, rsm_1=rsm_human, rsm_2=rsm_dnn,
-    #   mod_1='Human Behavior', mod_2='VGG 16', concepts=concepts, top_k=20)
+
+    concepts = load_concepts(concept_path)
+
+    # plot_density_scatters(
+    #     plots_dir=plot_dir,
+    #     behavior_images=image_filenames,
+    #     rsm_1=rsm_human,
+    #     rsm_2=rsm_dnn,
+    #     mod_1="Human Behavior",
+    #     mod_2="VGG 16",
+    #     concepts=concepts,
+    #     top_k=20,
+    # )
 
     # print("Plot most dissimilar object pairs")
-    # plot_most_dissim_pairs(plots_dir=out_path, behavior_images=behavior_images, rsm_1=rsm_human, rsm_2=rsm_dnn,
-    #                        mod_1='Human Behavior', mod_2='VGG 16', top_k=20)
+    # plot_most_dissim_pairs(
+    #     plots_dir=plot_dir,
+    #     rsm_1=rsm_human,
+    #     rsm_2=rsm_dnn,
+    #     mod_1="Human Behavior",
+    #     mod_2="VGG 16",
+    #     top_k=20,
+    # )
 
     human_embedding_sorted = human_embedding[:, human_sorted_indices]
     dnn_embedding_sorted = dnn_embedding[:, dnn_sorted_indices]
 
-    # plot_most_dissim_dims(out_path, mind_machine_corrs, behavior_images, human_embedding_sorted, dnn_embedding_sorted)
-    # find_rank_transformed_dissimilarities(human_embedding_sorted, dnn_embedding_sorted, behavior_images, out_path, topk=4)
+    plot_most_dissim_dims(
+        plot_dir,
+        mind_machine_corrs,
+        image_filenames,
+        human_embedding_sorted,
+        dnn_embedding_sorted,
+    )
+    # find_rank_transformed_dissimilarities(
+    #     human_embedding_sorted, dnn_embedding_sorted, behavior_images, plot_dir, topk=4
+    # )
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
     run_embedding_analysis(
-        args.human_embedding_path, args.dnn_embedding_path, args.feature_path
+        args.human_path, args.dnn_path, args.img_root, args.concept_path
     )

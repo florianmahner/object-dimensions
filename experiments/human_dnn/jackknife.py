@@ -10,19 +10,31 @@ and evaluate the impact of the dimension on the softmax decision. """
 import torch
 import os
 import torch.nn.functional as F
-import plotly.express as px
-import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-from PIL import Image
 from scipy.stats import rankdata
-import seaborn as sns
 import itertools
 import pickle
-import matplotlib.gridspec as gridspec
-
 from object_dimensions import build_triplet_dataset
 from object_dimensions import VariationalEmbedding as model
+from object_dimensions.utils.utils import (
+    load_image_data,
+    create_path_from_params,
+    load_sparse_codes,
+)
+
+from object_dimensions import ExperimentParser
+from experiments.human_dnn.plot_jackknife import plot_grid
+
+parser = ExperimentParser(
+    description="Jackknife analysis for the deep embeddings",
+)
+parser.add_argument("--human_path", type=str, default="data/human_data.pkl")
+parser.add_argument("--dnn_path", type=str, default="data/dnn_data.pkl")
+parser.add_argument("--triplet_path", type=str, default="data/triplets.pkl")
+parser.add_argument("--img_root", type=str, default="data/images")
+parser.add_argument("--comparison", type=str, default="dnn", choices=["dnn", "human"])
+parser.add_argument("--run_jackknife", action="store_true", default=False)
+parser.add_argument("--plot", action="store_true", default=False)
 
 
 def compute_softmax_per_batch(q_mu, q_var, indices, device):
@@ -145,78 +157,11 @@ def build_dataloader(triplet_path):
     return val_loader
 
 
-def plot_bar(decisions, dimensions, out_path="./rose.png"):
-    # Get the topk most important dimensions that changed the most for a triplet
-    topk = 12
-    decisions = decisions[np.argsort(-decisions)][:topk]
-
-    decisions = decisions / decisions.sum()
-    decisions = decisions * 1000
-    decisions = np.array(decisions, dtype=int)
-
-    dim = [f"Dim {str(i)}" for i in dimensions]
-    df = pd.DataFrame({"softmax": decisions, "dim": dim})
-
-    plt.figure(figsize=(6, 8))
-    ax = plt.subplot(111, polar=True)
-    plt.axis("off")
-
-    lowerLimit = 0
-    palette = sns.color_palette("husl", 13)
-
-    # Compute the angle each bar is centered on:
-    indexes = list(range(1, len(df.index) + 1))
-    width2 = 2 * np.pi / len(df.index)
-    angles = [element * width2 for element in indexes]
-
-    # Draw bars
-    bars = ax.bar(
-        x=angles,
-        height=df["softmax"],
-        width=0.2,
-        bottom=lowerLimit,
-        linewidth=2,
-        edgecolor="white",
-        color=palette,
-    )
-
-    # little space between the bar and the label
-    labelPadding = 0.1
-
-    # Add labels
-    for bar, angle, height, label in zip(bars, angles, df["softmax"], df["dim"]):
-        # Labels are rotated. Rotation must be specified in degrees :(
-        rotation = np.rad2deg(angle)
-
-        # Flip some labels upside down
-        alignment = ""
-        if angle >= np.pi / 2 and angle < 3 * np.pi / 2:
-            alignment = "right"
-            rotation = rotation + 180
-        else:
-            alignment = "left"
-
-        # Add a label to the bar right below the bar rotated
-        ax.text(
-            x=angle,
-            y=height + labelPadding,
-            s=label,
-            rotation=rotation,
-            rotation_mode="anchor",
-            ha=alignment,
-            va="center_baseline",
-            fontsize=15,
-        )
-
-    plt.savefig(out_path, bbox_inches="tight", pad_inches=0)
-
-
-def run_jackknife(
+def compute_jackknife(
     human_weights,
     human_var,
     dnn_weights,
     dnn_var,
-    image_filenames,
     triplet_path,
     plot_dir,
     topk=12,
@@ -302,3 +247,66 @@ def run_jackknife(
     # Save the dict into the plot directory
     with open(os.path.join(plot_dir, "jackknife.pkl"), "wb") as f:
         pickle.dump(save_dict, f)
+
+
+def main(
+    human_path, dnn_path, img_root, triplet_path, topk=12, run_jackknife=True, plot=True
+):
+    """Compare the human and DNN embeddings"""
+    dnn_embedding, dnn_var = load_sparse_codes(dnn_path, with_var=True)
+    human_embedding, human_var = load_sparse_codes(human_path, with_var=True)
+
+    # # Load the image data
+    plot_dir = create_path_from_params(dnn_path, "analyses", "jackknife")
+    print("Save all human dnn comparisons to {}".format(plot_dir))
+    image_filenames, indices = load_image_data(img_root, filter_behavior=True)
+    dnn_embedding = dnn_embedding[indices]
+    dnn_var = dnn_var[indices]
+
+    if run_jackknife:
+        compute_jackknife(
+            human_embedding,
+            human_var,
+            dnn_embedding,
+            dnn_var,
+            triplet_path,
+            plot_dir,
+            topk=topk,
+        )
+
+    if plot:
+        jackknife_path = os.path.join(plot_dir, "jackknife.pkl")
+
+        # Raise file not found error if the jackknife file does not exist
+        if not os.path.exists(jackknife_path):
+            raise FileNotFoundError(
+                "Jackknife file not found at {}. Consider running the analysis first.".format(
+                    jackknife_path
+                )
+            )
+
+        jackknife_dict = pickle.load(open(jackknife_path, "rb"))
+        for key in ["human_i_dnn_j", "human_j_dnn_i", "human_k_dnn_k"]:
+            # for key in [("human_k_dnn_k")]:
+            print("Plotting {}".format(key))
+            plot_grid(
+                plot_dir,
+                image_filenames,
+                jackknife_dict,
+                key,
+                softmax_key="high_both",
+                max=topk,
+            )
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+    main(
+        args.human_path,
+        args.dnn_path,
+        args.img_root,
+        args.triplet_path,
+        12,
+        args.run_jackknife,
+        args.plot,
+    )
