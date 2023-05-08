@@ -45,25 +45,40 @@
     .image-wrapper img {
         padding: 0px;
     }
+    .main {
+        margin-left: 120px;
+        width: 800px;
+    }
+    .iter {
+        margin-left: 100px;
+        width: 800px;
+    }
 </style>
 
 <body style="font-family:verdana ;width: 800px; margin: auto; text-align: center; font-size: 20px;">
+    
     <center>
         <h1>Instructions</h1>
     </center>
+    
     <form method="GET" action="{{ url_for('index') }}">
 
         <div class="main">
 
             <p>In the following experiment, you are asked to provide labels for 186 image collections of object properties. 
             These labels can be descriptive words or categories. Each of the following slides will show example object images 
-            from high to low values for one of the collections. Your task is to come up with verbal labels for each of the collections. 
-            When providing labels, try not to focus exclusively on the top of the collection but take the full range of objects into account. 
+            from <span style="color:red">high</span> to <span style="color:red">low</span>  values for one of the collections. 
+            </p>
+            
+            <p>
+            Your task is to come up with verbal labels for each of the collections. When providing labels, try not to focus exclusively 
+            on the top of the collection but take the full range of objects into account. 
             You can provide at least one and up to as many verbal labels for each collection as you consider reasonable.
-
             </p>
 
-            <p>Each collection contains a grid of 5 x 6 images:</p>
+            <p>Here is an example collection:</p>
+
+        </div>
             
             <div class="image-container">
                 <div class="shaded-bar">
@@ -74,24 +89,24 @@
                     <img src="https://fmahner.pythonanywhere.com/static/images/instructions.jpg" alt="Image" width="800">
                 </div>
             </div>
+        
+        <div class="main">
             
-            <p>Try to be specific when generating labels. For example, for the collection above, one possibility of labels could be:</p>
+            <p>For this collection one possibility of labels could be:</p>
 
-            <p>
-            
             <ul style="display: inline-block; text-align: left; margin: 0 auto; padding-left: 0;">
                 <li>vessel</li>
                 <li>round</li>
                 <li>used to cook</li>
                 <li>food-related</li>
             </ul>
-            </p>    
             
             <p>Remember, dimensions in these collections may represent multiple qualities. Be as comprehensive as possible when generating your labels.</p>
             
             <p>After labeling each collection, rate its interpretability on a scale from 1 to 7, with 1 being the <span style="color:red">least</span> 
                 interpretable and 7 being the <span style="color:red">most</span> interpretable. Interpretability refers to the ease of understanding 
-                the relationship between the images, primarily in the upper rows.</p>
+                the relationship between the images, primarily in the upper rows.
+            </p>
         
 
             <input type="submit" value="Start" style="font-size: 20px;">
