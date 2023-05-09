@@ -43,17 +43,6 @@ if not os.path.exists(os.path.join(THIS_FOLDER, "results")):
     os.makedirs(os.path.join(THIS_FOLDER, "results"))
 
 
-image_files = glob.glob(os.path.join(UPLOAD_FOLDER, "**", "*.jpg"), recursive=True)
-image_files = [os.path.basename(f) for f in image_files]
-image_files.remove("instructions.jpg")
-
-image_files = sorted(image_files, key=lambda x: int(x.split("_")[0]))
-random.shuffle(image_files)  # Each participant sees a different order
-
-descriptions = [f"description_{i}" for i in range(1, 6)]
-output = pd.DataFrame(columns=["image_file", *descriptions, "interpretability"])
-
-
 @app.route("/consent", methods=["GET", "POST"])
 def consent():
     return render_template("consent.html")
@@ -93,6 +82,18 @@ def start_new_session():
 
 @app.route("/", methods=["GET", "POST"])
 def index():
+    image_files = glob.glob(os.path.join(UPLOAD_FOLDER, "**", "*.jpg"), recursive=True)
+    image_files = [os.path.basename(f) for f in image_files]
+    image_files.remove("instructions.jpg")
+
+    image_files = sorted(image_files, key=lambda x: int(x.split("_")[0]))
+    random.shuffle(image_files)  # Each participant sees a different order
+
+    descriptions = [f"description_{i}" for i in range(1, 6)]
+    output = pd.DataFrame(
+        columns=["image_file", "dim", *descriptions, "interpretability"]
+    )
+
     session_id = request.args.get("session_id")
     if not session_id:
         # Generate a new session ID
@@ -122,6 +123,12 @@ def index():
         session["instructions_given"] = True
         return redirect(url_for("instructions", session_id=session_id))
 
+    if "output" not in session:
+        session["output"] = pd.DataFrame(
+            columns=["image_file", "dim", *descriptions, "interpretability"]
+        ).to_json()
+    output = pd.read_json(session["output"])
+
     # If there are no image files in the folder, return an error message
     if not image_files:
         return "No image files found in the upload folder."
@@ -140,12 +147,15 @@ def index():
             descriptions = descriptions + [""] * (5 - len(descriptions))
 
             # Add the descriptions to the output dataframe at the index
-            output.loc[index] = [fname, *descriptions, interpretability]
+            dim = fname.split("_")[0]
+            output.loc[index] = [fname, dim, *descriptions, interpretability]
 
             # Save the results to a CSV file
             output.to_csv(
                 os.path.join(THIS_FOLDER, "results", f"{SESSION_ID}.csv"), index=False
             )
+
+            session["output"] = output.to_json()
 
             index += 1
 
