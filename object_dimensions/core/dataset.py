@@ -14,13 +14,16 @@ def build_triplet_dataset(triplet_path, n_train=None, n_val=None, device="cpu"):
     if len(files) == 0:
         raise ValueError("No training or test files found in {}".format(triplet_path))
 
-    # Find all files ending .npy or .txt in triplet path
-    files = [f for f in files if re.search(r"\.npy|\.txt", f)]    
-    # Find all files containing train or val
     files = [f for f in files if re.search(r"train_|test_", f)]
-    
+    files = [f for f in files if re.search(r"\.npy|\.txt", f)]
+    files = sorted(files, key=lambda x: "test" in x)
+
     if len(files) == 0:
-        raise ValueError("No training file `train_x` or test files `test_1-x`found in {}, where x denotes the train/val split".format(triplet_path))
+        raise ValueError(
+            "No training file `train_x` or test files `test_1-x`found in {}, where x denotes the train/val split".format(
+                triplet_path
+            )
+        )
 
     if len(files) != 2:
         raise ValueError("Found more than two files in {}".format(triplet_path))
