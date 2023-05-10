@@ -11,9 +11,11 @@ import torch
 import os
 import torch.nn.functional as F
 import numpy as np
+import seaborn as sns
 from scipy.stats import rankdata
 import itertools
 import pickle
+import matplotlib.pyplot as plt
 from object_dimensions import build_triplet_dataset
 from object_dimensions import VariationalEmbedding as model
 from object_dimensions.utils.utils import (
@@ -37,6 +39,10 @@ parser.add_argument("--run_jackknife", action="store_true", default=False)
 parser.add_argument("--plot", action="store_true", default=False)
 
 
+def map_human_and_dnn_triplets():
+    pass
+
+
 def compute_softmax_per_batch(q_mu, q_var, indices, device):
     """This function extracts the embedding vectors at the indices of the most diverging triplets and computes the
     softmax decision for each of them"""
@@ -44,32 +50,42 @@ def compute_softmax_per_batch(q_mu, q_var, indices, device):
     if not isinstance(indices, torch.Tensor):
         indices = torch.tensor(indices)
 
-    indices = indices.type("torch.LongTensor")
-    indices = indices.to(device)
-    ind_i, ind_j, ind_k = indices.unbind(1)
-
-    # Reparametrize an embedding
     torch.manual_seed(0)  # fix the seed so that this is not stochastic!
     embedding = model.reparameterize_sslab(q_mu, q_var)
 
-    # We add a posivity constraint to this embedding, but this is maybe not necessary?!
+    # nll, acc = calculate_likelihood(embedding, indices)
+    indices = indices.type("torch.LongTensor").to(device)
+    indices = indices.unbind(1)
+    ind_i, ind_j, ind_k = indices
     embedding_i = F.relu(embedding[ind_i])
     embedding_j = F.relu(embedding[ind_j])
     embedding_k = F.relu(embedding[ind_k])
 
-    sim_ij = torch.sum(embedding_i * embedding_j, dim=1)
-    sim_ik = torch.sum(embedding_i * embedding_k, dim=1)
-    sim_jk = torch.sum(embedding_j * embedding_k, dim=1)
+    sim_ij = torch.einsum("ij,ij->i", embedding_i, embedding_j)
+    sim_ik = torch.einsum("ij,ij->i", embedding_i, embedding_k)
+    sim_jk = torch.einsum("ij,ij->i", embedding_j, embedding_k)
 
-    sims = torch.stack([sim_ij, sim_ik, sim_jk], 1)
-    softmax = F.softmax(sims, dim=1)  # i.e. BS x 3
+    # Compute the log softmax loss, i.e. we just look at the argmax anyways!
+    sims = torch.cat([sim_ij, sim_ik, sim_jk]).view(3, -1)  # faster than torch.stack
+
+    log_softmax = F.log_softmax(sims, dim=0)  # i.e. 3 x batch_size
+
+    # Theis the most similar (sim_ij), i.e. the argmax, k is the ooo.
+    log_softmax_ij = log_softmax[0]
+
+    # Compute the cross entropy loss -> we dont need to one hot encode the batch
+    # We just use the similarities at index 0, all other targets are 0 and redundant!
+    nll = torch.mean(-log_softmax_ij)
+
+    # Compute the accuracy
+    acc = torch.mean((torch.argmax(log_softmax, dim=0) == 0).float())
+    softmax = F.softmax(sims, dim=0).T  # i.e. 3 x batch_size
 
     return softmax
 
 
 def compute_softmax_decisions(q_mu, q_var, val_loader, device):
     """We compute the softmax choices for all triplets"""
-
     q_mu = torch.tensor(q_mu).to(device)
     q_var = torch.tensor(q_var).to(device)
 
@@ -96,7 +112,7 @@ def compute_softmax_decisions(q_mu, q_var, val_loader, device):
 
 def find_diverging_triplets(softmax_human, softmax_dnn, topk=12):
     """We ranksort the softmax decisions of the human and the dnn and find the triplets that are most
-    diverging, i.e. where the rank is high in one and low in the other."""
+    diverging, e.g. where the rank is high in one and low in the other."""
     rank_human = rankdata(softmax_human)
     rank_dnn = rankdata(softmax_dnn)
     high_both = np.mean([rank_human, rank_dnn], axis=0)
@@ -150,33 +166,56 @@ def jackknife(q_mu, q_var, triplet_indices, device, ooo_index=0):
 
 def build_dataloader(triplet_path):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    _, val_dataset = build_triplet_dataset(triplet_path, device)
+    _, val_dataset = build_triplet_dataset(triplet_path, device=device)
     val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=64, shuffle=False, num_workers=8
+        val_dataset, batch_size=256, shuffle=False, num_workers=8
     )
     return val_loader
 
 
+def calculate_likelihood(embedding, indices):
+    """Compute the negative log likelihood of the data given the embedding"""
+    indices = indices.unbind(1)
+    ind_i, ind_j, ind_k = indices
+
+    embedding_i = F.relu(embedding[ind_i])
+    embedding_j = F.relu(embedding[ind_j])
+    embedding_k = F.relu(embedding[ind_k])
+
+    sim_ij = torch.einsum("ij,ij->i", embedding_i, embedding_j)
+    sim_ik = torch.einsum("ij,ij->i", embedding_i, embedding_k)
+    sim_jk = torch.einsum("ij,ij->i", embedding_j, embedding_k)
+
+    # Compute the log softmax loss, i.e. we just look at the argmax anyways!
+    sims = torch.cat([sim_ij, sim_ik, sim_jk]).view(3, -1)  # faster than torch.stack
+
+    log_softmax = F.log_softmax(sims, dim=0)  # i.e. 3 x batch_size
+
+    # Theis the most similar (sim_ij), i.e. the argmax, k is the ooo.
+    log_softmax_ij = log_softmax[0]
+
+    # Compute the cross entropy loss -> we dont need to one hot encode the batch
+    # We just use the similarities at index 0, all other targets are 0 and redundant!
+    nll = torch.mean(-log_softmax_ij)
+
+    # Compute accuracy for that batch
+    triplet_choices = torch.argmax(log_softmax, 0)
+    triplet_accuracy = torch.sum(triplet_choices == 0) / len(triplet_choices)
+
+    return nll, triplet_accuracy
+
+
 def compute_jackknife(
+    val_loader,
     human_weights,
     human_var,
     dnn_weights,
     dnn_var,
-    triplet_path,
     plot_dir,
+    device,
     topk=12,
 ):
-    """This function runs the jackknife analysis for a given embedding
-    TODO Write a description for this I will really forget otherwise since its pretty complicated
-    """
     save_dict = dict()
-
-    # If all data on GPU, num workers need to be 0 and pin memory false
-    device = (
-        torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-    )
-
-    val_loader = build_dataloader(triplet_path)
 
     softmax_human, triplets = compute_softmax_decisions(
         human_weights, human_var, val_loader, device
@@ -253,24 +292,101 @@ def main(
     human_path, dnn_path, img_root, triplet_path, topk=12, run_jackknife=True, plot=True
 ):
     """Compare the human and DNN embeddings"""
-    dnn_embedding, dnn_var = load_sparse_codes(dnn_path, with_var=True)
-    human_embedding, human_var = load_sparse_codes(human_path, with_var=True)
+    # If all data on GPU, num workers need to be 0 and pin memory false
+    device = (
+        torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+    )
 
-    # # Load the image data
+    dnn_weights, dnn_var = load_sparse_codes(dnn_path, with_var=True, relu=True)
+    human_weights, human_var = load_sparse_codes(human_path, with_var=True, relu=True)
+
+    triplet_path_dnn = "./data/triplets/vgg16_bn/classifier.3/triplets_20mio"
+    val_loader = build_dataloader(triplet_path_dnn)
     plot_dir = create_path_from_params(dnn_path, "analyses", "jackknife")
-    print("Save all human dnn comparisons to {}".format(plot_dir))
+    print("Save to '{}'".format(plot_dir))
+
+    # PLot this for the DNN for all
+    softmax_dnn_non_filtered, _ = compute_softmax_decisions(
+        dnn_weights, dnn_var, val_loader, device
+    )
+    sns.set(style="whitegrid", context="paper", font_scale=1.2)
+    column_labels = {0: "k", 1: "j", 2: "i"}
+    colors = {0: "blue", 1: "green", 2: "red"}
+
+    fig, ax = plt.subplots(figsize=(6, 3))
+    for k in range(3):
+        sns.histplot(
+            softmax_dnn_non_filtered[:, k],
+            ax=ax,
+            bins=100,
+            color=colors[k],
+            alpha=0.5,
+            label=f"{column_labels[k]}",
+        )
+
+    ax.set_xlabel("Softmax probability")
+    ax.set_ylabel("Count")
+    ax.legend(title="Odd one out")
+
+    fig.tight_layout()
+    plt.savefig(
+        os.path.join(plot_dir, "softmax_histogram_dnn_all.png"),
+        bbox_inches="tight",
+        dpi=300,
+        pad_inches=0.1,
+    )
+    plt.close(fig)
+
+    dnn_smaller_weights = dnn_weights[:, :84]
+    dnn_smaller_var = dnn_var[:, :84]
+
+    softmax_dnn_non_filtered, _ = compute_softmax_decisions(
+        dnn_smaller_weights, dnn_smaller_var, val_loader, device
+    )
+    sns.set(style="whitegrid", context="paper", font_scale=1.2)
+    column_labels = {0: "k", 1: "j", 2: "i"}
+    colors = {0: "blue", 1: "green", 2: "red"}
+
+    fig, ax = plt.subplots(figsize=(6, 3))
+    for k in range(3):
+        sns.histplot(
+            softmax_dnn_non_filtered[:, k],
+            ax=ax,
+            bins=100,
+            color=colors[k],
+            alpha=0.5,
+            label=f"{column_labels[k]}",
+        )
+
+    ax.set_xlabel("Softmax probability")
+    ax.set_ylabel("Count")
+    ax.legend(title="Odd one out")
+
+    fig.tight_layout()
+    plt.savefig(
+        os.path.join(plot_dir, "softmax_histogram_dnn_84dims.png"),
+        bbox_inches="tight",
+        dpi=300,
+        pad_inches=0.1,
+    )
+    plt.close(fig)
+
+    val_loader = build_dataloader(triplet_path)
+
+    # Load image data
     image_filenames, indices = load_image_data(img_root, filter_behavior=True)
-    dnn_embedding = dnn_embedding[indices]
+    dnn_weights = dnn_weights[indices]
     dnn_var = dnn_var[indices]
 
     if run_jackknife:
         compute_jackknife(
-            human_embedding,
+            val_loader,
+            human_weights,
             human_var,
-            dnn_embedding,
+            dnn_weights,
             dnn_var,
-            triplet_path,
             plot_dir,
+            device,
             topk=topk,
         )
 

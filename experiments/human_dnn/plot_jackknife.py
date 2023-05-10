@@ -54,11 +54,88 @@ def plot_figure(
         ax = plt.subplot(gs2[ctr])
         img = Image.open(image_filenames[dnn_idx])
         img = img.resize((224, 224))
-
         ax.imshow(img)
         ax.axis("off")
     plt.subplot(gs2[1]).set_title(title_2, fontsize=20)
     return fig
+
+
+def plot_softmax_histogram(jackknife_dict, save_path):
+    softmax_human = jackknife_dict["softmax_human"]
+    softmax_dnn = jackknife_dict["softmax_dnn"]
+    lookup = lambda x: "k" if x == 0 else "j" if x == 1 else "i"
+    data = []
+    for index in range(3):
+        for softmax_val in softmax_human[:, index]:
+            data.append(
+                {
+                    "Softmax": softmax_val,
+                    "Type": "Human",
+                    "Category": "OOO - " + lookup(index),
+                }
+            )
+        for softmax_val in softmax_dnn[:, index]:
+            data.append(
+                {
+                    "Softmax": softmax_val,
+                    "Type": "DNN",
+                    "Category": "OOO - " + lookup(index),
+                }
+            )
+
+    df = pd.DataFrame(data)
+    g = sns.FacetGrid(
+        df, col="Type", row="Category", sharey=False, sharex=True, aspect=1.8
+    )
+    # g.map(sns.histplot, "Softmax", bins=100, kde=True)
+    g.map_dataframe(
+        lambda data, **kwargs: sns.histplot(
+            data=data,
+            x="Softmax",
+            bins=100,
+            kde=False,
+            color="blue" if data["Type"].iloc[0] == "Human" else "red",
+        )
+    )
+    g.set_axis_labels("Softmax", "Count")
+    g.set_titles(col_template="{col_name}", row_template="{row_name}")
+    g.fig.subplots_adjust(top=0.9)
+
+    g.savefig(
+        os.path.join(save_path, "histogram_argmax.png"),
+        bbox_inches="tight",
+        dpi=300,
+    )
+    plt.close(g.fig)
+
+
+def plot_weights(jackknife_dict, save_path):
+    weights_human = jackknife_dict["human_weights"]
+    weights_dnn = jackknife_dict["dnn_weights"]
+
+    weights_human = weights_human[weights_human != 0]
+    weights_dnn = weights_dnn[weights_dnn != 0]
+
+    # Set the style and context of the seaborn plots
+    sns.set(style="whitegrid", context="paper")
+    # Do a histogram of the weights using seaborn
+    fig, ax = plt.subplots(1, 2, figsize=(6, 3))
+    sns.histplot(weights_human.flatten(), bins=100, kde=False, ax=ax[0], color="blue")
+    ax[0].set_title("Human")
+    sns.histplot(weights_dnn.flatten(), bins=100, kde=False, ax=ax[1], color="red")
+    ax[1].set_title("DNN")
+    ax[0].set_xlabel("Weight")
+    ax[1].set_xlabel("Weight")
+    ax[0].set_ylabel("Count")
+    # Save the seaborn plot as a PDF
+    fig.tight_layout()
+    fig.savefig(
+        os.path.join(save_path, "histogram_weights.png"),
+        dpi=300,
+        bbox_inches="tight",
+    )
+
+    plt.close(fig)
 
 
 def plot_grid(
@@ -83,6 +160,9 @@ def plot_grid(
     human_title = "Human - " + key[-1]
     dnn_title = "DNN - " + key.split("_")[1]
 
+    plot_softmax_histogram(jackknife_dict, plot_dir)
+    plot_weights(jackknife_dict, plot_dir)
+
     ctr = 0
     save_path = os.path.join(plot_dir, key)
     if not os.path.exists(save_path):
@@ -90,105 +170,123 @@ def plot_grid(
 
     for triplet, dim_h, dim_d in zip(triplets, dims_human, dims_dnn):
         ctr += 1
-        # fig = plot_figure(
-        #     image_filenames,
-        #     triplet,
-        #     human_weights,
-        #     dnn_weights,
-        #     dim_h,
-        #     dim_d,
-        #     human_title,
-        #     dnn_title,
-        # )
-        # fig.savefig(
-        #     os.path.join(save_path, softmax_key + "_" + str(ctr) + ".pdf"),
-        #     dpi=100,
-        # )
+        fig = plot_figure(
+            image_filenames,
+            triplet,
+            human_weights,
+            dnn_weights,
+            dim_h,
+            dim_d,
+            human_title,
+            dnn_title,
+        )
+        fig.savefig(
+            os.path.join(save_path, softmax_key + "_" + str(ctr) + ".png"),
+            dpi=300,
+            bbox_inches="tight",
+            pad_inches=0,
+        )
 
-        # plt.close(fig)
+        plt.close(fig)
 
         if ctr == max:
             break
 
         # Plot the rose plots
-        plot_bar(diff_dnn[ctr], os.path.join(save_path, f"rose_dnn_{str(ctr)}.pdf"))
-        plot_bar(diff_human[ctr], os.path.join(save_path, f"rose_human_{str(ctr)}.pdf"))
+        plot_bar(diff_human[ctr], diff_dnn[ctr], ctr, save_path)
 
 
-def plot_bar(decisions, out_path="./rose.png"):
-    # Get the topk most important dimensions that changed the most for a triplet
-
-    dimensions = np.arange(1, len(decisions) + 1)
-    topk = 5
-    argsort = np.argsort(-decisions)
-    decisions = decisions[argsort][:topk]
-
-    # Check that the decision larger than eps
-    eps = 1e-12
-    indices = np.where(decisions > eps)[0]
-    decisions = decisions[indices]
-
-    # Filter the dimensions with the decisions larger than eps
-    dimensions = dimensions[argsort][:topk]
-    dimensions = dimensions[indices]
-    decisions = decisions / decisions.sum()
-    decisions = decisions * 1000
-    decisions = np.array(decisions, dtype=int)
-
-    dim = [f"Dim {str(i)}" for i in dimensions]
-    df = pd.DataFrame({"softmax": decisions, "dim": dim})
-
-    fig = plt.figure(figsize=(6, 6))
-    ax = plt.subplot(111, polar=True)
-    plt.axis("off")
-
-    lowerLimit = 0
-    palette = sns.color_palette("husl", 13)
-
-    # Compute the angle each bar is centered on:
-    indexes = list(range(1, len(df.index) + 1))
-    width2 = 2 * np.pi / len(df.index)
-    angles = [element * width2 for element in indexes]
-
-    # Draw bars
-    bars = ax.bar(
-        x=angles,
-        height=df["softmax"],
-        width=0.2,
-        bottom=lowerLimit,
-        linewidth=2,
-        edgecolor="white",
-        color=palette,
+def plot_bar(softmax_human, softmax_dnn, ctr, out_path="./rose.png"):
+    sns.set(style="whitegrid", context="paper")
+    fig, ax = plt.subplots(1, 2, figsize=(6, 3))
+    sns.histplot(softmax_human.flatten(), bins=100, kde=False, ax=ax[0], color="blue")
+    ax[0].set_title("Human")
+    sns.histplot(softmax_dnn.flatten(), bins=100, kde=False, ax=ax[1], color="red")
+    ax[1].set_title("DNN")
+    ax[0].set_xlabel("Δ Softmax")
+    ax[1].set_xlabel("Δ Softmax")
+    ax[0].set_ylabel("Count")
+    fig.tight_layout()
+    fig.savefig(
+        os.path.join(out_path, f"histogram_{ctr}.png"),
+        dpi=300,
+        bbox_inches="tight",
     )
+    plt.close(fig)
 
-    # little space between the bar and the label
-    labelPadding = 4
+    # Plot two rose plots
+    for decisions, path in zip(
+        [softmax_human, softmax_dnn], [f"rose_human_{ctr}.png", f"rose_dnn_{ctr}.png"]
+    ):
+        dimensions = np.arange(1, len(decisions) + 1)
+        topk = 5
+        argsort = np.argsort(-decisions)
+        decisions = decisions[argsort][:topk]
 
-    # Add labels
-    for bar, angle, height, label in zip(bars, angles, df["softmax"], df["dim"]):
-        # Labels are rotated. Rotation must be specified in degrees :(
-        rotation = np.rad2deg(angle)
+        # Filter the dimensions with the decisions larger than eps
+        dimensions = dimensions[argsort][:topk]
+        decisions = decisions / decisions.sum()
+        decisions = decisions * 1000
+        decisions = np.array(decisions, dtype=int)
 
-        # Flip some labels upside down
-        alignment = ""
-        if angle >= np.pi / 2 and angle < 3 * np.pi / 2:
-            alignment = "right"
-            rotation = rotation + 180
-        else:
-            alignment = "left"
+        dim = [f"Dim {str(i)}" for i in dimensions]
+        df = pd.DataFrame({"softmax": decisions, "dim": dim})
 
-        # Add a label to the bar right below the bar rotated
-        ax.text(
-            x=angle,
-            y=height + labelPadding,
-            s=label,
-            rotation=rotation,
-            rotation_mode="anchor",
-            ha=alignment,
-            va="center_baseline",
-            fontsize=12,
+        fig = plt.figure(figsize=(6, 6))
+        ax = plt.subplot(111, polar=True)
+        plt.axis("off")
+
+        lowerLimit = 0
+        palette = sns.color_palette("husl", 13)
+
+        # Compute the angle each bar is centered on:
+        indexes = list(range(1, len(df.index) + 1))
+        width2 = 2 * np.pi / len(df.index)
+        angles = [element * width2 for element in indexes]
+
+        # Draw bars
+        bars = ax.bar(
+            x=angles,
+            height=df["softmax"],
+            width=0.2,
+            bottom=lowerLimit,
+            linewidth=2,
+            edgecolor="white",
+            color=palette,
         )
 
-    fig.tight_layout()
-    plt.savefig(out_path, bbox_inches="tight", pad_inches=0, dpi=300)
-    plt.close(fig)
+        # little space between the bar and the label
+        labelPadding = 4
+
+        # Add labels
+        for bar, angle, height, label in zip(bars, angles, df["softmax"], df["dim"]):
+            # Labels are rotated. Rotation must be specified in degrees :(
+            rotation = np.rad2deg(angle)
+
+            # Flip some labels upside down
+            alignment = ""
+            if angle >= np.pi / 2 and angle < 3 * np.pi / 2:
+                alignment = "right"
+                rotation = rotation + 180
+            else:
+                alignment = "left"
+
+            # Add a label to the bar right below the bar rotated
+            ax.text(
+                x=angle,
+                y=height + labelPadding,
+                s=label,
+                rotation=rotation,
+                rotation_mode="anchor",
+                ha=alignment,
+                va="center_baseline",
+                fontsize=20,
+            )
+
+        modality = "Human" if "human" in path else "DNN"
+        ax.set_title("{}".format(modality), fontsize=20)
+
+        fig.tight_layout()
+        s_path = os.path.join(out_path, path)
+        plt.savefig(s_path, bbox_inches="tight", pad_inches=0, dpi=300)
+        plt.close(fig)
