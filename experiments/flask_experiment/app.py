@@ -154,7 +154,8 @@ def index():
 
             # Save the results to a CSV file
             output.to_csv(
-                os.path.join(THIS_FOLDER, "results", f"{SESSION_ID}.csv"), index=False
+                os.path.join(THIS_FOLDER, "results", f"{session['session_id']}.csv"),
+                index=False,
             )
 
             session["output"] = output.to_json()
