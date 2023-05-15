@@ -26,7 +26,7 @@ def generate_id():
 app = Flask(__name__)
 SESSION_ID = generate_id()
 app.secret_key = SESSION_ID
-app.permanent_session_lifetime = timedelta(minutes=120)
+app.permanent_session_lifetime = timedelta(days=7)
 
 # Configure the folder to store uploaded images
 THIS_FOLDER = Path(__file__).parent.resolve()
@@ -77,6 +77,8 @@ def add_header(response):
 @app.route("/start_new_session")
 def start_new_session():
     session.clear()  # Clear the existing session data
+    resp = make_response(redirect(url_for("index")))
+    resp.set_cookie("session_id", session["session_id"])
     return redirect(url_for("index"))
 
 
