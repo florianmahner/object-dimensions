@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import argparse
 import os
 import tqdm
 
@@ -40,6 +39,83 @@ parser.add_argument(
 def load_concepts(path="./data/misc/category_mat_manual.tsv"):
     concepts = pd.read_csv(path, encoding="utf-8", sep="\t")
     return concepts
+
+
+def get_image_combinations(
+    topk_imgs_mod1: np.ndarray,
+    topk_imgs_mod2: np.ndarray,
+    most_dissim_imgs_mod1: np.ndarray,
+    most_dissim_imgs_mod2: np.ndarray,
+    top_k: int,
+    topk_imgs_searchlight=None,
+    most_dissim_imgs_searchlight=None,
+):
+    """create combinations of both top k images for each modality and k most dissimilar images between modalities"""
+    imgs_comb_mod1_topk = concat_imgs(topk_imgs_mod1, top_k)
+    imgs_comb_mod2_topk = concat_imgs(topk_imgs_mod2, top_k)
+
+    imgs_comb_mod1_dissim = concat_imgs(most_dissim_imgs_mod1, top_k)
+    imgs_comb_mod2_dissim = concat_imgs(most_dissim_imgs_mod2, top_k)
+
+    if (topk_imgs_searchlight is not None) and (
+        most_dissim_imgs_searchlight is not None
+    ):
+        topk_imgs_searchlight = np.array(
+            [clip_img(img) / img.max() for img in topk_imgs_searchlight]
+        )
+        imgs_comb_search_topk = concat_imgs(topk_imgs_searchlight, top_k)
+
+        most_dissim_imgs_searchlight = np.array(
+            [clip_img(img) / img.max() for img in most_dissim_imgs_searchlight]
+        )
+        imgs_comb_search_dissim = concat_imgs(most_dissim_imgs_searchlight, top_k)
+
+        imgs_combs = [
+            imgs_comb_mod1_topk,
+            imgs_comb_mod2_topk,
+            imgs_comb_search_topk,
+            imgs_comb_mod1_dissim,
+            imgs_comb_mod2_dissim,
+            imgs_comb_search_dissim,
+        ]
+    else:
+        imgs_combs = [
+            imgs_comb_mod1_topk,
+            imgs_comb_mod2_topk,
+            imgs_comb_mod1_dissim,
+            imgs_comb_mod2_dissim,
+        ]
+    return imgs_combs
+
+
+def filter_rsm_concepts(rsm_human, rsm_dnn, concepts, plot_dir):
+    def get_singletons(concepts):
+        set_union = concepts.sum(axis=1)
+        unique_memberships = np.where(set_union > 1.0, 0.0, set_union).astype(bool)
+        singletons = concepts.iloc[unique_memberships, :]
+        non_singletons = concepts.iloc[~unique_memberships, :]
+        return singletons, non_singletons
+
+    def sort_singletons(singletons):
+        return np.hstack(
+            [
+                singletons[singletons.loc[:, concept] == 1.0].index
+                for concept in singletons.keys()
+            ]
+        )
+
+    singletons, non_singletons = get_singletons(concepts)
+    singletons = sort_singletons(singletons)
+    non_singletons = np.random.permutation(non_singletons.index)
+    sorted_items = np.hstack((singletons, non_singletons))
+
+    rsm_human = rsm_human[sorted_items, :]
+    rsm_human = rsm_human[:, sorted_items]
+
+    rsm_dnn = rsm_dnn[sorted_items, :]
+    rsm_dnn = rsm_dnn[:, sorted_items]
+
+    return rsm_human, rsm_dnn
 
 
 def compare_modalities(
@@ -236,7 +312,9 @@ def plot_density_scatters(
         fname = os.path.join(dissim_path, f"{concept}.png")
         fig.tight_layout()
         fig.savefig(fname, bbox_inches="tight", dpi=300)
-        plt.close()
+        plt.close(fig)
+
+    breakpoint()
 
 
 def plot_most_dissim_pairs(plots_dir, rsm_1, rsm_2, mod_1, mod_2, top_k):
@@ -340,7 +418,7 @@ def plot_most_dissim_dims(
     for dim_idx in tqdm.tqdm(range(n_dims)):
         # Include leading zeros in the dimension index
         dim_idx_str = str(dim_idx).zfill(2)
-        path = os.path.join(plots_dir, dim_idx_str)
+        path = os.path.join(plots_dir, "per_dim", dim_idx_str)
         if not os.path.exists(path):
             os.makedirs(path)
 
@@ -518,6 +596,123 @@ def plot_mind_machine_corrs(mind_machine_corrs, out_path, **kwargs):
     )
 
 
+def plot_rsm(rsm, fname):
+    fig, ax = plt.subplots(figsize=(3, 3))
+    sns.heatmap(rsm, cmap="viridis", cbar=False)
+    ax.axis("off")
+    fig.savefig(fname, pad_inches=0, bbox_inches="tight", dpi=450)
+    plt.close(fig)
+
+
+def concat_images(image_list, topk=8):
+    images = []
+    per_row = topk // 2
+    for image in image_list:
+        image = resize(io.imread(image), (400, 400))
+        images.append(image)
+
+    image_row1 = np.concatenate(images[:per_row], axis=1)
+    image_row2 = np.concatenate(images[per_row : per_row * 2], axis=1)
+    large_image = np.concatenate([image_row1, image_row2], axis=0)
+    return large_image
+
+
+def visualize_dims_across_modalities(
+    plots_dir,
+    ref_images,
+    w_mod1,
+    w_mod2,
+    latent_dim=0,
+    difference="absolute",
+    top_k=8,
+):
+    # find both top k objects per modality and their intersection
+    topk_mod1 = np.argsort(-w_mod1)[:top_k]
+    topk_mod2 = np.argsort(-w_mod2)[:top_k]
+    top_k_common = np.intersect1d(topk_mod1, topk_mod2)
+    # find top k objects (i.e., objects with hightest loadings) in current latent dimension for each modality
+    topk_imgs_mod1 = ref_images[topk_mod1]
+    topk_imgs_mod2 = ref_images[topk_mod2]
+
+    # calculate rank or absolute differences of weight coefficients between the (two) modalities
+    if difference == "rank":
+        rank_diff_mod1 = rankdata(-w_mod1) - rankdata(-w_mod2)
+        rank_diff_mod2 = rankdata(-w_mod2) - rankdata(-w_mod1)
+        most_dissim_imgs_mod1 = ref_images[np.argsort(rank_diff_mod1)[:top_k]]
+        most_dissim_imgs_mod2 = ref_images[np.argsort(rank_diff_mod2)[:top_k]]
+    else:
+        abs_diff_mod1 = w_mod1 - w_mod2
+        abs_diff_mod2 = w_mod2 - w_mod1
+        most_dissim_imgs_mod1 = ref_images[np.argsort(abs_diff_mod1)[::-1][:top_k]]
+        most_dissim_imgs_mod2 = ref_images[np.argsort(abs_diff_mod2)[::-1][:top_k]]
+
+    # Find a way to plot these images
+
+    most_dissim_imgs_mod1 = concat_images(most_dissim_imgs_mod1, topk=top_k)
+    most_dissim_imgs_mod2 = concat_images(most_dissim_imgs_mod2, topk=top_k)
+    topk_imgs_mod1 = concat_images(topk_imgs_mod1, topk=top_k)
+    topk_imgs_mod2 = concat_images(topk_imgs_mod2, topk=top_k)
+
+    titles = [r"Human Behavior", r"VGG 16"]
+    border_cols = ["r", "b", "b"]
+
+    path = os.path.join(plots_dir, "compare_modalities")
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+    n_rows = 2
+    n_cols = 3
+
+    # set variables and initialise figure object
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(14, 4), dpi=300)
+    y_labs = [r"Top $k$", r"Most dissimilar"]
+
+    axes[0, 0].imshow(topk_imgs_mod1)
+    axes[0, 0].set_title(titles[0])
+    axes[0, 0].set_ylabel(y_labs[0])
+
+    axes[0, 1].imshow(topk_imgs_mod2)
+    axes[0, 1].set_title(titles[1])
+
+    axes[1, 0].imshow(most_dissim_imgs_mod1)
+    axes[1, 0].set_ylabel(y_labs[1])
+    axes[1, 1].imshow(most_dissim_imgs_mod2)
+
+    # Color differently based on the topk row or the most dissimlar row
+    for i in range(n_rows):
+        colors = np.array(["grey" for _ in range(len(w_mod1))])
+        if i == 0:
+            colors[topk_mod1] = "r"
+            colors[topk_mod2] = "b"
+            if len(top_k_common) > 0:
+                colors[top_k_common] = "m"
+        else:
+            if difference == "rank":
+                colors[np.argsort(rank_diff_mod1)[:top_k]] = "r"
+                colors[np.argsort(rank_diff_mod2)[:top_k]] = "b"
+            else:
+                colors[np.argsort(abs_diff_mod1)[::-1][:top_k]] = "r"
+                colors[np.argsort(abs_diff_mod2)[::-1][:top_k]] = "b"
+
+        axes[i, 2].scatter(w_mod1, w_mod2, c=colors, alpha=0.6)
+
+    for ax in [axes[0, 2], axes[1, 2]]:
+        ax.set_xlabel(r"Human Behavior")
+        ax.set_ylabel(r"VGG 16")
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    for ax in [axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]]:
+        ax.axis("off")
+
+    plt.savefig(
+        os.path.join(path, "latent_dim_{}_across_modalities.pdf".format(latent_dim)),
+        bbox_inches="tight",
+        pad_inches=0.05,
+    )
+    plt.close(fig)
+
+
 def run_embedding_analysis(human_path, dnn_path, img_root, concept_path=""):
     """Compare human and DNN performance on the same task."""
 
@@ -539,40 +734,59 @@ def run_embedding_analysis(human_path, dnn_path, img_root, concept_path=""):
     rho = correlate_rsms(rsm_dnn, rsm_human, "correlation")
     print("Correlation between human and DNN embeddings: {}".format(rho))
 
+    concepts = load_concepts(concept_path)
+
+    rsm_human, rsm_dnn = filter_rsm_concepts(rsm_human, rsm_dnn, concepts, plot_dir)
+    for rsm, name in zip([rsm_dnn, rsm_human], ["dnn", "human"]):
+        fname = os.path.join(plot_dir, f"{name}_rsm.jpg")
+        plot_rsm(rsm, fname)
+
     out = compare_modalities(
-        human_embedding, dnn_embedding, duplicates=True, all_dims=True
+        human_embedding, dnn_embedding, duplicates=False, all_dims=True
     )
     human_sorted_indices, dnn_sorted_indices, mind_machine_corrs, all_dims = out
 
-    # plot_mind_machine_corrs(mind_machine_corrs, plot_dir, color="black", linewidth=2)
-
-    # print("Plot density scatters for each object category")
-
-    concepts = load_concepts(concept_path)
-
-    # plot_density_scatters(
-    #     plots_dir=plot_dir,
-    #     behavior_images=image_filenames,
-    #     rsm_1=rsm_human,
-    #     rsm_2=rsm_dnn,
-    #     mod_1="Human Behavior",
-    #     mod_2="VGG 16",
-    #     concepts=concepts,
-    #     top_k=20,
-    # )
-
-    # print("Plot most dissimilar object pairs")
-    # plot_most_dissim_pairs(
-    #     plots_dir=plot_dir,
-    #     rsm_1=rsm_human,
-    #     rsm_2=rsm_dnn,
-    #     mod_1="Human Behavior",
-    #     mod_2="VGG 16",
-    #     top_k=20,
-    # )
-
     human_embedding_sorted = human_embedding[:, human_sorted_indices]
     dnn_embedding_sorted = dnn_embedding[:, dnn_sorted_indices]
+
+    for j, (w_b, w_dnn) in enumerate(
+        zip(human_embedding_sorted.T[:50], dnn_embedding_sorted.T[:50])
+    ):
+        print("VIs dim across modalities for dim {}".format(j), end="\r)
+        w_b /= np.max(w_b)
+        w_dnn /= np.max(w_dnn)
+        visualize_dims_across_modalities(
+            plot_dir,
+            image_filenames,
+            w_b,
+            w_dnn,
+            latent_dim=j,
+        )
+
+    plot_mind_machine_corrs(mind_machine_corrs, plot_dir, color="black", linewidth=2)
+
+    print("Plot density scatters for each object category")
+
+    plot_density_scatters(
+        plots_dir=plot_dir,
+        behavior_images=image_filenames,
+        rsm_1=rsm_human,
+        rsm_2=rsm_dnn,
+        mod_1="Human Behavior",
+        mod_2="VGG 16",
+        concepts=concepts,
+        top_k=20,
+    )
+
+    print("Plot most dissimilar object pairs")
+    plot_most_dissim_pairs(
+        plots_dir=plot_dir,
+        rsm_1=rsm_human,
+        rsm_2=rsm_dnn,
+        mod_1="Human Behavior",
+        mod_2="VGG 16",
+        top_k=20,
+    )
 
     plot_most_dissim_dims(
         plot_dir,
@@ -581,9 +795,9 @@ def run_embedding_analysis(human_path, dnn_path, img_root, concept_path=""):
         human_embedding_sorted,
         dnn_embedding_sorted,
     )
-    # find_rank_transformed_dissimilarities(
-    #     human_embedding_sorted, dnn_embedding_sorted, behavior_images, plot_dir, topk=4
-    # )
+    find_rank_transformed_dissimilarities(
+        human_embedding_sorted, dnn_embedding_sorted, behavior_images, plot_dir, topk=4
+    )
 
 
 if __name__ == "__main__":
