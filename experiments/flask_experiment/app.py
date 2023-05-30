@@ -24,8 +24,7 @@ def generate_id():
 
 
 app = Flask(__name__)
-SESSION_ID = generate_id()
-app.secret_key = SESSION_ID
+app.secret_key = os.urandom(24)
 app.permanent_session_lifetime = timedelta(days=7)
 
 # Configure the folder to store uploaded images
@@ -65,52 +64,25 @@ def show_index():
     return render_template("index.html", image_filepath=image_filepath, index=index)
 
 
-@app.after_request
-def add_header(response):
-    response.headers["Cache-Control"] = "no-store"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
-    response.headers["Cache-Control"] = "public, max-age=0"
-    return response
-
-
-@app.route("/start_new_session")
-def start_new_session():
-    session.clear()  # Clear the existing session data
-    resp = make_response(redirect(url_for("index")))
-    resp.set_cookie("session_id", session["session_id"])
-    return redirect(url_for("index"))
-
-
 @app.route("/", methods=["GET", "POST"])
 def index():
-    image_files = glob.glob(os.path.join(UPLOAD_FOLDER, "**", "*.jpg"), recursive=True)
-    image_files = [os.path.basename(f) for f in image_files]
-    image_files.remove("instructions.jpg")
+    session_id = session.get("session_id")
+    session.permanent = True
 
-    image_files = sorted(image_files, key=lambda x: int(x.split("_")[0]))
-    random.shuffle(image_files)  # Each participant sees a different order
-
-    descriptions = [f"description_{i}" for i in range(1, 6)]
-    output = pd.DataFrame(
-        columns=["image_file", "dim", *descriptions, "interpretability"]
-    )
-
-    session_id = request.args.get("session_id")
     if not session_id:
-        # Generate a new session ID
         session_id = generate_id()
-        session.permanent = (
-            True  # Set the session to expire after the specified lifetime
+        session["session_id"] = session_id
+
+    image_files = session.get("image_files")
+    if not image_files:
+        image_files = glob.glob(
+            os.path.join(UPLOAD_FOLDER, "**", "*.jpg"), recursive=True
         )
-        session["session_id"] = session_id
-    else:
-        # Check if the session ID matches the current session
-        if session_id != session.get("session_id"):
-            # Reset the session data if the session ID is different
-            session.clear()
-        # Store the current session ID in the session object
-        session["session_id"] = session_id
+        image_files = [os.path.basename(f) for f in image_files]
+        image_files.remove("instructions.jpg")
+        image_files = sorted(image_files, key=lambda x: int(x.split("_")[0]))
+        random.shuffle(image_files)  # Each participant sees a different order
+        session["image_files"] = image_files
 
     if not session.get("consent_given"):
         session["consent_given"] = True
@@ -126,6 +98,7 @@ def index():
         return redirect(url_for("instructions", session_id=session_id))
 
     if "output" not in session:
+        descriptions = [f"description_{i}" for i in range(1, 6)]
         session["output"] = pd.DataFrame(
             columns=["image_file", "dim", *descriptions, "interpretability"]
         ).to_json()
@@ -135,14 +108,20 @@ def index():
     if not image_files:
         return "No image files found in the upload folder."
 
-    index = session.get("index", 0)
+    # Retrieve the current index from the URL query parameter or session, or set it to 0 if it doesn't exist
+    index = (
+        int(request.args.get("index"))
+        if request.args.get("index")
+        else session.get("index", 0)
+    )
 
     # Determine the index of the current image based on the 'index' form parameter
     if request.method == "POST":
         if request.form["submit_button"] == "Next":
-            descriptions = request.form["descriptions"]
-            interpretability = request.form["interpretability"]
+            descriptions = request.form.get("descriptions")
+            interpretability = request.form.get("interpretability")
 
+            image_files = session["image_files"]
             fname = image_files[index]
             # Split the descriptions with a comma
             descriptions = descriptions.split(",")
@@ -176,7 +155,7 @@ def index():
     session["filepath"] = filepath
     session["index"] = index
 
-    return redirect(url_for("show_index", session_id=session_id))
+    return redirect(url_for("show_index", session_id=session["session_id"]))
 
 
 @app.route("/end")
@@ -185,4 +164,4 @@ def end():
 
 
 if __name__ == "__main__":
-    app.run(port=2500)
+    app.run(port=2500, debug=True)
