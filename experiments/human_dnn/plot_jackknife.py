@@ -102,9 +102,9 @@ def plot_softmax_histogram(jackknife_dict, save_path):
     g.fig.subplots_adjust(top=0.9)
 
     g.savefig(
-        os.path.join(save_path, "histogram_argmax.png"),
+        os.path.join(save_path, "histogram_argmax.pdf"),
         bbox_inches="tight",
-        dpi=300,
+        transparent=True,
     )
     plt.close(g.fig)
 
@@ -130,9 +130,9 @@ def plot_weights(jackknife_dict, save_path):
     # Save the seaborn plot as a PDF
     fig.tight_layout()
     fig.savefig(
-        os.path.join(save_path, "histogram_weights.png"),
-        dpi=300,
+        os.path.join(save_path, "histogram_weights.pdf"),
         bbox_inches="tight",
+        transparent=True,
     )
 
     plt.close(fig)
@@ -181,10 +181,10 @@ def plot_grid(
             dnn_title,
         )
         fig.savefig(
-            os.path.join(save_path, softmax_key + "_" + str(ctr) + ".png"),
-            dpi=300,
+            os.path.join(save_path, softmax_key + "_" + str(ctr) + ".pdf"),
             bbox_inches="tight",
             pad_inches=0,
+            transparent=True,
         )
 
         plt.close(fig)
@@ -208,9 +208,9 @@ def plot_bar(softmax_human, softmax_dnn, ctr, out_path="./rose.png"):
     ax[0].set_ylabel("Count")
     fig.tight_layout()
     fig.savefig(
-        os.path.join(out_path, f"histogram_{ctr}.png"),
-        dpi=300,
+        os.path.join(out_path, f"histogram_{ctr}.pdf"),
         bbox_inches="tight",
+        transparent=True,
     )
     plt.close(fig)
 

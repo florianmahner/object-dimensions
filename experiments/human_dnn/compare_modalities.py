@@ -34,58 +34,18 @@ parser.add_argument(
 parser.add_argument(
     "--concept_path", type=str, help="Path to concept matrix and filenames"
 )
+parser.add_argument(
+    "--diff_measure",
+    type=str,
+    choices=["rank", "absolute"],
+    default="absolute",
+    help="Measure to use for comparing the two modalities in the scatter plot",
+)
 
 
 def load_concepts(path="./data/misc/category_mat_manual.tsv"):
     concepts = pd.read_csv(path, encoding="utf-8", sep="\t")
     return concepts
-
-
-def get_image_combinations(
-    topk_imgs_mod1: np.ndarray,
-    topk_imgs_mod2: np.ndarray,
-    most_dissim_imgs_mod1: np.ndarray,
-    most_dissim_imgs_mod2: np.ndarray,
-    top_k: int,
-    topk_imgs_searchlight=None,
-    most_dissim_imgs_searchlight=None,
-):
-    """create combinations of both top k images for each modality and k most dissimilar images between modalities"""
-    imgs_comb_mod1_topk = concat_imgs(topk_imgs_mod1, top_k)
-    imgs_comb_mod2_topk = concat_imgs(topk_imgs_mod2, top_k)
-
-    imgs_comb_mod1_dissim = concat_imgs(most_dissim_imgs_mod1, top_k)
-    imgs_comb_mod2_dissim = concat_imgs(most_dissim_imgs_mod2, top_k)
-
-    if (topk_imgs_searchlight is not None) and (
-        most_dissim_imgs_searchlight is not None
-    ):
-        topk_imgs_searchlight = np.array(
-            [clip_img(img) / img.max() for img in topk_imgs_searchlight]
-        )
-        imgs_comb_search_topk = concat_imgs(topk_imgs_searchlight, top_k)
-
-        most_dissim_imgs_searchlight = np.array(
-            [clip_img(img) / img.max() for img in most_dissim_imgs_searchlight]
-        )
-        imgs_comb_search_dissim = concat_imgs(most_dissim_imgs_searchlight, top_k)
-
-        imgs_combs = [
-            imgs_comb_mod1_topk,
-            imgs_comb_mod2_topk,
-            imgs_comb_search_topk,
-            imgs_comb_mod1_dissim,
-            imgs_comb_mod2_dissim,
-            imgs_comb_search_dissim,
-        ]
-    else:
-        imgs_combs = [
-            imgs_comb_mod1_topk,
-            imgs_comb_mod2_topk,
-            imgs_comb_mod1_dissim,
-            imgs_comb_mod2_dissim,
-        ]
-    return imgs_combs
 
 
 def filter_rsm_concepts(rsm_human, rsm_dnn, concepts, plot_dir):
@@ -114,6 +74,21 @@ def filter_rsm_concepts(rsm_human, rsm_dnn, concepts, plot_dir):
 
     rsm_dnn = rsm_dnn[sorted_items, :]
     rsm_dnn = rsm_dnn[:, sorted_items]
+
+    # triang = np.tril_indices(rsm_human.shape[0], k=-1)
+
+    # # rank sort rsm
+    # rsm_human[triang] = rankdata(rsm_human[triang])
+    # rsm_dnn[triang] = rankdata(rsm_dnn[triang])
+
+    # rsm_human = rsm_human + rsm_human.T
+    # rsm_dnn = rsm_dnn + rsm_dnn.T
+
+    # # rsm_human = np.fill_diagonal(rsm_human, 1.0)
+    # # rsm_dnn = np.fill_diagonal(rsm_dnn, 1.0)
+
+    rsm_human = rankdata(rsm_human).reshape(rsm_human.shape)
+    rsm_dnn = rankdata(rsm_dnn).reshape(rsm_dnn.shape)
 
     return rsm_human, rsm_dnn
 
@@ -573,24 +548,46 @@ def find_rank_transformed_dissimilarities(
             plt.close(fig)
 
 
-def plot_mind_machine_corrs(mind_machine_corrs, out_path, **kwargs):
-    plt.rc("font", family="sans-serif")
-    plt.rc("xtick", labelsize="x-small")
-    plt.rc("ytick", labelsize="x-small")
-    plt.rc("axes", labelsize=8)
-    fig, ax = plt.subplots(figsize=(3, 2))
-    sns.set_context("paper")
-    sns.set_style("whitegrid")
-    sns.lineplot(x=range(len(mind_machine_corrs)), y=mind_machine_corrs, ax=ax)
-    ax.lines[0].set_color("black")
-    ax.lines[0].set_linewidth(1)
+def plot_mind_machine_corrs(
+    mind_machine_corrs, mind_machine_corrs_w_duplicates, out_path, **kwargs
+):
+    # Create a DataFrame and reshape it to long format
+    df = pd.DataFrame(
+        {
+            "Human Embedding Dimension": range(len(mind_machine_corrs)),
+            "Unique": mind_machine_corrs,
+            "With Duplicates": mind_machine_corrs_w_duplicates,
+        }
+    ).melt(
+        "Human Embedding Dimension",
+        var_name="Type",
+        value_name="Highest Pearson's r with DNN",
+    )
 
-    ax.set_xlabel("Human Embedding Dimension")
-    ax.set_ylabel("Highest Pearson's r \nwith DNN")
+    # Set the plot context and style
+    sns.set_context("paper", font_scale=1.5)
+    sns.set_style("white")
+
+    # Create the figure
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    # Create a lineplot
+    sns.lineplot(
+        data=df,
+        x="Human Embedding Dimension",
+        y="Highest Pearson's r with DNN",
+        hue="Type",
+        style="Type",
+        ax=ax,
+    )
+
+    sns.despine()
+
     fig.tight_layout()
+
+    # Save the figure
     fig.savefig(
         os.path.join(out_path, "human_dnn_dimension_correlation.pdf"),
-        dpi=450,
         bbox_inches="tight",
         pad_inches=0.05,
     )
@@ -598,8 +595,8 @@ def plot_mind_machine_corrs(mind_machine_corrs, out_path, **kwargs):
 
 def plot_rsm(rsm, fname):
     fig, ax = plt.subplots(figsize=(3, 3))
-    sns.heatmap(rsm, cmap="viridis", cbar=False)
     ax.axis("off")
+    ax.imshow(rsm)
     fig.savefig(fname, pad_inches=0, bbox_inches="tight", dpi=450)
     plt.close(fig)
 
@@ -656,7 +653,7 @@ def visualize_dims_across_modalities(
     titles = [r"Human Behavior", r"VGG 16"]
     border_cols = ["r", "b", "b"]
 
-    path = os.path.join(plots_dir, "compare_modalities")
+    path = os.path.join(plots_dir, "compare_modalities", difference + "_diff")
     if not os.path.exists(path):
         os.makedirs(path)
 
@@ -703,22 +700,28 @@ def visualize_dims_across_modalities(
         ax.set_yticks([])
 
     for ax in [axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]]:
-        ax.axis("off")
+        ax.set_xticks([])
+        ax.set_yticks([])
 
     plt.savefig(
-        os.path.join(path, "latent_dim_{}_across_modalities.pdf".format(latent_dim)),
+        os.path.join(
+            path,
+            "latent_dim_{}_across_modalities.pdf".format(latent_dim),
+        ),
         bbox_inches="tight",
         pad_inches=0.05,
     )
     plt.close(fig)
 
 
-def run_embedding_analysis(human_path, dnn_path, img_root, concept_path=""):
+def run_embedding_analysis(
+    human_path, dnn_path, img_root, concept_path="", difference="absolute"
+):
     """Compare human and DNN performance on the same task."""
 
     """Compare the human and DNN embeddings"""
-    dnn_embedding, dnn_var = load_sparse_codes(dnn_path, with_var=True)
-    human_embedding, human_var = load_sparse_codes(human_path, with_var=True)
+    dnn_embedding, dnn_var = load_sparse_codes(dnn_path, with_var=True, relu=True)
+    human_embedding, human_var = load_sparse_codes(human_path, with_var=True, relu=True)
 
     # # Load the image data
     plot_dir = create_path_from_params(dnn_path, "analyses", "human_dnn")
@@ -741,18 +744,32 @@ def run_embedding_analysis(human_path, dnn_path, img_root, concept_path=""):
         fname = os.path.join(plot_dir, f"{name}_rsm.jpg")
         plot_rsm(rsm, fname)
 
+    breakpoint()
+
     out = compare_modalities(
         human_embedding, dnn_embedding, duplicates=False, all_dims=True
     )
-    human_sorted_indices, dnn_sorted_indices, mind_machine_corrs, all_dims = out
 
+    human_sorted_indices, dnn_sorted_indices, mind_machine_corrs = out[:3]
     human_embedding_sorted = human_embedding[:, human_sorted_indices]
     dnn_embedding_sorted = dnn_embedding[:, dnn_sorted_indices]
+
+    mind_machine_corrs_w_duplicates = compare_modalities(
+        human_embedding, dnn_embedding, duplicates=True, all_dims=True
+    )[2]
+
+    plot_mind_machine_corrs(
+        mind_machine_corrs,
+        mind_machine_corrs_w_duplicates,
+        plot_dir,
+        color="black",
+        linewidth=2,
+    )
 
     for j, (w_b, w_dnn) in enumerate(
         zip(human_embedding_sorted.T[:50], dnn_embedding_sorted.T[:50])
     ):
-        print("VIs dim across modalities for dim {}".format(j), end="\r)
+        print("Vis dim across modalities for dim {}".format(j), end="\r")
         w_b /= np.max(w_b)
         w_dnn /= np.max(w_dnn)
         visualize_dims_across_modalities(
@@ -761,9 +778,10 @@ def run_embedding_analysis(human_path, dnn_path, img_root, concept_path=""):
             w_b,
             w_dnn,
             latent_dim=j,
+            difference=difference,
         )
 
-    plot_mind_machine_corrs(mind_machine_corrs, plot_dir, color="black", linewidth=2)
+        breakpoint()
 
     print("Plot density scatters for each object category")
 
@@ -796,12 +814,16 @@ def run_embedding_analysis(human_path, dnn_path, img_root, concept_path=""):
         dnn_embedding_sorted,
     )
     find_rank_transformed_dissimilarities(
-        human_embedding_sorted, dnn_embedding_sorted, behavior_images, plot_dir, topk=4
+        human_embedding_sorted, dnn_embedding_sorted, image_filenames, plot_dir, topk=4
     )
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
     run_embedding_analysis(
-        args.human_path, args.dnn_path, args.img_root, args.concept_path
+        args.human_path,
+        args.dnn_path,
+        args.img_root,
+        args.concept_path,
+        args.diff_measure,
     )
