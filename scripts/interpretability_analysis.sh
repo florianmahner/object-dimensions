@@ -33,7 +33,7 @@ fi
 if $sparse_codes; then
     echo "Learn the sparse code predictions using Ridge / ElasticNet Regression CV"
     sleep 2
-    python experiments/sparse_codes/sparse_codes_ridge.py \
+    python experiments/sparse_codes/sparse_codes.py \
         --config "./configs/interpretability.toml" --section "sparse_codes"
 fi
 
@@ -51,7 +51,7 @@ fi
 
 if $searchlight
 then
-    echo "Searchlight analysis"
+    echo "Grad CAM"
     python experiments/relevance_maps/grad_cam.py \
         --config "./configs/interpretability.toml" # does not need a section
 fi
