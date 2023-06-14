@@ -3,12 +3,8 @@ from object_dimensions import ExperimentParser
 from object_dimensions.utils.utils import (
     load_sparse_codes,
     load_image_data,
-    compute_rsm,
-    correlate_rsms,
 )
 from sklearn.linear_model import LinearRegression
-import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split
 from sklearn.model_selection import KFold
 
 
@@ -71,7 +67,6 @@ def main(args):
             residuals_all[test_index] = residuals_test
 
         print("R2 scores across folds: ", r2_scores.mean(), r2_scores.std())
-        # Save the residuals
         residuals_all = np.abs(residuals_all)
         print(residuals_all.min())
         np.save(
