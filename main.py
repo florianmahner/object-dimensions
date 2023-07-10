@@ -35,8 +35,8 @@ parser.add_argument(
 parser.add_argument(
     "--modality",
     type=str,
-    default="deep",
-    choices=("deep", "behavior"),
+    default="dnn",
+    choices=("dnn", "behavior"),
     help="Modality to train on",
 )
 parser.add_argument(
@@ -239,6 +239,7 @@ def train(args):
             args.log_path,
             args.identifier,
             args.modality,
+            args.method,
             n_samples,
             args.prior,
             str(args.init_dim),
@@ -252,6 +253,7 @@ def train(args):
             args.log_path,
             args.identifier,
             args.modality,
+            args.method,
             model_name,
             module_name,
             n_samples,
