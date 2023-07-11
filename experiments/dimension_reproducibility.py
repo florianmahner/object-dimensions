@@ -1,11 +1,8 @@
 import os
-import toml
 import glob
 import pickle
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns
-import pandas as pd
 from collections import defaultdict
 from argparse import ArgumentParser
 from tqdm import tqdm
@@ -25,6 +22,9 @@ parser.add_argument(
 parser.add_argument(
     "--modality", type=str, default="behavior", choices=("behavior", "dnn")
 )
+
+parser.add_argument("--run_analysis", action="store_true")
+parser.add_argument("--plot", action="store_true")
 
 
 def vectorized_pearsonr(base: np.ndarray, comp: np.ndarray) -> Union[float, np.ndarray]:
@@ -48,21 +48,26 @@ def vectorized_pearsonr(base: np.ndarray, comp: np.ndarray) -> Union[float, np.n
 
 
 def split_half_reliability(embeddings: np.ndarray, identifiers: str) -> Dict[str, list]:
-    """For two observers do:
+    """For each model, we calculate the split-half reliability of each dimension.
+    We do this by:
     1. Split the data objects in half using an odd and even mask
     2. For a model run, iterate across all dimensions $i$
         - Find the highest correlating dimension across all other models $k$ and all other dimensions.
         Calculate this using the odd-mask
         - For model $k$ correlate the maximum correlation for that dimension $i$ using the even mask
     We then obtain a *sampling distribution* of Pearson r coefficients across all other model seeds.
-    We Fisher-Z transform this sampling distribution of Pearson r so that they become z-scored (i.e. normally distributed)
+    We Fisher-z transform this sampling distribution of Pearson r so that they become z-scored (i.e. normally distributed)
     We then take the mean of that sampling distribution to have the average z-transformed reliability score
-    We invert this to get the average Pearson r reliability score
+    We invert this to get the average Pearson r reliability score.
+
+    Parameters
+    ----------
+    embeddings : np.ndarray
+        Embeddings of shape (n_embeddings, n_objects, n_dimensions)
+    identifiers : str
+        Identifiers of the embeddings, i.e. the model names or seeds
     """
     n_embeddings, n_objects, n_dimensions = embeddings.shape
-    assert n_embeddings == len(
-        identifiers
-    ), "Number of embeddings and identifiers must match"
 
     np.random.seed(42)
     odd_mask = np.random.choice([True, False], size=n_objects)
@@ -113,8 +118,6 @@ def find_mean_reliability(
         values = values[:ndim]
         mean_reliability = np.mean(values)
         mean_reliabilities[key] = mean_reliability
-        print("Mean reliability for seed {} is {}".format(key, mean_reliability))
-
     return mean_reliabilities
 
 
@@ -133,10 +136,18 @@ def _load_files(base_dir: str) -> Tuple[List[str], List[int]]:
     return files, seeds
 
 
-def run_analysis(base_dir: str, modality: str) -> None:
+def run_analysis(
+    base_dir: str,
+    modality: str,
+    run_analysis: bool = True,
+) -> None:
+    out_path = os.path.join(
+        "./results", "reliability_across_seeds_{}.pkl".format(modality)
+    )
+
     files, seeds = _load_files(base_dir)
-    embeddings, pruned_dims = [], []
-    for file in files:
+    embeddings, pruned_dims = defaultdict(list), defaultdict(list)
+    for file, seed in zip(files, seeds):
         params = np.load(file)
         if params["method"] == "variational":
             q_mu = params["q_mu"]
@@ -144,42 +155,45 @@ def run_analysis(base_dir: str, modality: str) -> None:
             q_mu = params["weights"]
         q_mu = _preprocess_embedding(q_mu)
 
-        embeddings.append(q_mu)
-        pruned_dims.append(params["dim_over_time"][-1])
+        embeddings[seed] = q_mu
+        pruned_dims[seed] = params["dim_over_time"][-1]
 
-    embeddings = np.array(embeddings)
-    reliability_per_dim = split_half_reliability(embeddings, seeds)
-    mean_reliabilities = find_mean_reliability(reliability_per_dim, pruned_dims)
+    if run_analysis:
+        identifiers = np.array(list(embeddings.keys()))
+        embedding_array = np.array(list(embeddings.values()))
 
-    best_embedding = np.argmax(mean_reliabilities)
-    best_embedding = embeddings[best_embedding]
-    n_pruned = pruned_dims[best_embedding]
-    best_seed = seeds[best_embedding]
+        # Find the key with the highest mean reliability
+        reliability_per_dim = split_half_reliability(embedding_array, identifiers)
+        mean_reliabilities = find_mean_reliability(reliability_per_dim, pruned_dims)
 
+        best_seed = np.argmax(list(mean_reliabilities.values()))
+        best_embedding = embeddings[best_seed]
+        n_pruned = pruned_dims[best_seed]
+        best_reliability_per_dim = reliability_per_dim[best_seed]
+
+        out_dict = dict(
+            reliability_per_dim=reliability_per_dim,
+            best_reliability_per_dim=best_reliability_per_dim,
+            best_embedding=best_embedding,
+            best_seed=best_seed,
+            n_pruned=n_pruned,
+            mean_reliabilities=mean_reliabilities,
+        )
+
+        with open(out_path, "wb") as f:
+            pickle.dump(out_dict, f)
+
+    save = pickle.load(open(out_path, "rb"))
+
+    best_reliability_per_dim = save["best_reliability_per_dim"]
+    n_pruned = save["n_pruned"]
+    best_seed = save["best_seed"]
     print("Best embedding is for seed {}".format(best_seed))
-    best_reliability_per_dim = reliability_per_dim[best_seed]
-
-    out_dict = dict(
-        reliability_per_dim=reliability_per_dim,
-        best_reliability_per_dim=best_reliability_per_dim,
-        best_seed=best_seed,
-        mean_reliabilities=mean_reliabilities,
-    )
-
-    out_path = os.path.join(
-        "./results", "reliability_across_seeds_{}.pkl".format(modality)
-    )
-    with open(out_path, "wb") as f:
-        pickle.dump(out_dict, f)
-
-    n_embeddings, _, n_dimensions = embeddings.shape
-    data = pd.DataFrame(
-        {
-            "Dimension": np.arange(n_dimensions),
-            "Reproducibility": best_reliability_per_dim,
-        }
-    )
-    ax = sns.lineplot(x="Dimension", y="Reproducibility", data=data, color="black")
+    n_embeddings = len(embeddings)
+    best_reliability_per_dim = np.squeeze(best_reliability_per_dim)
+    ndim = len(best_reliability_per_dim)
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.plot(range(ndim), best_reliability_per_dim)
     ax.set_xlabel("Dimension number")
     ax.set_ylabel("Reproducibility of dimensions (Pearson's r)".format(n_embeddings))
     ax.set_title("N = {} runs, Batch Size = 256".format(n_embeddings))
@@ -193,9 +207,9 @@ def run_analysis(base_dir: str, modality: str) -> None:
         bbox_inches="tight",
         pad_inches=0.1,
     )
-    plt.close()
+    plt.close(fig)
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    run_analysis(args.base_dir, args.modality)
+    run_analysis(args.base_dir, args.modality, args.run_analysis)
