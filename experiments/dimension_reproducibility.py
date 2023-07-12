@@ -24,7 +24,6 @@ parser.add_argument(
 )
 
 parser.add_argument("--run_analysis", action="store_true")
-parser.add_argument("--plot", action="store_true")
 
 
 def vectorized_pearsonr(base: np.ndarray, comp: np.ndarray) -> Union[float, np.ndarray]:
@@ -48,25 +47,36 @@ def vectorized_pearsonr(base: np.ndarray, comp: np.ndarray) -> Union[float, np.n
 
 
 def split_half_reliability(embeddings: np.ndarray, identifiers: str) -> Dict[str, list]:
-    """For each model, we calculate the split-half reliability of each dimension.
-    We do this by:
-    1. Split the data objects in half using an odd and even mask
-    2. For a model run, iterate across all dimensions $i$
-        - Find the highest correlating dimension across all other models $k$ and all other dimensions.
-        Calculate this using the odd-mask
-        - For model $k$ correlate the maximum correlation for that dimension $i$ using the even mask
-    We then obtain a *sampling distribution* of Pearson r coefficients across all other model seeds.
-    We Fisher-z transform this sampling distribution of Pearson r so that they become z-scored (i.e. normally distributed)
-    We then take the mean of that sampling distribution to have the average z-transformed reliability score
-    We invert this to get the average Pearson r reliability score.
+    """
+    Compute the split-half reliability of each dimension for each model.
+
+    The method is as follows:
+    1. Split the data objects in half using an odd and even mask.
+    2. For a given model run, iterate across all dimensions $i$:
+        - Identify the dimension in all other models $k$ that has the highest correlation with dimension $i$,
+          calculated using the odd-masked data.
+        - For model $k$, correlate this identified dimension with dimension $i$ using the even-masked data.
+    This process results in a sampling distribution of Pearson r coefficients across all other model seeds.
+    The sampling distribution of Pearson r is then transformed using Fisher-z so that it becomes z-scored (i.e.,
+    normally distributed). The mean of this sampling distribution is taken as the average z-transformed
+    reliability score. Finally, this score is inverted to get the average Pearson r reliability score.
 
     Parameters
     ----------
     embeddings : np.ndarray
-        Embeddings of shape (n_embeddings, n_objects, n_dimensions)
+        Embeddings in the shape of (n_embeddings, n_objects, n_dimensions).
+
     identifiers : str
-        Identifiers of the embeddings, i.e. the model names or seeds
+        Identifiers of the embeddings, which could be model names or seeds.
+
+    Returns
+    -------
+    dict
+        A dictionary with identifiers as keys and Pearson r values across all dimensions.
     """
+    assert (
+        embeddings.ndim == 3
+    ), "Embeddings must be 3-dimensional (n_embeddings, n_objects, n_dimensions)"
     n_embeddings, n_objects, n_dimensions = embeddings.shape
 
     np.random.seed(42)
@@ -104,7 +114,7 @@ def split_half_reliability(embeddings: np.ndarray, identifiers: str) -> Dict[str
         z_transformed = np.arctanh(reproducibility_across_embeddings)
         average = np.mean(z_transformed, axis=0)
         back_transformed = np.tanh(average)
-        reliability_per_dim[ident].append(back_transformed)
+        reliability_per_dim[ident] = back_transformed
 
     return reliability_per_dim
 
@@ -116,8 +126,8 @@ def find_mean_reliability(
     for key, values in reliability_per_dim.items():
         ndim = n_pruned[key]
         values = values[:ndim]
-        mean_reliability = np.mean(values)
-        mean_reliabilities[key] = mean_reliability
+        mean_reliabilities[key] = np.mean(values)
+
     return mean_reliabilities
 
 
@@ -134,6 +144,57 @@ def _load_files(base_dir: str) -> Tuple[List[str], List[int]]:
     files = sorted(files, key=lambda x: int(x.split("/")[-3]))
     seeds = np.array([int(f.split("/")[-3]) for f in files])
     return files, seeds
+
+
+def plot_reliability(
+    reliability_per_dim: np.ndarray,
+    n_pruned: int,
+    n_embeddings: int,
+    out_path: str,
+    modality: str,
+) -> None:
+    """Plot the reliability of each dimension across all models."""
+    ndim = len(reliability_per_dim)
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.plot(range(ndim), reliability_per_dim)
+    ax.set_xlabel("Dimension number")
+    ax.set_ylabel("Reproducibility of dimensions (Pearson's r)".format(n_embeddings))
+    ax.set_title("N = {} runs, Batch Size = 256".format(n_embeddings))
+    ax.axvline(x=n_pruned, color="red", linestyle="--")
+    plt.tight_layout()
+    plt.savefig(
+        os.path.join(
+            "./results", "plots", f"reproducibility_across_dimensions_{modality}.png"
+        ),
+        dpi=300,
+        bbox_inches="tight",
+        pad_inches=0.1,
+    )
+    plt.close(fig)
+
+
+def plot_reliability_across_seeds(
+    mean_reliabilities: Dict[str, float],
+    out_path: str,
+    modality: str,
+) -> None:
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.bar(
+        list(mean_reliabilities.keys()),
+        list(mean_reliabilities.values()),
+        color="gray",
+    )
+    ax.set_xlabel("Random Seed")
+    ax.set_ylabel("Mean reproducibility (Pearson's r)")
+    plt.savefig(
+        os.path.join(
+            "./results", "plots", f"reproducibility_across_seeds_{modality}.png"
+        ),
+        dpi=300,
+        bbox_inches="tight",
+        pad_inches=0.1,
+    )
+    plt.close(fig)
 
 
 def run_analysis(
@@ -184,30 +245,25 @@ def run_analysis(
             pickle.dump(out_dict, f)
 
     save = pickle.load(open(out_path, "rb"))
-
     best_reliability_per_dim = save["best_reliability_per_dim"]
     n_pruned = save["n_pruned"]
     best_seed = save["best_seed"]
     print("Best embedding is for seed {}".format(best_seed))
     n_embeddings = len(embeddings)
     best_reliability_per_dim = np.squeeze(best_reliability_per_dim)
-    ndim = len(best_reliability_per_dim)
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.plot(range(ndim), best_reliability_per_dim)
-    ax.set_xlabel("Dimension number")
-    ax.set_ylabel("Reproducibility of dimensions (Pearson's r)".format(n_embeddings))
-    ax.set_title("N = {} runs, Batch Size = 256".format(n_embeddings))
-    ax.axvline(x=n_pruned, color="red", linestyle="--")
-    plt.tight_layout()
-    plt.savefig(
-        os.path.join(
-            "./results", "plots", f"reproducibility_across_dimensions_{modality}.png"
-        ),
-        dpi=300,
-        bbox_inches="tight",
-        pad_inches=0.1,
+    plot_reliability(
+        best_reliability_per_dim,
+        n_pruned,
+        n_embeddings,
+        out_path,
+        modality,
     )
-    plt.close(fig)
+
+    plot_reliability_across_seeds(
+        save["mean_reliabilities"],
+        out_path,
+        modality,
+    )
 
 
 if __name__ == "__main__":
