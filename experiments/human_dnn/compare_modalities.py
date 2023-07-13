@@ -19,7 +19,7 @@ from object_dimensions.utils.utils import (
     load_image_data,
     create_path_from_params,
 )
-from scipy.stats import rankdata, pearsonr
+from scipy.stats import rankdata, pearsonr, spearmanr
 from object_dimensions import ExperimentParser
 
 
@@ -94,7 +94,12 @@ def filter_rsm_concepts(rsm_human, rsm_dnn, concepts, plot_dir):
 
 
 def compare_modalities(
-    weights_human, weights_dnn, duplicates=False, not_sorted=False, all_dims=False
+    weights_human,
+    weights_dnn,
+    base="human",
+    duplicates=False,
+    not_sorted=False,
+    all_dims=False,
 ):
     """Compares the Human behavior embedding to the VGG embedding by correlating them."""
 
@@ -102,18 +107,23 @@ def compare_modalities(
         weights_dnn.shape[0] == weights_human.shape[0]
     ), "Number of items in weight matrices must align."
     dim_human, dim_dnn = weights_human.shape[1], weights_dnn.shape[1]
-    if dim_human < dim_dnn:
-        dim_smaller, dim_larger = dim_human, dim_dnn
-        mod_1, mod_2 = weights_human, weights_dnn
-    else:
-        dim_smaller, dim_larger = dim_dnn, dim_human
-        mod_1, mod_2 = weights_dnn, weights_human
+    if base == "human":
+        mod_1 = weights_human
+        dim_base = dim_human
+        mod_2 = weights_dnn
+        dim_comp = dim_dnn
 
-    corrs_between_modalities = np.zeros(dim_smaller)
+    elif base == "dnn":
+        mod_1 = weights_dnn
+        mod_2 = weights_human
+        dim_base = dim_dnn
+        dim_comp = dim_human
+
+    corrs_between_modalities = np.zeros(dim_base)
     mod2_dims = []
     corrs_for_all_dims = []
     for dim_idx_1, weight_1 in enumerate(mod_1.T):
-        corrs = np.zeros(dim_larger)
+        corrs = np.zeros(dim_comp)
         for dim_idx_2, weight_2 in enumerate(mod_2.T):
             corrs[dim_idx_2] = pearsonr(weight_1, weight_2)[0]
 
@@ -197,9 +207,8 @@ def plot_density_scatters(
         tril_inds = np.tril_indices(len(rsm_1_concept), k=-1)
         tril_1 = rsm_1_concept[tril_inds]
         tril_2 = rsm_2_concept[tril_inds]
-        rho = pearsonr(tril_1, tril_2)[0].round(5)
 
-        # rho = spearmanr(tril_1, tril_2)[0].round(5)
+        rho = spearmanr(tril_1, tril_2)[0].round(5)
 
         # Find object pairs that are most dissimilar between modality one (i.e. behavior) and modality 2 (i.e. VGG 16) for a specific concept
         most_dissim_1 = np.argsort(rankdata(tril_1) - rankdata(tril_2))[::-1][:top_k]
@@ -624,6 +633,7 @@ def visualize_dims_across_modalities(
     w_mod1,
     w_mod2,
     latent_dim=0,
+    r=None,
     difference="absolute",
     top_k=8,
 ):
@@ -707,6 +717,8 @@ def visualize_dims_across_modalities(
         ax.set_xticks([])
         ax.set_yticks([])
 
+    fig.suptitle(r"Pearson r = {:.2f}".format(r))
+
     plt.savefig(
         os.path.join(
             path,
@@ -718,38 +730,161 @@ def visualize_dims_across_modalities(
     plt.close(fig)
 
 
-def plot_rsm_across_dims(human_sorted, dnn_sorted, out_path):
-    rsm_corrs = []
-    n_human = human_sorted.shape[1]
-    n_dnn = dnn_sorted.shape[1]
+def corr_rsm_across_dims(human, dnn, index, corr="pearson"):
+    dim_h = human[:, :index]
+    dim_d = dnn[:, :index]
+    rsm_h = correlation_matrix(dim_h)
+    rsm_d = correlation_matrix(dim_d)
+    corr_hd = correlate_rsms(rsm_h, rsm_d, corr)
+    return corr_hd
+
+
+def correlate_modalities(
+    weights_human, weights_dnn, base="human", duplicates=False, sort_by_corrs=True
+):
+    dim_human, dim_dnn = weights_human.shape[1], weights_dnn.shape[1]
+    weights = {"human": weights_human, "dnn": weights_dnn}
+    dims = {"human": dim_human, "dnn": dim_dnn}
+    weights_base = weights[base]
+    dim_base = dims[base]
+    weights_comp = weights["dnn" if base == "human" else "human"]
+    dim_comp = dims["dnn" if base == "human" else "human"]
+
+    if dim_base > dim_comp and not duplicates:
+        raise ValueError(
+            """If duplicates is set to False, the number of dimensions in the base modality
+            must be smaller than the number of dimensions in the comparison modality."""
+        )
+
+    matching_dims, matching_corrs = [], []
+    for i, w1 in enumerate(weights_base.T):
+        corrs = np.zeros(dim_comp)
+        for j, w2 in enumerate(weights_comp.T):
+            corrs[j] = pearsonr(w1, w2)[0]
+
+        sorted_dim_corrs = np.argsort(-corrs)
+        if duplicates:
+            matching_dims.append(sorted_dim_corrs[0])
+        else:
+            for dim in sorted_dim_corrs:
+                if (
+                    dim not in matching_dims
+                ):  # take the highest correlation that has not been used before
+                    matching_dims.append(dim)
+                    break
+
+        # Store the highest correlation for the selected dimension
+        select_dim = matching_dims[-1]
+        matching_corrs.append(corrs[select_dim])
+
+    # Now sort the dimensions based on the highest correlations
+    if sort_by_corrs:
+        matching_corrs = np.array(matching_corrs)
+        sorted_corrs = np.argsort(-matching_corrs)
+        comp_dims = np.array(matching_dims)[sorted_corrs]
+        base_dims = sorted_corrs
+
+    else:
+        base_dims = np.arange(len(matching_dims))
+        comp_dims = np.array(matching_dims)
+
+    weights_base = weights_base[:, base_dims]
+    weights_comp = weights_comp[:, comp_dims]
+
+    return weights_base, weights_comp, matching_corrs
+
+
+def plot_rsm_across_dims(
+    human_dim,
+    dnn_dim,
+    out_path,
+):
+    n_human = human_dim.shape[1]
+    n_dnn = dnn_dim.shape[1]
     ndims = min(n_human, n_dnn)
+
+    weights_human, weights_dnn, _ = correlate_modalities(
+        human_dim, dnn_dim, duplicates=True, sort_by_corrs=True
+    )
+
+    weights_human_sorted_human, weights_dnn_sorted_human, _ = correlate_modalities(
+        human_dim, dnn_dim, base="human", duplicates=True, sort_by_corrs=False
+    )
+
+    weights_dnn_sorted_dnn, weights_human_sorted_dnn, _ = correlate_modalities(
+        human_dim, dnn_dim, base="dnn", duplicates=True, sort_by_corrs=False
+    )
+
+    rsm_dims = []
+    rsm_dims_human_sorted = []
+    rsm_dims_dnn_sorted = []
 
     for i in range(2, ndims + 1):
         print("Calculating RSM correlation for dim {}".format(i), end="\r")
-        dim_h = human_sorted[:, :i]
-        dim_d = dnn_sorted[:, :i]
-        rsm_h = correlation_matrix(dim_h)
-        rsm_d = correlation_matrix(dim_d)
 
-        corr_hd = correlate_rsms(rsm_h, rsm_d)
-        rsm_corrs.append(corr_hd)
+        corr_dim = corr_rsm_across_dims(weights_human, weights_dnn, i, corr="pearson")
+        corr_dim_human = corr_rsm_across_dims(
+            weights_human_sorted_human, weights_dnn_sorted_human, i, corr="pearson"
+        )
+        corr_dim_dnn = corr_rsm_across_dims(
+            weights_dnn_sorted_dnn, weights_human_sorted_dnn, i, corr="pearson"
+        )
 
-    fig, ax = plt.subplots(1)
-    ax.plot(rsm_corrs)
+        rsm_dims.append(corr_dim)
+        rsm_dims_human_sorted.append(corr_dim_human)
+        rsm_dims_dnn_sorted.append(corr_dim_dnn)
+
+    # Make this into a seaborn lineplot with sums and dims as separate lines
+    rsm_dims = np.array(rsm_dims)
+    rsm_dims_human_sorted = np.array(rsm_dims_human_sorted)
+    rsm_dims_dnn_sorted = np.array(rsm_dims_dnn_sorted)
+
+    fig, ax = plt.subplots(figsize=(6, 4), dpi=300)
+    sns.lineplot(
+        x=range(ndims - 1),
+        y=rsm_dims,
+        label="Correlation",
+        color="r",
+        alpha=0.6,
+        ax=ax,
+    )
+    sns.lineplot(
+        x=range(ndims - 1),
+        y=rsm_dims_human_sorted,
+        label="Human sum",
+        color="b",
+        alpha=0.6,
+        ax=ax,
+    )
+    sns.lineplot(
+        x=range(ndims - 1),
+        y=rsm_dims_dnn_sorted,
+        label="DNN sum",
+        color="g",
+        alpha=0.6,
+        ax=ax,
+    )
+
     ax.set_xlabel("Number of included dimensions")
-    ax.set_ylabel("Spearman rho between RSMs")
-    ax.set_xticks(range(2, ndims + 1, 10))
-    ax.set_xticklabels([str(i) for i in range(2, ndims + 1, 10)])
-    ax.spines[["right", "top"]].set_visible(False)
+    ax.set_ylabel(r"Pearson r between RSMs")
+    ax.set_ylim(0, 0.65)
+
+    ax.set_xticks(range(0, ndims - 1, 5))
+    ax.set_xticklabels(range(2, ndims + 1, 5))
+    ax.legend(title="Sorting method")
+    sns.despine()
+
     for ext in ["png", "pdf"]:
-        fig.savefig(
+        plt.savefig(
             os.path.join(out_path, "rsm_corrs_across_dims.{}".format(ext)),
             dpi=300,
             bbox_inches="tight",
             pad_inches=0.05,
         )
 
-    plt.close(fig)
+    plt.close()
+
+    breakpoint()
 
 
 def run_embedding_analysis(
@@ -783,7 +918,7 @@ def run_embedding_analysis(
         plot_rsm(rsm, fname)
 
     out = compare_modalities(
-        human_embedding, dnn_embedding, duplicates=False, all_dims=True
+        human_embedding, dnn_embedding, duplicates=False, all_dims=True, base="human"
     )
 
     human_sorted_indices, dnn_sorted_indices, mind_machine_corrs = out[:3]
@@ -791,7 +926,7 @@ def run_embedding_analysis(
     dnn_embedding_sorted = dnn_embedding[:, dnn_sorted_indices]
 
     mind_machine_corrs_w_duplicates = compare_modalities(
-        human_embedding, dnn_embedding, duplicates=True, all_dims=True
+        human_embedding, dnn_embedding, duplicates=True, all_dims=True, base="human"
     )[2]
 
     plot_mind_machine_corrs(
@@ -802,7 +937,11 @@ def run_embedding_analysis(
         linewidth=2,
     )
 
-    plot_rsm_across_dims(human_embedding_sorted, dnn_embedding_sorted, plot_dir)
+    plot_rsm_across_dims(
+        human_embedding,
+        dnn_embedding,
+        plot_dir,
+    )
 
     for j, (w_b, w_dnn) in enumerate(
         zip(human_embedding_sorted.T[:50], dnn_embedding_sorted.T[:50])
@@ -810,6 +949,8 @@ def run_embedding_analysis(
         print("Vis dim across modalities for dim {}".format(j), end="\r")
         # w_b += np.min(w_b)
         # w_dnn += np.min(w_dnn)
+
+        pearson = mind_machine_corrs[j]
 
         w_b /= np.max(w_b)
         w_dnn /= np.max(w_dnn)
@@ -819,6 +960,7 @@ def run_embedding_analysis(
             w_b,
             w_dnn,
             latent_dim=j,
+            r=pearson,
             difference=difference,
         )
 
