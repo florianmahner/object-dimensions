@@ -289,8 +289,6 @@ def plot_density_scatters(
         fig.savefig(fname, bbox_inches="tight", dpi=300)
         plt.close(fig)
 
-    breakpoint()
-
 
 def plot_most_dissim_pairs(plots_dir, rsm_1, rsm_2, mod_1, mod_2, top_k):
     # create directory for density scatter plots
@@ -345,6 +343,7 @@ def plot_most_dissim_pairs(plots_dir, rsm_1, rsm_2, mod_1, mod_2, top_k):
             fontsize=10,
         )
         g.savefig(os.path.join(PATH, "most_dissim_obj_pairs.jpg"))
+        plt.close()
 
     mods = [mod_1, mod_2]
     for i, most_dissim in enumerate(most_dissim_pairs):
@@ -586,11 +585,16 @@ def plot_mind_machine_corrs(
     fig.tight_layout()
 
     # Save the figure
-    fig.savefig(
-        os.path.join(out_path, "human_dnn_dimension_correlation.pdf"),
-        bbox_inches="tight",
-        pad_inches=0.05,
-    )
+    for ext in [".png", ".pdf"]:
+        fig.savefig(
+            os.path.join(out_path, "human_dnn_dimension_correlation{}".format(ext)),
+            bbox_inches="tight",
+            pad_inches=0.05,
+            dpi=300,
+            transparent=True,
+        )
+
+    plt.close(fig)
 
 
 def plot_rsm(rsm, fname):
@@ -714,6 +718,40 @@ def visualize_dims_across_modalities(
     plt.close(fig)
 
 
+def plot_rsm_across_dims(human_sorted, dnn_sorted, out_path):
+    rsm_corrs = []
+    n_human = human_sorted.shape[1]
+    n_dnn = dnn_sorted.shape[1]
+    ndims = min(n_human, n_dnn)
+
+    for i in range(2, ndims + 1):
+        print("Calculating RSM correlation for dim {}".format(i), end="\r")
+        dim_h = human_sorted[:, :i]
+        dim_d = dnn_sorted[:, :i]
+        rsm_h = correlation_matrix(dim_h)
+        rsm_d = correlation_matrix(dim_d)
+
+        corr_hd = correlate_rsms(rsm_h, rsm_d)
+        rsm_corrs.append(corr_hd)
+
+    fig, ax = plt.subplots(1)
+    ax.plot(rsm_corrs)
+    ax.set_xlabel("Number of included dimensions")
+    ax.set_ylabel("Spearman rho between RSMs")
+    ax.set_xticks(range(2, ndims + 1, 10))
+    ax.set_xticklabels([str(i) for i in range(2, ndims + 1, 10)])
+    ax.spines[["right", "top"]].set_visible(False)
+    for ext in ["png", "pdf"]:
+        fig.savefig(
+            os.path.join(out_path, "rsm_corrs_across_dims.{}".format(ext)),
+            dpi=300,
+            bbox_inches="tight",
+            pad_inches=0.05,
+        )
+
+    plt.close(fig)
+
+
 def run_embedding_analysis(
     human_path, dnn_path, img_root, concept_path="", difference="absolute"
 ):
@@ -734,8 +772,8 @@ def run_embedding_analysis(
     rsm_dnn = correlation_matrix(dnn_embedding)
     rsm_human = correlation_matrix(human_embedding)
 
-    rho = correlate_rsms(rsm_dnn, rsm_human, "correlation")
-    print("Correlation between human and DNN embeddings: {}".format(rho))
+    rho = correlate_rsms(rsm_dnn, rsm_human, "spearman")
+    print("Spearman correlation between human and DNN embeddings: {}".format(rho))
 
     concepts = load_concepts(concept_path)
 
@@ -743,8 +781,6 @@ def run_embedding_analysis(
     for rsm, name in zip([rsm_dnn, rsm_human], ["dnn", "human"]):
         fname = os.path.join(plot_dir, f"{name}_rsm.jpg")
         plot_rsm(rsm, fname)
-
-    breakpoint()
 
     out = compare_modalities(
         human_embedding, dnn_embedding, duplicates=False, all_dims=True
@@ -766,10 +802,15 @@ def run_embedding_analysis(
         linewidth=2,
     )
 
+    plot_rsm_across_dims(human_embedding_sorted, dnn_embedding_sorted, plot_dir)
+
     for j, (w_b, w_dnn) in enumerate(
         zip(human_embedding_sorted.T[:50], dnn_embedding_sorted.T[:50])
     ):
         print("Vis dim across modalities for dim {}".format(j), end="\r")
+        # w_b += np.min(w_b)
+        # w_dnn += np.min(w_dnn)
+
         w_b /= np.max(w_b)
         w_dnn /= np.max(w_dnn)
         visualize_dims_across_modalities(
@@ -781,7 +822,8 @@ def run_embedding_analysis(
             difference=difference,
         )
 
-        breakpoint()
+    dnn_embedding, dnn_var = load_sparse_codes(dnn_path, with_var=True, relu=True)
+    human_embedding, human_var = load_sparse_codes(human_path, with_var=True, relu=True)
 
     print("Plot density scatters for each object category")
 
