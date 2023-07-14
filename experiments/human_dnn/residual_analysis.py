@@ -66,9 +66,15 @@ def main(args):
             # Store residuals
             residuals_all[test_index] = residuals_test
 
-        print("R2 scores across folds: ", r2_scores.mean(), r2_scores.std())
+        print(
+            "R2 scores across folds: ",
+            r2_scores.mean(),
+            r2_scores.std(),
+            "dependent_variable: ",
+            dependent_variable,
+        )
+
         residuals_all = np.abs(residuals_all)
-        print(residuals_all.min())
         np.save(
             f"./data/misc/residuals_dependent_{dependent_variable}.npy", residuals_all
         )

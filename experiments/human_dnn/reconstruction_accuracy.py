@@ -7,14 +7,13 @@ from object_dimensions.utils.utils import (
     correlate_rsms,
 )
 from torch import Tensor
-from scipy.stats import pearsonr
 from tqdm import tqdm
 from typing import Tuple
 
 
 parser = ExperimentParser()
-parser.add_argument("--human_embedding", type=str, default="./results/human")
-parser.add_argument("--dnn_embedding", type=str, default="./results/dnn")
+parser.add_argument("--human_path", type=str, default="./results/human")
+parser.add_argument("--dnn_path", type=str, default="./results/dnn")
 parser.add_argument(
     "--img_root",
     type=str,
@@ -23,7 +22,9 @@ parser.add_argument(
 )
 
 
-def rsm_pred_torch(embedding: Tensor) -> Tuple[Tensor, float]:
+def rsm_pred_torch(
+    embedding: np.ndarray, w_acc: bool = False, verbose: bool = False
+) -> Tuple[Tensor, float]:
     """
     Compute the reconstruction similarity matrix (RSM) for a given embedding
     Args:
@@ -43,6 +44,7 @@ def rsm_pred_torch(embedding: Tensor) -> Tuple[Tensor, float]:
         >>> print(odd_one_out_accuracy)
         0.123456789
     """
+    embedding = torch.tensor(embedding, dtype=torch.double)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     sim_matrix = torch.matmul(embedding, embedding.T)
     sim_matrix = sim_matrix.to(dtype=torch.double, device=device)
@@ -56,7 +58,9 @@ def rsm_pred_torch(embedding: Tensor) -> Tuple[Tensor, float]:
 
     rsm = torch.zeros_like(sim_matrix).double()
     ooo_accuracy = 0.0
-    pbar = tqdm(total=n_batches)
+
+    if verbose:
+        pbar = tqdm(total=n_batches)
 
     for batch_idx in range(n_batches):
         start_idx = batch_idx * batch_size
@@ -84,27 +88,30 @@ def rsm_pred_torch(embedding: Tensor) -> Tuple[Tensor, float]:
         rsm[i, j] = mean_proba
         ooo_accuracy += mean_proba.mean()
 
-        pbar.set_description(f"Batch {batch_idx+1}/{n_batches}")
-        pbar.update(1)
+        if verbose:
+            pbar.set_description(f"Batch {batch_idx+1}/{n_batches}")
+            pbar.update(1)
 
-    pbar.close()
+    if verbose:
+        pbar.close()
     rsm = rsm.cpu().numpy()
     rsm += rsm.T  # make similarity matrix symmetric
+
     np.fill_diagonal(rsm, 1)
     ooo_accuracy = ooo_accuracy.item() / n_batches
-    return rsm, ooo_accuracy
+    if w_acc:
+        return rsm, ooo_accuracy
+    else:
+        return rsm
 
 
 def main(args):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    human_embedding = load_sparse_codes(args.human_embedding)
-    dnn_embedding = load_sparse_codes(args.dnn_embedding)
+    human_embedding = load_sparse_codes(args.human_path)
+    dnn_embedding = load_sparse_codes(args.dnn_path)
     indices = load_image_data(args.img_root, filter_behavior=True)[1]
     dnn_embedding = dnn_embedding[indices]
-    dnn_embedding = torch.tensor(dnn_embedding)
-    human_embedding = torch.tensor(human_embedding)
-    rsm_dnn, ooo_dnn = rsm_pred_torch(dnn_embedding)
-    rsm_human, ooo_human = rsm_pred_torch(human_embedding)
+    rsm_dnn, ooo_dnn = rsm_pred_torch(dnn_embedding, w_acc=True, verbose=True)
+    rsm_human, ooo_human = rsm_pred_torch(human_embedding, w_acc=True, verbose=True)
     rho = correlate_rsms(rsm_dnn, rsm_human)
     print(
         f"RSM correlation: {rho:.9f}, OOO DNN: {ooo_dnn:.5f}, OOO human: {ooo_human:.5f}",
@@ -113,7 +120,4 @@ def main(args):
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    args.human_embedding = "./data/misc/vice_embedding_lukas_66d.txt"
-    args.img_root = "./data/image_data/images12_plus"
-    args.dnn_embedding = "results/sslab_final/deep/vgg16_bn/classifier.3/20.mio/sslab/300/256/0.24/0/params/parameters.npz"
     main(args)

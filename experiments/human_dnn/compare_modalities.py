@@ -12,6 +12,8 @@ import seaborn as sns
 from skimage.transform import resize
 import skimage.io as io
 
+from experiments.human_dnn.reconstruction_accuracy import rsm_pred_torch
+
 from object_dimensions.utils.utils import (
     correlate_rsms,
     correlation_matrix,
@@ -41,128 +43,6 @@ parser.add_argument(
     default="absolute",
     help="Measure to use for comparing the two modalities in the scatter plot",
 )
-
-
-def load_concepts(path="./data/misc/category_mat_manual.tsv"):
-    concepts = pd.read_csv(path, encoding="utf-8", sep="\t")
-    return concepts
-
-
-def filter_rsm_concepts(rsm_human, rsm_dnn, concepts, plot_dir):
-    def get_singletons(concepts):
-        set_union = concepts.sum(axis=1)
-        unique_memberships = np.where(set_union > 1.0, 0.0, set_union).astype(bool)
-        singletons = concepts.iloc[unique_memberships, :]
-        non_singletons = concepts.iloc[~unique_memberships, :]
-        return singletons, non_singletons
-
-    def sort_singletons(singletons):
-        return np.hstack(
-            [
-                singletons[singletons.loc[:, concept] == 1.0].index
-                for concept in singletons.keys()
-            ]
-        )
-
-    singletons, non_singletons = get_singletons(concepts)
-    singletons = sort_singletons(singletons)
-    non_singletons = np.random.permutation(non_singletons.index)
-    sorted_items = np.hstack((singletons, non_singletons))
-
-    rsm_human = rsm_human[sorted_items, :]
-    rsm_human = rsm_human[:, sorted_items]
-
-    rsm_dnn = rsm_dnn[sorted_items, :]
-    rsm_dnn = rsm_dnn[:, sorted_items]
-
-    # triang = np.tril_indices(rsm_human.shape[0], k=-1)
-
-    # # rank sort rsm
-    # rsm_human[triang] = rankdata(rsm_human[triang])
-    # rsm_dnn[triang] = rankdata(rsm_dnn[triang])
-
-    # rsm_human = rsm_human + rsm_human.T
-    # rsm_dnn = rsm_dnn + rsm_dnn.T
-
-    # # rsm_human = np.fill_diagonal(rsm_human, 1.0)
-    # # rsm_dnn = np.fill_diagonal(rsm_dnn, 1.0)
-
-    rsm_human = rankdata(rsm_human).reshape(rsm_human.shape)
-    rsm_dnn = rankdata(rsm_dnn).reshape(rsm_dnn.shape)
-
-    return rsm_human, rsm_dnn
-
-
-def compare_modalities(
-    weights_human,
-    weights_dnn,
-    base="human",
-    duplicates=False,
-    not_sorted=False,
-    all_dims=False,
-):
-    """Compares the Human behavior embedding to the VGG embedding by correlating them."""
-
-    assert (
-        weights_dnn.shape[0] == weights_human.shape[0]
-    ), "Number of items in weight matrices must align."
-    dim_human, dim_dnn = weights_human.shape[1], weights_dnn.shape[1]
-    if base == "human":
-        mod_1 = weights_human
-        dim_base = dim_human
-        mod_2 = weights_dnn
-        dim_comp = dim_dnn
-
-    elif base == "dnn":
-        mod_1 = weights_dnn
-        mod_2 = weights_human
-        dim_base = dim_dnn
-        dim_comp = dim_human
-
-    corrs_between_modalities = np.zeros(dim_base)
-    mod2_dims = []
-    corrs_for_all_dims = []
-    for dim_idx_1, weight_1 in enumerate(mod_1.T):
-        corrs = np.zeros(dim_comp)
-        for dim_idx_2, weight_2 in enumerate(mod_2.T):
-            corrs[dim_idx_2] = pearsonr(weight_1, weight_2)[0]
-
-        corrs_for_all_dims.append([corrs])
-
-        if duplicates:
-            mod2_dims.append(np.argmax(corrs))
-        # If duplicates are not allowed, take the highest correlation that has not been used before
-        # i.e. is not in mod2_dims
-        else:
-            for corrs_mod_2 in np.argsort(-corrs):
-                if corrs_mod_2 not in mod2_dims:
-                    mod2_dims.append(corrs_mod_2)
-                    break
-
-        # Store the highest correlation for the current dimension
-        corrs_between_modalities[dim_idx_1] = corrs[mod2_dims[-1]]
-
-    # Sort the dimensions based on the highest correlations
-    mod1_dims_sorted = np.argsort(-corrs_between_modalities)
-    mod2_dims_sorted = np.asarray(mod2_dims)[mod1_dims_sorted]
-    corrs = corrs_between_modalities[mod1_dims_sorted]
-
-    corrs_for_all_dims = np.concatenate(corrs_for_all_dims, axis=0)
-
-    # Return the sorted dimensions and correlations
-    if not_sorted:
-        if all_dims:
-            return (
-                mod1_dims_sorted,
-                mod2_dims_sorted,
-                corrs_between_modalities,
-                corrs_for_all_dims,
-            )
-        return mod1_dims_sorted, mod2_dims_sorted, corrs_between_modalities
-    elif all_dims:
-        return mod1_dims_sorted, mod2_dims_sorted, corrs, corrs_for_all_dims
-    else:
-        return
 
 
 def get_img_pairs(tril_indices, most_dissimilar):
@@ -606,14 +486,6 @@ def plot_mind_machine_corrs(
     plt.close(fig)
 
 
-def plot_rsm(rsm, fname):
-    fig, ax = plt.subplots(figsize=(3, 3))
-    ax.axis("off")
-    ax.imshow(rsm)
-    fig.savefig(fname, pad_inches=0, bbox_inches="tight", dpi=450)
-    plt.close(fig)
-
-
 def concat_images(image_list, topk=8):
     images = []
     per_row = topk // 2
@@ -730,12 +602,19 @@ def visualize_dims_across_modalities(
     plt.close(fig)
 
 
-def corr_rsm_across_dims(human, dnn, index, corr="pearson"):
-    dim_h = human[:, :index]
-    dim_d = dnn[:, :index]
-    rsm_h = correlation_matrix(dim_h)
-    rsm_d = correlation_matrix(dim_d)
+def corr_rsm_across_dims(human, dnn, index, corr="pearson", cumulative=False):
+    if cumulative:
+        dim_h = human[:, :index]
+        dim_d = dnn[:, :index]
+
+    else:
+        dim_h = human[:, index]
+        dim_d = dnn[:, index]
+
+    rsm_h = rsm_pred_torch(dim_h)
+    rsm_d = rsm_pred_torch(dim_d)
     corr_hd = correlate_rsms(rsm_h, rsm_d, corr)
+
     return corr_hd
 
 
@@ -781,6 +660,7 @@ def correlate_modalities(
     if sort_by_corrs:
         matching_corrs = np.array(matching_corrs)
         sorted_corrs = np.argsort(-matching_corrs)
+        matching_corrs = matching_corrs[sorted_corrs]
         comp_dims = np.array(matching_dims)[sorted_corrs]
         base_dims = sorted_corrs
 
@@ -794,101 +674,12 @@ def correlate_modalities(
     return weights_base, weights_comp, matching_corrs
 
 
-def plot_rsm_across_dims(
-    human_dim,
-    dnn_dim,
-    out_path,
-):
-    n_human = human_dim.shape[1]
-    n_dnn = dnn_dim.shape[1]
-    ndims = min(n_human, n_dnn)
-
-    weights_human, weights_dnn, _ = correlate_modalities(
-        human_dim, dnn_dim, duplicates=True, sort_by_corrs=True
-    )
-
-    weights_human_sorted_human, weights_dnn_sorted_human, _ = correlate_modalities(
-        human_dim, dnn_dim, base="human", duplicates=True, sort_by_corrs=False
-    )
-
-    weights_dnn_sorted_dnn, weights_human_sorted_dnn, _ = correlate_modalities(
-        human_dim, dnn_dim, base="dnn", duplicates=True, sort_by_corrs=False
-    )
-
-    rsm_dims = []
-    rsm_dims_human_sorted = []
-    rsm_dims_dnn_sorted = []
-
-    for i in range(2, ndims + 1):
-        print("Calculating RSM correlation for dim {}".format(i), end="\r")
-
-        corr_dim = corr_rsm_across_dims(weights_human, weights_dnn, i, corr="pearson")
-        corr_dim_human = corr_rsm_across_dims(
-            weights_human_sorted_human, weights_dnn_sorted_human, i, corr="pearson"
-        )
-        corr_dim_dnn = corr_rsm_across_dims(
-            weights_dnn_sorted_dnn, weights_human_sorted_dnn, i, corr="pearson"
-        )
-
-        rsm_dims.append(corr_dim)
-        rsm_dims_human_sorted.append(corr_dim_human)
-        rsm_dims_dnn_sorted.append(corr_dim_dnn)
-
-    # Make this into a seaborn lineplot with sums and dims as separate lines
-    rsm_dims = np.array(rsm_dims)
-    rsm_dims_human_sorted = np.array(rsm_dims_human_sorted)
-    rsm_dims_dnn_sorted = np.array(rsm_dims_dnn_sorted)
-
-    fig, ax = plt.subplots(figsize=(6, 4), dpi=300)
-    sns.lineplot(
-        x=range(ndims - 1),
-        y=rsm_dims,
-        label="Correlation",
-        color="r",
-        alpha=0.6,
-        ax=ax,
-    )
-    sns.lineplot(
-        x=range(ndims - 1),
-        y=rsm_dims_human_sorted,
-        label="Human sum",
-        color="b",
-        alpha=0.6,
-        ax=ax,
-    )
-    sns.lineplot(
-        x=range(ndims - 1),
-        y=rsm_dims_dnn_sorted,
-        label="DNN sum",
-        color="g",
-        alpha=0.6,
-        ax=ax,
-    )
-
-    ax.set_xlabel("Number of included dimensions")
-    ax.set_ylabel(r"Pearson r between RSMs")
-    ax.set_ylim(0, 0.65)
-
-    ax.set_xticks(range(0, ndims - 1, 5))
-    ax.set_xticklabels(range(2, ndims + 1, 5))
-    ax.legend(title="Sorting method")
-    sns.despine()
-
-    for ext in ["png", "pdf"]:
-        plt.savefig(
-            os.path.join(out_path, "rsm_corrs_across_dims.{}".format(ext)),
-            dpi=300,
-            bbox_inches="tight",
-            pad_inches=0.05,
-        )
-
-    plt.close()
-
-    breakpoint()
-
-
 def run_embedding_analysis(
-    human_path, dnn_path, img_root, concept_path="", difference="absolute"
+    human_path,
+    dnn_path,
+    img_root,
+    concept_path="",
+    difference="absolute",
 ):
     """Compare human and DNN performance on the same task."""
 
@@ -903,35 +694,16 @@ def run_embedding_analysis(
     dnn_embedding = dnn_embedding[indices]
     dnn_var = dnn_var[indices]
 
-    # # Get rsm matrices
-    rsm_dnn = correlation_matrix(dnn_embedding)
-    rsm_human = correlation_matrix(human_embedding)
-
-    rho = correlate_rsms(rsm_dnn, rsm_human, "spearman")
-    print("Spearman correlation between human and DNN embeddings: {}".format(rho))
-
-    concepts = load_concepts(concept_path)
-
-    rsm_human, rsm_dnn = filter_rsm_concepts(rsm_human, rsm_dnn, concepts, plot_dir)
-    for rsm, name in zip([rsm_dnn, rsm_human], ["dnn", "human"]):
-        fname = os.path.join(plot_dir, f"{name}_rsm.jpg")
-        plot_rsm(rsm, fname)
-
-    out = compare_modalities(
-        human_embedding, dnn_embedding, duplicates=False, all_dims=True, base="human"
+    human_embedding_sorted, dnn_embedding_sorted, corrs = correlate_modalities(
+        human_embedding, dnn_embedding, duplicates=False, sort_by_corrs=True
     )
 
-    human_sorted_indices, dnn_sorted_indices, mind_machine_corrs = out[:3]
-    human_embedding_sorted = human_embedding[:, human_sorted_indices]
-    dnn_embedding_sorted = dnn_embedding[:, dnn_sorted_indices]
-
-    mind_machine_corrs_w_duplicates = compare_modalities(
-        human_embedding, dnn_embedding, duplicates=True, all_dims=True, base="human"
+    corrs_w_duplicates = correlate_modalities(
+        human_embedding, dnn_embedding, duplicates=True, sort_by_corrs=True
     )[2]
-
     plot_mind_machine_corrs(
-        mind_machine_corrs,
-        mind_machine_corrs_w_duplicates,
+        corrs,
+        corrs_w_duplicates,
         plot_dir,
         color="black",
         linewidth=2,
