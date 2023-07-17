@@ -20,35 +20,17 @@ def parse_args():
         description="Extract features and tripletize from a dataset using a pretrained model and module"
     )
     parser.add_argument(
-        "--in_path",
+        "--feature_path",
         type=str,
         default="./data/image_data/things",
-        help="Path to image dataset or any other dataset",
+        help="Path to features to use for tripletization",
     )
     parser.add_argument(
-        "--out_path",
+        "--out_path", 
         type=str,
         default="./data/triplets",
-        help="Path to store image features",
-    )
-    parser.add_argument(
-        "--model_name",
-        type=str,
-        default="vgg16_bn",
-        help="Name of the model to use if we want to extrct features",
-    )
-    parser.add_argument(
-        "--module_name",
-        type=str,
-        default="classifier.3",
-        help="Name of the module to use",
-    )
-    parser.add_argument(
-        "--extract",
-        action="store_true",
-        default=False,
-        help="Extract features from the dataset",
-    )
+        help="Path to save the triplets",
+        )
     parser.add_argument(
         "--tripletize",
         action="store_true",
@@ -80,23 +62,10 @@ def parse_args():
         "--similarity",
         type=str,
         default="dot",
+        choices=["dot", "cosine", "euclidean"],
         help="Similarity metric to use for tripletization",
     )
-    parser.add_argument(
-        "--batch_size",
-        type=int,
-        default=4,
-        help="Batch size for tripletization",
-    )
-
     return parser.parse_args()
-
-
-def default_transforms(X: np.ndarray) -> np.ndarray:
-    X = np.maximum(0, X)
-    nan_indices = np.isnan(X[:, :]).any(axis=1)
-    X = X[~nan_indices]
-    return X
 
 
 def cosine_matrix(X: np.ndarray, a_min: float = -1.0, a_max: float = 1.0):
@@ -154,63 +123,6 @@ def load_domain(path: str) -> np.ndarray:
     return domain
 
 
-def load_model(model_name: str):
-    from thingsvision import get_extractor
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    if model_name in ["clip", "OpenCLIP"]:
-        model = get_extractor(
-            model_name="OpenCLIP",
-            pretrained=True,
-            device=device,
-            source="custom",
-            model_parameters={"variant": "ViT-H-14", "dataset": "laion2b_s32b_b79k"},
-        )
-    else:
-        model = get_extractor(
-            model_name, pretrained=True, device=device, source="torchvision"
-        )
-    return model
-
-
-def extract_features(
-    img_root: str,
-    out_path: str,
-    model_name: str = "vgg16_bn",
-    module_name: str = "classifer.3",
-    batch_size: int = 4,
-):
-    """Extract features from a dataset using a pretrained model"""
-    from thingsvision.utils.storing import save_features
-    from thingsvision.utils.data import DataLoader, ImageDataset
-    from thingsvision.core.extraction import center_features
-
-    extractor = load_model(model_name)
-    dataset = ImageDataset(
-        root=img_root,
-        out_path=out_path,
-        transforms=extractor.get_transformations(),
-        backend=extractor.get_backend(),
-    )
-    assert len(dataset) > 0, "Dataset from path {} is empty!".format(img_root)
-
-    filenames = dataset.images
-    with open(out_path + "/filenames.txt", "w") as f:
-        f.write("\n".join(filenames))
-
-    batches = DataLoader(
-        dataset=dataset, batch_size=batch_size, backend=extractor.get_backend()
-    )
-
-    features = extractor.extract_features(
-        batches=batches, module_name=module_name, flatten_acts=True
-    )
-
-    if model_name in ["clip", "OpenCLIP"]:
-        features = center_features(features)
-    save_features(features, out_path, file_format="npy")
-
-
 @dataclass(init=True, repr=True)
 class Sampler(object):
     feature_path: str
@@ -221,7 +133,7 @@ class Sampler(object):
     seed: int = 42
     sample_type: str = "random"
     similarity: Union[str, Callable] = "dot"
-    transforms: Optional[Callable] = default_transforms  # Note make this optional
+    transforms: Optional[Callable] = self.default_transforms 
     triplet_path: Optional[str] = None
 
     def __post_init__(self):
@@ -240,6 +152,12 @@ class Sampler(object):
             self.X = self.transforms(self.X)
         self.S = get_similarity(self.X, similarity=self.similarity)
         self.n_objects, self.n_features = self.X.shape
+
+    def default_transforms(self, X: np.ndarray) -> np.ndarray:
+        X = np.maximum(0, X)
+        nan_indices = np.isnan(X[:, :]).any(axis=1)
+        X = X[~nan_indices]
+        return X
 
     def softmax(self, z: np.ndarray) -> np.ndarray:
         proba = np.exp(z) / np.sum(np.exp(z))
@@ -396,20 +314,9 @@ class Sampler(object):
 
 if __name__ == "__main__":
     args = parse_args()
-    if args.extract:
-        extract_features(
-            args.in_path,
-            args.out_path,
-            args.model_name,
-            args.module_name,
-            batch_size=args.batch_size,
-        )
-
-    feature_path = os.path.join(args.out_path, "features.npy")
-
     if args.tripletize:
         sampler = Sampler(
-            feature_path,
+            args.feature_path,
             args.out_path,
             n_samples=args.n_samples,
             k=args.k,
