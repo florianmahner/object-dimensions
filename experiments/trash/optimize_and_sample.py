@@ -15,70 +15,82 @@ from pytorch_pretrained_biggan import BigGAN, truncated_noise_sample
 from object_dimensions.utils.latent_predictor import LatentPredictor
 from object_dimensions.utils.utils import img_to_uint8
 from torch.utils.data import DataLoader
+from tomlparse import argparse
 
-from object_dimensions import ExperimentParser
 
-parser = ExperimentParser(description="BigGAN latent space optimization")
-parser.add_argument(
-    "--embedding_path",
-    type=str,
-    default="./weights/params/pruned_q_mu_epoch_300.txt",
-    help="Path to weights directory",
-)
-parser.add_argument(
-    "--model_name", type=str, default="vgg16_bn", help="Model to load from THINGSvision"
-)
-parser.add_argument(
-    "--module_name",
-    type=str,
-    default="classifier.3",
-    help="Layer of the model to load from THINGSvision",
-)
-parser.add_argument(
-    "--n_samples",
-    type=int,
-    default=2_000_000,
-    help="Number of latent samples to generate",
-)
-parser.add_argument(
-    "--window_size",
-    type=int,
-    default=50,
-    help="Window size of trainer to check convergence of latent dimenisonality",
-)
-parser.add_argument("--batch_size", type=int, default=8, help="Batch size for sampling")
-parser.add_argument(
-    "--truncation", type=float, default=0.4, help="Truncation value for noise sample"
-)
-parser.add_argument("--top_k", type=int, default=16, help="Top k values to sample from")
-parser.add_argument(
-    "--sample_latents",
-    type=str,
-    default="False",
-    choices=("True", "False"),
-    help="Sample latents",
-)
-parser.add_argument(
-    "--max_iter", type=int, default=200, help="Number of optimizing iterations"
-)
-parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
-parser.add_argument("--seed", type=int, default=42, help="Random seed")
-parser.add_argument(
-    "--dim", type=int, default=(1, 2), nargs="+", help="Dimension to optimize for"
-)
-parser.add_argument(
-    "--alpha",
-    type=float,
-    default=1.0,
-    help="Weight of the absolute value in a dimension to optimize for",
-)
-parser.add_argument(
-    "--beta",
-    type=float,
-    default=1.0,
-    help="Weight for the softmax loss in the dimension optimization",
-)
-parser.add_argument("--device", type=str, default="cuda:0", help="Device to use")
+def parse_args():
+    parser = argparse.ArgumentParser(description="BigGAN latent space optimization")
+    parser.add_argument(
+        "--embedding_path",
+        type=str,
+        default="./weights/params/pruned_q_mu_epoch_300.txt",
+        help="Path to weights directory",
+    )
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        default="vgg16_bn",
+        help="Model to load from THINGSvision",
+    )
+    parser.add_argument(
+        "--module_name",
+        type=str,
+        default="classifier.3",
+        help="Layer of the model to load from THINGSvision",
+    )
+    parser.add_argument(
+        "--n_samples",
+        type=int,
+        default=2_000_000,
+        help="Number of latent samples to generate",
+    )
+    parser.add_argument(
+        "--window_size",
+        type=int,
+        default=50,
+        help="Window size of trainer to check convergence of latent dimenisonality",
+    )
+    parser.add_argument(
+        "--batch_size", type=int, default=8, help="Batch size for sampling"
+    )
+    parser.add_argument(
+        "--truncation",
+        type=float,
+        default=0.4,
+        help="Truncation value for noise sample",
+    )
+    parser.add_argument(
+        "--top_k", type=int, default=16, help="Top k values to sample from"
+    )
+    parser.add_argument(
+        "--sample_latents",
+        type=str,
+        default="False",
+        choices=("True", "False"),
+        help="Sample latents",
+    )
+    parser.add_argument(
+        "--max_iter", type=int, default=200, help="Number of optimizing iterations"
+    )
+    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument(
+        "--dim", type=int, default=(1, 2), nargs="+", help="Dimension to optimize for"
+    )
+    parser.add_argument(
+        "--alpha",
+        type=float,
+        default=1.0,
+        help="Weight of the absolute value in a dimension to optimize for",
+    )
+    parser.add_argument(
+        "--beta",
+        type=float,
+        default=1.0,
+        help="Weight for the softmax loss in the dimension optimization",
+    )
+    parser.add_argument("--device", type=str, default="cuda:0", help="Device to use")
+    return parser.parse_args()
 
 
 def global_shift(img: torch.Tensor):
@@ -167,7 +179,8 @@ def optimize_latents(
 class Sampler(object):
     """Generate n latent samples a priori for optimization of latent embeddings
     We generate n images for this using the pretrained big gan and then select the topk images that maximally
-    activate each of the embedding dimension. We then optimize for these topk latents!"""
+    activate each of the embedding dimension. We then optimize for these topk latents!
+    """
 
     def __init__(
         self, n_samples, n_dims, batch_size, truncation, top_k, out_path, device
@@ -401,7 +414,7 @@ class Optimizer(nn.Module):
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
+    args = parse_args()
 
     np.random.seed(args.seed)
     random.seed(args.seed)

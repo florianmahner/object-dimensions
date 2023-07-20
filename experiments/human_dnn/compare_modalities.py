@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from skimage.transform import resize
+from tomlparse import argparse
 import skimage.io as io
 
 from experiments.human_dnn.reconstruction_accuracy import rsm_pred_torch
@@ -22,27 +23,30 @@ from object_dimensions.utils.utils import (
     create_path_from_params,
 )
 from scipy.stats import rankdata, pearsonr, spearmanr
-from object_dimensions import ExperimentParser
 
 
-parser = ExperimentParser(
-    description="Compare human and DNN performance on the same task."
-)
-parser.add_argument("--human_path", type=str, help="Path to human embedding matrix.")
-parser.add_argument("--dnn_path", type=str, help="Path to DNN embedding matrix.")
-parser.add_argument(
-    "--img_root", type=str, help="Path to VGG feature matrix and filenames"
-)
-parser.add_argument(
-    "--concept_path", type=str, help="Path to concept matrix and filenames"
-)
-parser.add_argument(
-    "--diff_measure",
-    type=str,
-    choices=["rank", "absolute"],
-    default="absolute",
-    help="Measure to use for comparing the two modalities in the scatter plot",
-)
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Compare human and DNN performance on the same task."
+    )
+    parser.add_argument(
+        "--human_path", type=str, help="Path to human embedding matrix."
+    )
+    parser.add_argument("--dnn_path", type=str, help="Path to DNN embedding matrix.")
+    parser.add_argument(
+        "--img_root", type=str, help="Path to VGG feature matrix and filenames"
+    )
+    parser.add_argument(
+        "--concept_path", type=str, help="Path to concept matrix and filenames"
+    )
+    parser.add_argument(
+        "--diff_measure",
+        type=str,
+        choices=["rank", "absolute"],
+        default="absolute",
+        help="Measure to use for comparing the two modalities in the scatter plot",
+    )
+    return parse_args()
 
 
 def get_img_pairs(tril_indices, most_dissimilar):
@@ -480,7 +484,7 @@ def plot_mind_machine_corrs(
             bbox_inches="tight",
             pad_inches=0.05,
             dpi=300,
-            transparent=True,
+            transparent=False,
         )
 
     plt.close(fig)
@@ -621,6 +625,21 @@ def corr_rsm_across_dims(human, dnn, index, corr="pearson", cumulative=False):
 def correlate_modalities(
     weights_human, weights_dnn, base="human", duplicates=False, sort_by_corrs=True
 ):
+    """Correlate the weights of two modalities and return the weights of both modalities in eiter the same or different orders
+    Parameters:
+    weights_human (np.ndarray): The weights of the human modality
+    weights_dnn (np.ndarray): The weights of the DNN modality
+    base (str): The modality that will be used as the base for the comparison.
+                The other modality will be compared to this one.
+    duplicates (bool): Whether to allow duplicate dimensions in the comparison modality.
+                       If set to False, we correlate without repeats.
+    sort_by_corrs (bool): Whether to sort the dimensions based on the highest correlations. Otherwise we sort
+                            the dimensions based on the order of the dimensions in the base modality
+                            (i.e. the sum of the weights)
+    Returns:
+    Tuple[np.ndarray, np.ndarray]: The correlated weights of the human and DNN modalities,
+    in either the same or different orders based on the parameters.
+    """
     dim_human, dim_dnn = weights_human.shape[1], weights_dnn.shape[1]
     weights = {"human": weights_human, "dnn": weights_dnn}
     dims = {"human": dim_human, "dnn": dim_dnn}
@@ -709,12 +728,6 @@ def run_embedding_analysis(
         linewidth=2,
     )
 
-    plot_rsm_across_dims(
-        human_embedding,
-        dnn_embedding,
-        plot_dir,
-    )
-
     for j, (w_b, w_dnn) in enumerate(
         zip(human_embedding_sorted.T[:50], dnn_embedding_sorted.T[:50])
     ):
@@ -722,7 +735,7 @@ def run_embedding_analysis(
         # w_b += np.min(w_b)
         # w_dnn += np.min(w_dnn)
 
-        pearson = mind_machine_corrs[j]
+        pearson = corrs[j]
 
         w_b /= np.max(w_b)
         w_dnn /= np.max(w_dnn)
@@ -775,7 +788,7 @@ def run_embedding_analysis(
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
+    args = parse_args()
     run_embedding_analysis(
         args.human_path,
         args.dnn_path,

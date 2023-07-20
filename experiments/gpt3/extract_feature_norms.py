@@ -11,49 +11,36 @@ import pandas as pd
 from copy import deepcopy
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
-
-
+from tomlparse import argparse
 from object_dimensions.utils.utils import load_sparse_codes, load_image_data
-from object_dimensions import ExperimentParser
 
-parser = ExperimentParser(description="Label dimensions of sparse codes using GPT3")
-parser.add_argument(
-    "--embedding_path",
-    default="./embedding.txt",
-    type=str,
-    help="Path to the embedding txt file",
-)
-parser.add_argument(
-    "--img_root",
-    default="./data/image_data/images12_plus",
-    type=str,
-    help="Path to all vgg features",
-)
-parser.add_argument(
-    "--feature_norm_path",
-    default="./data/feature_norms",
-    type=str,
-    help="Path to GPT3 norms",
-)
-parser = ExperimentParser(description="Label dimensions of sparse codes using GPT3")
-parser.add_argument(
-    "--embedding_path",
-    default="./embedding.txt",
-    type=str,
-    help="Path to the embedding txt file",
-)
-parser.add_argument(
-    "--img_root",
-    default="./data/image_data/images12_plus",
-    type=str,
-    help="Path to all vgg features",
-)
-parser.add_argument(
-    "--feature_norm_path",
-    default="./data/feature_norms",
-    type=str,
-    help="Path to GPT3 norms",
-)
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Label dimensions of sparse codes using GPT3"
+    )
+    parser.add_argument(
+        "--embedding_path",
+        default="./embedding.txt",
+        type=str,
+        help="Path to the embedding txt file",
+    )
+    parser.add_argument(
+        "--img_root",
+        default="./data/image_data/images12_plus",
+        type=str,
+        help="Path to all vgg features",
+    )
+    parser.add_argument(
+        "--feature_norm_path",
+        default="./data/feature_norms",
+        type=str,
+        help="Path to GPT3 norms",
+    )
+    parser.add_argument(
+        "--run", default=False, action="store_true", help="Run extraction of norms"
+    )
+    return parser.parse_args()
 
 
 def normalize_object_dimension_weights(object_dimension_embeddings):
@@ -145,7 +132,17 @@ def generate_gpt3_norms(
     embedding_path,
     img_root,
     feature_norm_path="./data/feature_norms/feature_object_matrix.csv",
+    run=False,
 ):
+    # Save to file
+    base_path = os.path.dirname(os.path.dirname(embedding_path))
+    out_path = os.path.join(base_path, "analyses", "per_dim")
+
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
+
+    fname = os.path.join(out_path, "dimensions_labelled_gpt3.csv")
+
     feature_norms = pd.read_csv(feature_norm_path)
     feature_norms = feature_norms.T
 
@@ -155,32 +152,30 @@ def generate_gpt3_norms(
     embedding = embedding[indices]
 
     objects = [os.path.basename(f).split(".")[0][:-4] for f in image_filenames]
-    embedding_pd = pd.DataFrame(embedding, index=objects)
 
-    descriptions = calc_top_feature_per_dim(
-        embedding_pd, feature_norms, list(range(embedding.shape[1]))
-    )
-    topk_descriptions = matrix_to_top_list(descriptions, topk=7)
+    if run:
+        embedding_pd = pd.DataFrame(embedding, index=objects)
 
-    topk_indices = topk_descriptions["feature"].tolist()
+        descriptions = calc_top_feature_per_dim(
+            embedding_pd, feature_norms, list(range(embedding.shape[1]))
+        )
+        topk_descriptions = matrix_to_top_list(descriptions, topk=7)
 
-    topk_indices = topk_descriptions["feature"].tolist()
+        topk_indices = topk_descriptions["feature"].tolist()
 
-    # Get the first row of the feature norms pd dataframe
-    text = feature_norms.iloc[0, :].tolist()
-    features = [text[t] for t in topk_indices]
-    topk_descriptions["description"] = features
-    topk_descriptions["description"] = features
+        topk_indices = topk_descriptions["feature"].tolist()
 
-    # Save to file
-    base_path = os.path.dirname(os.path.dirname(embedding_path))
-    out_path = os.path.join(base_path, "analyses", "per_dim")
+        # Get the first row of the feature norms pd dataframe
+        text = feature_norms.iloc[0, :].tolist()
+        features = [text[t] for t in topk_indices]
+        topk_descriptions["description"] = features
+        topk_descriptions["description"] = features
+        topk_descriptions.to_csv(fname, index=False)
 
-    if not os.path.exists(out_path):
-        os.makedirs(out_path)
-
-    fname = os.path.join(out_path, "dimensions_labelled_gpt3.csv")
-    topk_descriptions.to_csv(fname, index=False)
+    else:
+        topk_descriptions = pd.read_csv(
+            fname, dtype={"feature": str, "weight": float, "dimension": int}
+        )
 
     # Create a word cloud for each dimension with its description weights by the weight
     for dim in range(embedding.shape[1]):
@@ -194,25 +189,33 @@ def generate_gpt3_norms(
         weights = dim_df["weight"].tolist()
         weights = [w * 1000 for w in weights]
         weights = [int(w) for w in weights]
+
+        x, y = np.ogrid[:300, :300]
+        mask = (x - 150) ** 2 + (y - 150) ** 2 > 130**2
+        mask = 255 * mask.astype(int)
         wordcloud = WordCloud(
-            width=800,
-            height=400,
-            max_words=100,
+            width=1600,
+            height=800,
+            max_words=5,
             background_color="white",
-            # colormap="tab10",
+            colormap="tab10",
+            mask=mask,
         ).generate_from_frequencies(dict(zip(words, weights)))
-        plt.figure(figsize=(5, 2))
+        plt.figure(figsize=(20, 10))
         plt.imshow(wordcloud, interpolation="bilinear")
         plt.axis("off")
-        plt.savefig(
-            os.path.join(out_path, f"{dim:02d}", f"{dim}_word_cloud.png"),
-            dpi=300,
-            bbox_inches="tight",
-            pad_inches=0,
-        )
+        for ext in ["pdf", "png"]:
+            plt.savefig(
+                os.path.join(out_path, f"{dim:02d}", f"{dim}_word_cloud.{ext}"),
+                dpi=300,
+                bbox_inches="tight",
+                pad_inches=0,
+            )
         plt.close()
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
-    generate_gpt3_norms(args.embedding_path, args.img_root, args.feature_norm_path)
+    args = parse_args()
+    generate_gpt3_norms(
+        args.embedding_path, args.img_root, args.feature_norm_path, args.run
+    )

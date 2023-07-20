@@ -46,12 +46,18 @@ class LatentPredictor(nn.Module):
         regression_path="",
     ):
         super().__init__()
+        if isinstance(device, torch.device):
+            device_type = device.type
+            self.device = device
+        else:
+            device_type = device
+            self.device = torch.device(device)
+            
         extractor = get_extractor(
-            model_name=model_name, pretrained=True, device=device, source="torchvision"
+            model_name=model_name, pretrained=True, device=device_type, source="torchvision"
         )
         model = extractor.model
         model = model.eval()
-        # model = model.train()
 
         self.feature_extractor = model.features
 

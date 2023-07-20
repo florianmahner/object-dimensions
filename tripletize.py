@@ -2,21 +2,21 @@
 # -*- coding: utf-8 -*-
 
 import os
-from object_dimensions import ExperimentParser
+from tomlparse import argparse
 import itertools
 import random
 import os
 import re
-import torch
 from dataclasses import dataclass
-from typing import Union, Callable, Tuple, List, Optional, Iterable
+from typing import Union, Callable, Optional, Iterable
 import numpy as np
 from collections import Counter
 from scipy.spatial.distance import cdist
+from pathlib import Path
 
 
 def parse_args():
-    parser = ExperimentParser(
+    parser = argparse.ArgumentParser(
         description="Extract features and tripletize from a dataset using a pretrained model and module"
     )
     parser.add_argument(
@@ -26,16 +26,10 @@ def parse_args():
         help="Path to features to use for tripletization",
     )
     parser.add_argument(
-        "--out_path", 
+        "--out_path",
         type=str,
         default="./data/triplets",
         help="Path to save the triplets",
-        )
-    parser.add_argument(
-        "--tripletize",
-        action="store_true",
-        default=False,
-        help="Tripletize the features",
     )
     parser.add_argument(
         "--adaptive",
@@ -64,6 +58,20 @@ def parse_args():
         default="dot",
         choices=["dot", "cosine", "euclidean"],
         help="Similarity metric to use for tripletization",
+    )
+    parser.add_argument(
+        "--k",
+        type=int,
+        default=3,
+        help="Number of nearest neighbors to use. 3 = triplet, 2 pairwise",
+        choices=[2, 3],
+    )
+
+    parser.add_argument(
+        "--train_fraction",
+        type=float,
+        default=0.9,
+        help="Fraction of data to use for training",
     )
     return parser.parse_args()
 
@@ -133,23 +141,26 @@ class Sampler(object):
     seed: int = 42
     sample_type: str = "random"
     similarity: Union[str, Callable] = "dot"
-    transforms: Optional[Callable] = self.default_transforms 
+    transforms: Optional[Callable] = None
     triplet_path: Optional[str] = None
 
     def __post_init__(self):
-        if self.k != 3:
-            raise ValueError("Only triplets are supported at the moment")
+        if self.k not in [2, 3]:
+            raise ValueError(
+                "Only triplets (k=3) and pairwise (k=2) are supported at the moment"
+            )
         if self.train_fraction > 1 or self.train_fraction < 0:
             raise ValueError("Train fraction must be between 0 and 1")
         if self.sample_type not in ["random", "adaptive"]:
             raise ValueError("Sample type must be either 'random' or 'adaptive'")
-
         if not os.path.exists(self.out_path):
             os.makedirs(self.out_path)
 
         self.X = load_domain(self.feature_path)
         if self.transforms:
             self.X = self.transforms(self.X)
+        else:
+            self.X = self.default_transforms(self.X)
         self.S = get_similarity(self.X, similarity=self.similarity)
         self.n_objects, self.n_features = self.X.shape
 
@@ -281,6 +292,9 @@ class Sampler(object):
         test_split = ooo_choices[frac:]
         return train_split, test_split
 
+    def run(self) -> None:
+        self()
+
     def __call__(self) -> None:
         """Sample triplets and save them to disk."""
         if self.k == 2:
@@ -291,8 +305,9 @@ class Sampler(object):
             unique_triplets = load_domain(self.triplet_path)
             unique_triplets = unique_triplets.astype(int)
             unique_triplets.sort(axis=1)
+            self.n_samples = unique_triplets.shape[0]
             choices = self.select_odd_one_outs(unique_triplets)
-            fname = os.path.basename(self.triplet_path)
+            fname = Path(self.triplet_path).stem + ".npy"
             with open(os.path.join(self.out_path, fname), "wb") as f:
                 np.save(f, choices)
             return
@@ -314,14 +329,16 @@ class Sampler(object):
 
 if __name__ == "__main__":
     args = parse_args()
-    if args.tripletize:
-        sampler = Sampler(
-            args.feature_path,
-            args.out_path,
-            n_samples=args.n_samples,
-            k=args.k,
-            train_fraction=args.train_fraction,
-            seed=args.seed,
-            similarity=args.similarity,
-            triplet_path=args.triplet_path,
-        )
+
+    sampler = Sampler(
+        args.feature_path,
+        args.out_path,
+        n_samples=args.n_samples,
+        k=args.k,
+        train_fraction=args.train_fraction,
+        seed=args.seed,
+        similarity=args.similarity,
+        triplet_path=args.triplet_path,
+    )
+
+    sampler.run()

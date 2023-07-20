@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from object_dimensions import ExperimentParser
+from tomlparse import argparse
 from object_dimensions.utils.utils import (
     load_sparse_codes,
     load_image_data,
@@ -8,22 +8,27 @@ from object_dimensions.utils.utils import (
 )
 from torch import Tensor
 from tqdm import tqdm
-from typing import Tuple
+from typing import Tuple, Union
 
 
-parser = ExperimentParser()
-parser.add_argument("--human_path", type=str, default="./results/human")
-parser.add_argument("--dnn_path", type=str, default="./results/dnn")
-parser.add_argument(
-    "--img_root",
-    type=str,
-    default="./data/reference_images",
-    help="Path to image root directory",
-)
+def parse_args():
+    parser = tomlparse.ArgumentParser()
+    parser.add_argument("--human_path", type=str, default="./results/human")
+    parser.add_argument("--dnn_path", type=str, default="./results/dnn")
+    parser.add_argument(
+        "--img_root",
+        type=str,
+        default="./data/reference_images",
+        help="Path to image root directory",
+    )
+    return parser.parse_args()
 
 
 def rsm_pred_torch(
-    embedding: np.ndarray, w_acc: bool = False, verbose: bool = False
+    embedding: Union[np.ndarray, torch.Tensor],
+    w_acc: bool = False,
+    verbose: bool = False,
+    return_type: str = "numpy",
 ) -> Tuple[Tensor, float]:
     """
     Compute the reconstruction similarity matrix (RSM) for a given embedding
@@ -44,7 +49,14 @@ def rsm_pred_torch(
         >>> print(odd_one_out_accuracy)
         0.123456789
     """
-    embedding = torch.tensor(embedding, dtype=torch.double)
+    assert isinstance(
+        embedding, (np.ndarray, torch.Tensor)
+    ), "embedding must be a numpy array or torch tensor"
+    if isinstance(embedding, np.ndarray):
+        embedding = torch.tensor(embedding, dtype=torch.double)
+    if embedding.dtype != torch.double:
+        embedding = embedding.double()
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     sim_matrix = torch.matmul(embedding, embedding.T)
     sim_matrix = sim_matrix.to(dtype=torch.double, device=device)
@@ -94,11 +106,14 @@ def rsm_pred_torch(
 
     if verbose:
         pbar.close()
-    rsm = rsm.cpu().numpy()
-    rsm += rsm.T  # make similarity matrix symmetric
 
-    np.fill_diagonal(rsm, 1)
+    rsm = rsm + rsm.T  # make similarity matrix symmetric
+    rsm.fill_diagonal_(1)
     ooo_accuracy = ooo_accuracy.item() / n_batches
+
+    if return_type == "numpy":
+        rsm = rsm.cpu().numpy()
+
     if w_acc:
         return rsm, ooo_accuracy
     else:
@@ -119,5 +134,5 @@ def main(args):
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
+    args = parse_args()
     main(args)

@@ -8,118 +8,121 @@ import random
 import argparse
 
 import numpy as np
+from tomlparse import argparse
 
 from object_dimensions.core.engine import EmbeddingTrainer
 from object_dimensions.core.model import VariationalEmbedding, DeterministicEmbedding
 from object_dimensions.core.priors import SpikeSlabPrior, LogGaussianPrior
-
-from object_dimensions import ExperimentParser, build_triplet_dataset
-from object_dimensions import DeepEmbeddingLogger
+from object_dimensions import DeepEmbeddingLogger, build_triplet_dataset
 
 
-parser = ExperimentParser(description="Main training script for deep embeddings")
-parser.add_argument(
-    "--method",
-    type=str,
-    default="variational",
-    choices=("variational", "deterministic"),
-    help="Type of embedding to train. Variational = VICE, deterministic = SPoSE",
-)
-parser.add_argument("--triplet_path", type=str, help="Path to the triplet file")
-parser.add_argument(
-    "--log_path",
-    type=str,
-    default="./results",
-    help="Path to store all training outputs and model checkpoints",
-)
-parser.add_argument(
-    "--modality",
-    type=str,
-    default="dnn",
-    choices=("dnn", "behavior"),
-    help="Modality to train on",
-)
-parser.add_argument(
-    "--fresh",
-    default=False,
-    action="store_true",
-    help="""Start clean and delete old path content. Otherwise
-continue training from checkpoint if it exists and load the previous config file from that directory""",
-)
-parser.add_argument(
-    "--load_model",
-    default=False,
-    action="store_true",
-    help="Load a pretrained model from log path",
-)
-parser.add_argument(
-    "--tensorboard",
-    default=False,
-    action="store_true",
-    help="Use tensorboard to log training",
-)
-parser.add_argument(
-    "--init_dim",
-    type=int,
-    default=100,
-    help="Initial dimensionality of the latent space",
-)
-parser.add_argument(
-    "--prior",
-    type=str,
-    default="sslab",
-    choices=["sslab", "gauss"],
-    help="Select the prior to use for the variational embedding",
-)
-parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
-parser.add_argument(
-    "--n_epochs", type=int, default=3000, help="Number of epochs to train for"
-)
-parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
-parser.add_argument(
-    "--stability_time",
-    type=int,
-    default=100,
-    help="Number of epochs to train before checking stability",
-)
-parser.add_argument("--seed", type=int, default=42, help="Random seed")
-parser.add_argument(
-    "--beta",
-    type=float,
-    default=1.0,
-    help="Beta parameter to balance KL div and reconstruction loss",
-)
-parser.add_argument(
-    "--params_interval",
-    type=int,
-    default=100,
-    help="Interval to save learned embeddings",
-)
-parser.add_argument(
-    "--checkpoint_interval",
-    type=int,
-    default=100,
-    help="Interval to save model checkpoints",
-)
-parser.add_argument(
-    "--mc_samples",
-    type=int,
-    default=5,
-    help="Number of Monte Carlo samples to use for inference",
-)
-parser.add_argument(
-    "--scale", type=float, default=0.5, help="Scale parameter for log normal prior"
-)
-parser.add_argument(
-    "--non_zero_weights",
-    type=int,
-    default=5,
-    help="Number of non zero weights for each object",
-)
-parser.add_argument("--device_id", type=int, default=0, help="GPU device id")
-parser.add_argument(
-    "--identifier", type=str, default="", help="Identifier for the experiment"
-)
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Main training script for deep embeddings"
+    )
+    parser.add_argument(
+        "--method",
+        type=str,
+        default="variational",
+        choices=("variational", "deterministic"),
+        help="Type of embedding to train. Variational = VICE, deterministic = SPoSE",
+    )
+    parser.add_argument("--triplet_path", type=str, help="Path to the triplet file")
+    parser.add_argument(
+        "--log_path",
+        type=str,
+        default="./results",
+        help="Path to store all training outputs and model checkpoints",
+    )
+    parser.add_argument(
+        "--modality",
+        type=str,
+        default="dnn",
+        choices=("dnn", "behavior"),
+        help="Modality to train on",
+    )
+    parser.add_argument(
+        "--fresh",
+        default=False,
+        action="store_true",
+        help="""Start clean and delete old path content. Otherwise
+    continue training from checkpoint if it exists and load the previous config file from that directory""",
+    )
+    parser.add_argument(
+        "--load_model",
+        default=False,
+        action="store_true",
+        help="Load a pretrained model from log path",
+    )
+    parser.add_argument(
+        "--tensorboard",
+        default=False,
+        action="store_true",
+        help="Use tensorboard to log training",
+    )
+    parser.add_argument(
+        "--init_dim",
+        type=int,
+        default=100,
+        help="Initial dimensionality of the latent space",
+    )
+    parser.add_argument(
+        "--prior",
+        type=str,
+        default="sslab",
+        choices=["sslab", "gauss"],
+        help="Select the prior to use for the variational embedding",
+    )
+    parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
+    parser.add_argument(
+        "--n_epochs", type=int, default=3000, help="Number of epochs to train for"
+    )
+    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
+    parser.add_argument(
+        "--stability_time",
+        type=int,
+        default=100,
+        help="Number of epochs to train before checking stability",
+    )
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument(
+        "--beta",
+        type=float,
+        default=1.0,
+        help="Beta parameter to balance KL div and reconstruction loss",
+    )
+    parser.add_argument(
+        "--params_interval",
+        type=int,
+        default=100,
+        help="Interval to save learned embeddings",
+    )
+    parser.add_argument(
+        "--checkpoint_interval",
+        type=int,
+        default=100,
+        help="Interval to save model checkpoints",
+    )
+    parser.add_argument(
+        "--mc_samples",
+        type=int,
+        default=5,
+        help="Number of Monte Carlo samples to use for inference",
+    )
+    parser.add_argument(
+        "--scale", type=float, default=0.5, help="Scale parameter for log normal prior"
+    )
+    parser.add_argument(
+        "--non_zero_weights",
+        type=int,
+        default=5,
+        help="Number of non zero weights for each object",
+    )
+    parser.add_argument("--device_id", type=int, default=0, help="GPU device id")
+    parser.add_argument(
+        "--identifier", type=str, default="", help="Identifier for the experiment"
+    )
+    return parser.parse_args()
 
 
 def _parse_number_of_objects(triplet_path, modality):
@@ -301,6 +304,6 @@ def train(args):
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
+    args = parse_args()
     _check_args(args)
     train(args)

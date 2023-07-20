@@ -9,44 +9,52 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import skimage.io as io
 import numpy as np
-import cv2
-from object_dimensions import ExperimentParser
+import random
+
+from tomlparse import argparse
 from object_dimensions.utils.utils import load_sparse_codes, load_image_data
 
 
-parser = ExperimentParser(description="Visualize embedding")
-parser.add_argument(
-    "--embedding_path", type=str, default="./weights", help="path to weights directory"
-)
-parser.add_argument(
-    "--img_root",
-    type=str,
-    default="./data/reference_images",
-    help="Path to image root directory",
-)
-parser.add_argument(
-    "--filter_behavior",
-    default=False,
-    action="store_true",
-    help="If to filter the learned embedding by the behavior images",
-)
-parser.add_argument(
-    "--filter_plus",
-    default=False,
-    action="store_true",
-    help="If to filter the learned embedding by the behavior images",
-)
-parser.add_argument(
-    "--per_dim", default=False, action="store_true", help="Plots per dimension if true"
-)
+def parse_args():
+    parser = argparse.ArgumentParser(description="Visualize embedding")
+    parser.add_argument(
+        "--embedding_path",
+        type=str,
+        default="./weights",
+        help="path to weights directory",
+    )
+    parser.add_argument(
+        "--img_root",
+        type=str,
+        default="./data/reference_images",
+        help="Path to image root directory",
+    )
+    parser.add_argument(
+        "--filter_behavior",
+        default=False,
+        action="store_true",
+        help="If to filter the learned embedding by the behavior images",
+    )
+    parser.add_argument(
+        "--filter_plus",
+        default=False,
+        action="store_true",
+        help="If to filter the learned embedding by the behavior images",
+    )
+    parser.add_argument(
+        "--per_dim",
+        default=False,
+        action="store_true",
+        help="Plots per dimension if true",
+    )
 
-
-parser.add_argument(
-    "--behav-experiment",
-    default=False,
-    action="store_true",
-    help="Plots large images for behavior experiment",
-)
+    parser.add_argument(
+        "--behav-experiment",
+        default=False,
+        action="store_true",
+        help="Plots large images for behavior experiment",
+    )
+    return parser.parse_args()
 
 
 def plot_dim_3x3(images, codes, dim, top_k=10):
@@ -59,6 +67,29 @@ def plot_dim_3x3(images, codes, dim, top_k=10):
     top_k = 9
     top_k_samples = np.argsort(-weight)[:top_k]  # this is over the image dimension
     fig, axes = plt.subplots(3, 3, figsize=(6, 6))
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0.0, hspace=0.0)
+
+    for k, sample in enumerate(top_k_samples):
+        ax = axes[k // 3, k % 3]
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.axis("off")
+        img = io.imread(images[sample])
+
+        ax.imshow(img)
+    return fig
+
+
+def plot_dim_3x2(images, codes, dim, top_k=10):
+    # Check if codes is 2d or 1d
+    if len(codes.shape) == 1:
+        weight = codes
+    else:
+        weight = codes[:, dim]
+
+    top_k = 6
+    top_k_samples = np.argsort(-weight)[:top_k]  # this is over the image dimension
+    fig, axes = plt.subplots(2, 3, figsize=(6, 4))
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0.0, hspace=0.0)
 
     for k, sample in enumerate(top_k_samples):
@@ -95,28 +126,32 @@ def plot_dim_1x8(images, codes, dim, top_k=10):
     return fig
 
 
-def plot_large(images, codes, dim, top_k=6):
+def plot_behavior(images, codes, dim, top_k=6):
     # Check if codes is 2d or 1d
     if len(codes.shape) == 1:
         weight = codes
     else:
         weight = codes[:, dim]
-
     weight_indices = np.argsort(-weight)
-    # Shape of weight_indices is (n_samples, ) usually 24102
     n = int(len(weight_indices))
-
     n_rows = 7
     n_cols = 12
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(24, 15))
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0.05, hspace=0.0)
-    for i, p in enumerate(np.arange(0, n_rows * 8, 8)):
-        middle_idx = int(n * ((p / 100)))
-        start_idx = max(0, middle_idx - 6)  # for the lowest 20 percentile
-        end_idx = min(n, middle_idx + 12)  # for the highest 20 percentile
-        weight_percentile = weight_indices[start_idx:end_idx]
 
+    ws = 12  # window size
+
+    for i, p in enumerate(np.arange(0, n_rows * 2, 2)):
+        middle_idx = int(n * ((p / 100)))
+        start_idx = max(0, middle_idx - ws // 2)  # for the lowest 20 percentile
+        end_idx = min(n, middle_idx + ws // 2)  # for the highest 20 percentile
+        end_idx = max(end_idx, ws)
+        indices = list(range(start_idx, end_idx))
+        # random.seed(0)
+        # random.shuffle(indices)
+        indices = indices[:12]
+        weight_percentile = weight_indices[indices]
         for j, sample in enumerate(weight_percentile):
             ax = axes[i, j]
             ax.set_xticks([])
@@ -127,9 +162,7 @@ def plot_large(images, codes, dim, top_k=6):
             ax.imshow(img)
 
             if j == 11:
-                # breakpoint()
                 break
-
     return fig
 
 
@@ -174,7 +207,6 @@ def plot_per_dim(args):
 
     print("Shape of weight Matrix", W.shape)
 
-    top_k = 10
     n_dims = W.shape[1]
 
     for dim in range(n_dims):
@@ -184,7 +216,7 @@ def plot_per_dim(args):
             )
             if not os.path.exists(behav_path):
                 os.makedirs(behav_path)
-            fig_large = plot_large(images, W, dim, top_k=16)
+            fig_large = plot_behavior(images, W, dim, top_k=16)
             for ext in ["jpg"]:
                 fname = os.path.join(behav_path, f"{dim}_topk{append}_large.{ext}")
                 fig_large.savefig(fname, dpi=100, bbox_inches="tight", pad_inches=0)
@@ -192,9 +224,9 @@ def plot_per_dim(args):
             print(f"Done plotting for dim {dim} large")
             continue
 
-        fig_5x2 = plot_dim(images, W, dim, top_k)
-        fig_3x3 = plot_dim_3x3(images, W, dim, top_k)
-        fig_1x8 = plot_dim_1x8(images, W, dim, top_k)
+        fig_5x2 = plot_dim(images, W, dim, 10)
+        fig_3x3 = plot_dim_3x3(images, W, dim, 9)
+        fig_1x8 = plot_dim_1x8(images, W, dim, 8)
 
         # fig.suptitle("Dimension: {}".format(dim))
         out_path = os.path.join(results_path, f"{dim:02d}")
@@ -251,8 +283,9 @@ def plot_dimensions(args):
         bbox_inches="tight",
         pad_inches=0,
     )
+    plt.close(fig)
 
-    top_k = 12
+    top_k = 20
     n_rows = W.shape[0]
     n_cols = top_k
     fig = plt.figure(figsize=(int(top_k * 1.5), int(n_rows * 1.6)))
@@ -284,7 +317,7 @@ def plot_dimensions(args):
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
+    args = parse_args()
     if args.per_dim:
         plot_per_dim(args)
     else:

@@ -10,46 +10,47 @@ from thingsvision.utils.data import DataLoader
 from thingsvision.core.extraction import center_features
 
 from object_dimensions.utils.image_dataset import ImageDataset
-from object_dimensions import ExperimentParser
+from tomlparse import argparse
 
 sys.path.append("./stylegan_xl")
 from stylegan_xl import legacy
 from stylegan_xl.dnnlib import util
 
-from thingsvision.utils.storing import save_features
-from thingsvision import get_extractor
-from thingsvision.utils.data import DataLoader, ImageDataset
-from thingsvision.core.extraction import center_features
-
-parser = ExperimentParser(
-    description="Extract features from a dataset using a pretrained model"
-)
-parser.add_argument(
-    "--img_root", type=str, default="./data/THINGS", help="Path to image dataset"
-)
-parser.add_argument(
-    "--out_path", type=str, default="./data/vgg_features", help="Path to save features"
-)
-parser.add_argument(
-    "--batch_size",
-    type=int,
-    default=64,
-    help="Batch size for the dataloader to extract features",
-)
-parser.add_argument(
-    "--model_name",
-    type=str,
-    default="vgg16_bn",
-    help="Name of the pretrained model to use",
-)
-parser.add_argument(
-    "--module_name",
-    type=str,
-    default="classifier.3",
-    help="Name of the layer to extract features from",
-)
-
 device = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Extract features from a dataset using a pretrained model"
+    )
+    parser.add_argument(
+        "--img_root", type=str, default="./data/THINGS", help="Path to image dataset"
+    )
+    parser.add_argument(
+        "--out_path",
+        type=str,
+        default="./data/vgg_features",
+        help="Path to save features",
+    )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        default=64,
+        help="Batch size for the dataloader to extract features",
+    )
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        default="vgg16_bn",
+        help="Name of the pretrained model to use",
+    )
+    parser.add_argument(
+        "--module_name",
+        type=str,
+        default="classifier.3",
+        help="Name of the layer to extract features from",
+    )
+    return parser.parse_args()
 
 
 def load_model(model_name):
@@ -98,7 +99,7 @@ def extract_features(img_root, out_path, model_name, module_name, batch_size):
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
+    args = parse_args()
     extract_features(
         img_root=args.img_root,
         out_path=args.out_path,

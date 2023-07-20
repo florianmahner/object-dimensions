@@ -5,6 +5,7 @@
 
 
 import argparse
+import pickle
 import torch
 import os
 import math
@@ -21,101 +22,6 @@ import numpy as np
 from numba import njit, prange
 from scipy.spatial.distance import pdist, squareform
 from object_dimensions.utils.image_dataset import ImageDataset
-
-
-class ExperimentParser:
-    """Convenience argument parser for all experiments also accepts a .toml file as input"""
-
-    def __init__(self, *args, **kwargs):
-        self.parser = argparse.ArgumentParser(*args, **kwargs)
-        self.parser.add_argument(
-            "--config",
-            type=str,
-            default="",
-            help="Path to the configuration file.",
-        )
-        self.parser.add_argument(
-            "--section",
-            type=str,
-            default="",
-            help="Section name in the config file to parse arguments from",
-        )
-
-    def add_argument(self, *args, **kwargs):
-        return self.parser.add_argument(*args, **kwargs)
-
-    def _extract_args(self):
-        """Find the default arguments of the argument parser if any and the ones that are passed
-        through the command line"""
-        sys_defaults = sys.argv.copy()
-        sys.argv = []
-        default_args = self.parser.parse_args()
-        sys.argv = sys_defaults
-        cmdl_args = self.parser.parse_args()
-        return default_args, cmdl_args
-
-    def _find_changed_args(self, default_args, cmdl_args):
-        """Find the arguments that have been changed from the command line to replace the .toml arguments"""
-        default_args = vars(default_args)
-        cmdl_args = vars(cmdl_args)
-        changed_args = {}
-
-        for key, value in default_args.items():
-            if cmdl_args[key] != value:
-                changed_args[key] = cmdl_args[key]
-
-        return changed_args
-
-    def parse_args(self, combined_section="general"):
-        """Parse the arguments from the command line and the configuration file.
-        If a section name is provided, only the arguments in that section will be parsed from the .toml file
-        """
-        default_args, cmdl_args = self._extract_args()
-
-        # These are the default arguments options updated by the command line
-        if not cmdl_args.config:
-            return cmdl_args
-
-        # If a config file is passed, upodate the cmdl args with the config file unless
-        # the argument is already specified in the command line
-        try:
-            config = toml.load(cmdl_args.config)
-        except FileNotFoundError:
-            raise FileNotFoundError("Config file {} not found".format(cmdl_args.config))
-
-        changed_args = self._find_changed_args(default_args, cmdl_args)
-        if cmdl_args.section:
-            try:
-                section_name = cmdl_args.section
-                section_config = config[section_name]
-            except KeyError:
-                raise KeyError(
-                    "Section {} not found in config file".format(section_name)
-                )
-
-        else:
-            section_config = config
-
-        # Integrate args from a section that counts for all experiments
-        if config.get(combined_section):
-            section_config.update(config[combined_section])
-
-        for key, value in section_config.items():
-            if key not in default_args:
-                # raise ValueError(
-                # "Warning: key '{}' in config file {} not found in argparser".format(
-                # key, default_args.config
-                # )
-                # )
-                continue
-            # If the key has been passed in the command line, do not overwrite the
-            # command line argument with the toml argument, but vice versa.
-            if key in changed_args:
-                section_config[key] = changed_args[key]
-            else:
-                setattr(cmdl_args, key, value)
-
-        return cmdl_args
 
 
 # ------- Helper Functions for images ------- #
@@ -260,7 +166,6 @@ def remove_zeros(W, eps=0.1):
 
 def transform_params(weights, scale, relu=True):
     """We transform by (i) adding a positivity constraint and the sorting in descending order"""
-
     if relu:
         weights = relu_embedding(weights)
     sorted_dims = np.argsort(-np.linalg.norm(weights, axis=0, ord=1))
@@ -284,14 +189,21 @@ def load_sparse_codes(
         assert isinstance(weights, np.ndarray) and isinstance(
             vars, np.ndarray
         ), "Weights and var must be numpy arrays"
-
     elif isinstance(path, str):
         if path.endswith(".txt"):
-            try:
-                weights = np.loadtxt(path.replace("q_var", "q_mu"))
-                vars = np.loadtxt(path.replace("q_mu", "q_var"))
-            except OSError:
-                raise OSError("Error loading sparse codes from path {}".format(path))
+            # Check if q_mu or q_var in path
+            if "q_mu" or "q_var" in path:
+                try:
+                    weights = np.loadtxt(path.replace("q_var", "q_mu"))
+                    vars = np.loadtxt(path.replace("q_mu", "q_var"))
+                except OSError:
+                    raise OSError(
+                        "Error loading sparse codes from path {}".format(path)
+                    )
+            else:
+                if "embedding" in os.path.basename(path):
+                    weights = np.loadtxt(path)
+                    vars = None
 
         elif path.endswith(".npz"):
             params = np.load(path)
@@ -315,9 +227,6 @@ def load_sparse_codes(
         raise ValueError(
             "Weights or Vars must be a .txt file path or as numpy array or .npz file"
         )
-
-    if "embedding" in os.path.basename(path):
-        weights = np.loadtxt(path)
 
     weights, vars, sorted_dims = transform_params(weights, vars, relu=relu)
     if with_dim:
@@ -369,16 +278,21 @@ def correlation_matrix(F, a_min=-1.0, a_max=1.0):
     """Compute dissimilarity matrix based on correlation distance (on the matrix-level)."""
     F_c = F - F.mean(axis=1)[:, np.newaxis]
     cov = F_c @ F_c.T
-    # compute vector l2-norm across rows
-    l2_norms = np.linalg.norm(F_c, axis=1)
+    l2_norms = np.linalg.norm(F_c, axis=1)  # compute vector l2-norm across rows
     denom = np.outer(l2_norms, l2_norms)
 
-    corr_mat = (cov / denom).clip(min=a_min, max=a_max)
+    corr_mat = cov / denom
+    corr_mat = np.nan_to_num(corr_mat, nan=0.0)
+    corr_mat = corr_mat.clip(min=a_min, max=a_max)
 
     return corr_mat
 
 
 def correlate_rsms(rsm_a, rsm_b, correlation="pearson"):
+    assert correlation in [
+        "pearson",
+        "spearman",
+    ], "Correlation must be pearson or spearman"
     """Correlate the lower triangular parts of two rsms"""
     rsm_a = fill_diag(rsm_a)
     rsm_b = fill_diag(rsm_b)
@@ -388,6 +302,48 @@ def correlate_rsms(rsm_a, rsm_b, correlation="pearson"):
     )
     rho = corr_func(rsm_a[triu_inds], rsm_b[triu_inds])[0]
 
+    return rho
+
+
+import torch
+
+
+def fill_diag_torch(tensor):
+    """Set diagonal elements to zero"""
+    return tensor - torch.diag(tensor.diag())
+
+
+def pearson_corr_torch(x, y):
+    """Compute Pearson correlation for PyTorch tensors"""
+    vx = x - torch.mean(x)
+    vy = y - torch.mean(y)
+    return torch.sum(vx * vy) / (
+        torch.sqrt(torch.sum(vx**2)) * torch.sqrt(torch.sum(vy**2))
+    )
+
+
+def spearman_corr_torch(x, y):
+    """Compute Spearman correlation for PyTorch tensors"""
+    vx = x - torch.mean(x)
+    vy = y - torch.mean(y)
+    return torch.sum(vx * vy) / (
+        torch.sqrt(torch.sum(vx**2)) * torch.sqrt(torch.sum(vy**2))
+    )
+
+
+def correlate_rsms_torch(rsm_a, rsm_b, correlation="pearson"):
+    assert correlation in [
+        "pearson",
+        "spearman",
+    ], "Correlation must be pearson or spearman"
+    """Correlate the lower triangular parts of two rsms"""
+    rsm_a = fill_diag_torch(rsm_a)
+    rsm_b = fill_diag_torch(rsm_b)
+    triu_inds = torch.triu_indices(len(rsm_a), len(rsm_a), offset=1)
+    corr_func = pearson_corr_torch if correlation == "pearson" else spearman_corr_torch
+    rho = corr_func(
+        rsm_a[triu_inds[0], triu_inds[1]], rsm_b[triu_inds[0], triu_inds[1]]
+    )
     return rho
 
 

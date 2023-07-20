@@ -1,3 +1,5 @@
+""" Calculates the reproducbility of dimensions using odd and even objects, i.e. split half reliability"""
+
 import os
 import glob
 import pickle
@@ -9,23 +11,23 @@ from tqdm import tqdm
 from typing import Dict, Union, List, Tuple
 
 
-""" Calculates the reproducbility of dimensions using odd and even objects, i.e. split half reliability"""
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument(
+        "--base_dir",
+        type=str,
+        default="./results/behavior",
+        help="Base directory of the experiment",
+    )
 
-parser = ArgumentParser()
-parser.add_argument(
-    "--base_dir",
-    type=str,
-    default="./results/behavior",
-    help="Base directory of the experiment",
-)
+    parser.add_argument(
+        "--modality", type=str, default="behavior", choices=("behavior", "dnn")
+    )
 
-parser.add_argument(
-    "--modality", type=str, default="behavior", choices=("behavior", "dnn")
-)
+    parser.add_argument("--run_analysis", action="store_true")
+    return parser.parse_args()
 
-parser.add_argument("--run_analysis", action="store_true")
-
-
+        
 def vectorized_pearsonr(base: np.ndarray, comp: np.ndarray) -> Union[float, np.ndarray]:
     """Alterntive to scipy.stats.pearsonr that is vectorized over the first dimension for
     fast pairwise correlation calculation."""
@@ -73,6 +75,9 @@ def split_half_reliability(embeddings: np.ndarray, identifiers: str) -> Dict[str
     -------
     dict
         A dictionary with identifiers as keys and Pearson r values across all dimensions.
+
+
+    TODO - Take the pruned dimensions to calc fisher z!
     """
     assert (
         embeddings.ndim == 3
@@ -251,6 +256,9 @@ def run_analysis(
     print("Best embedding is for seed {}".format(best_seed))
     n_embeddings = len(embeddings)
     best_reliability_per_dim = np.squeeze(best_reliability_per_dim)
+
+    breakpoint()
+
     plot_reliability(
         best_reliability_per_dim,
         n_pruned,
@@ -267,5 +275,5 @@ def run_analysis(
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
+    args = parse_args()
     run_analysis(args.base_dir, args.modality, args.run_analysis)

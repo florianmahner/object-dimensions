@@ -3,7 +3,7 @@
 vis=false
 sparse_codes=false
 big_gan=false
-searchlight=false
+grad_cam=false
 gpt3=false
 causal=false
 style=false
@@ -14,7 +14,7 @@ while getopts "vcbgsay" opt; do
     c) sparse_codes=true ;;
     b) big_gan=true ;;
     g) gpt3=true ;;
-    s) searchlight=true ;;
+    s) grad_cam=true ;;
     a) causal=true ;;
     y) style=true ;;
 
@@ -49,7 +49,7 @@ if $big_gan; then
         --config "./configs/interpretability.toml" --section "big_gan"
 fi
 
-if $searchlight
+if $grad_cam
 then
     echo "Grad CAM"
     python experiments/relevance_maps/grad_cam.py \

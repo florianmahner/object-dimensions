@@ -15,61 +15,74 @@ from PIL import Image, ImageDraw
 import torchvision
 import torchvision.transforms as T
 import torch.nn.functional as F
-from object_dimensions import ExperimentParser
+from tomlparse import argparse
 
 from experiments.visualization.visualize_embedding import plot_dim
 
 from object_dimensions.utils.utils import img_to_uint8, load_image_data
 from object_dimensions.utils.latent_predictor import LatentPredictor
 
-parser = ExperimentParser(description="Searchlight analysis for one image.")
-parser.add_argument("--embedding_path", type=str, help="Path to the embedding file.")
-parser.add_argument(
-    "--img_root",
-    type=str,
-    default="./data/images",
-    help="Path to the all images used for the embedding.",
-)
-parser.add_argument(
-    "--analysis", type=str, default="regression", help="Type of analysis to perform."
-)
-parser.add_argument(
-    "--model_name", type=str, default="vgg16_bn", help="Name of the model to use."
-)
-parser.add_argument(
-    "--module_name", type=str, default="classifier.3", help="Name of the module to use."
-)
-parser.add_argument(
-    "--window_size",
-    type=int,
-    default=20,
-    choices=[15, 20, 25, 30, 35],
-    help="Size of the window to use for the searchlight.",
-)
-parser.add_argument(
-    "--stride",
-    type=int,
-    default=1,
-    choices=[1, 2, 3, 4, 5],
-    help="Stride of the window to use for the searchlight.",
-)
-parser.add_argument(
-    "--seed", type=int, default=42, help="Random seed to use for the searchlight."
-)
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Searchlight analysis for one image.")
+    parser.add_argument(
+        "--embedding_path", type=str, help="Path to the embedding file."
+    )
+    parser.add_argument(
+        "--img_root",
+        type=str,
+        default="./data/images",
+        help="Path to the all images used for the embedding.",
+    )
+    parser.add_argument(
+        "--analysis",
+        type=str,
+        default="regression",
+        help="Type of analysis to perform.",
+    )
+    parser.add_argument(
+        "--model_name", type=str, default="vgg16_bn", help="Name of the model to use."
+    )
+    parser.add_argument(
+        "--module_name",
+        type=str,
+        default="classifier.3",
+        help="Name of the module to use.",
+    )
+    parser.add_argument(
+        "--window_size",
+        type=int,
+        default=20,
+        choices=[15, 20, 25, 30, 35],
+        help="Size of the window to use for the searchlight.",
+    )
+    parser.add_argument(
+        "--stride",
+        type=int,
+        default=1,
+        choices=[1, 2, 3, 4, 5],
+        help="Stride of the window to use for the searchlight.",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Random seed to use for the searchlight."
+    )
+    return parser.parse_args()
+
 
 # The queries of the database that we want to visualize!
 
 QUERIES = [
-    ("flashlight_01b", [58, 101, 7, 120, 37,9,69 ])
+    ("flashlight_01b", [58, 101, 7, 120, 37, 9, 69])
     # ("basketball_plus", [82, 63, 64, 40, 23, 52, 68])
     # ("wineglass_plus", [4, 69, 66])
     # ("wine_01b", [9, 4, 66, 67,36, 69, 4, 47])
 ]
 
-def searchlight_(img, regression_predictor, window_size, stride=1, latent_dim=1, device="cpu"):    
-    reshape = T.Compose(
-        [T.Resize(256), T.CenterCrop(224), T.ToTensor()]
-    )
+
+def searchlight_(
+    img, regression_predictor, window_size, stride=1, latent_dim=1, device="cpu"
+):
+    reshape = T.Compose([T.Resize(256), T.CenterCrop(224), T.ToTensor()])
     normalize = T.Compose(
         [T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])]
     )
@@ -94,7 +107,6 @@ def searchlight_(img, regression_predictor, window_size, stride=1, latent_dim=1,
         # Get the gradients of the image
         gradients = regression_predictor.get_activations_gradient()
 
-
     pooled_gradients = torch.mean(gradients, dim=[0, 2, 3])
 
     # get the activations of the last convolutional layer
@@ -110,6 +122,7 @@ def searchlight_(img, regression_predictor, window_size, stride=1, latent_dim=1,
     # normalize the heatmap
     heatmap /= torch.max(heatmap)
     return heatmap.cpu().numpy()
+
 
 def search_image_spaces(
     base_path,
@@ -132,13 +145,11 @@ def search_image_spaces(
     img = Image.open(dataset[img_idx])
     # codes = regression_predictor(img, transform=True)[1]
     # codes = codes.detach().cpu().numpy()
-    reshape = T.Compose(
-        [T.Resize(256), T.CenterCrop(224)]
-    )
+    reshape = T.Compose([T.Resize(256), T.CenterCrop(224)])
     img_vis = reshape(img)
     img_vis = np.array(img_vis)
     fig, ax = plt.subplots(1, 1)
-    
+
     ax.imshow(img_vis)
     ax.set_xticks([])
     ax.set_yticks([])
@@ -154,14 +165,16 @@ def search_image_spaces(
             f"\n...Currently performing searchlight analysis for latent dimension {dim}."
         )
 
-        diffs = searchlight_(img, regression_predictor, window_size, stride, dim, device)
+        diffs = searchlight_(
+            img, regression_predictor, window_size, stride, dim, device
+        )
         save_dict = {"diffs": diffs, "img": img_vis, "dim": dim}
 
         # store save dict as pickle file in directory
         with open(os.path.join(out_path, f"./searchlight_dim_{dim}.pkl"), "wb") as f:
             pickle.dump(save_dict, f)
-        
-        heatmap = diffs    
+
+        heatmap = diffs
         heatmap = img_to_uint8(heatmap)
         heatmap = cv2.resize(heatmap, (img_vis.shape[0], img_vis.shape[1]))
 
@@ -199,7 +212,7 @@ def search_image_spaces(
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
+    args = parse_args()
 
     np.random.seed(args.seed)
     random.seed(args.seed)

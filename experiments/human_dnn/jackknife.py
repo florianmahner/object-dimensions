@@ -16,6 +16,7 @@ from scipy.stats import rankdata
 import itertools
 import pickle
 import matplotlib.pyplot as plt
+from tomlparse import argparse
 from object_dimensions import build_triplet_dataset
 from object_dimensions import VariationalEmbedding as model
 from object_dimensions.utils.utils import (
@@ -23,20 +24,23 @@ from object_dimensions.utils.utils import (
     create_path_from_params,
     load_sparse_codes,
 )
-
-from object_dimensions import ExperimentParser
 from experiments.human_dnn.plot_jackknife import plot_grid
 
-parser = ExperimentParser(
-    description="Jackknife analysis for the deep embeddings",
-)
-parser.add_argument("--human_path", type=str, default="data/human_data.pkl")
-parser.add_argument("--dnn_path", type=str, default="data/dnn_data.pkl")
-parser.add_argument("--triplet_path", type=str, default="data/triplets.pkl")
-parser.add_argument("--img_root", type=str, default="data/images")
-parser.add_argument("--comparison", type=str, default="dnn", choices=["dnn", "human"])
-parser.add_argument("--run_jackknife", action="store_true", default=False)
-parser.add_argument("--plot", action="store_true", default=False)
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Jackknife analysis for the deep embeddings",
+    )
+    parser.add_argument("--human_path", type=str, default="data/human_data.pkl")
+    parser.add_argument("--dnn_path", type=str, default="data/dnn_data.pkl")
+    parser.add_argument("--triplet_path", type=str, default="data/triplets.pkl")
+    parser.add_argument("--img_root", type=str, default="data/images")
+    parser.add_argument(
+        "--comparison", type=str, default="dnn", choices=["dnn", "human"]
+    )
+    parser.add_argument("--run_jackknife", action="store_true", default=False)
+    parser.add_argument("--plot", action="store_true", default=False)
+    return parser.parse_args()
 
 
 def map_human_and_dnn_triplets():
@@ -416,7 +420,7 @@ def main(
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
+    args = parse_args()
     main(
         args.human_path,
         args.dnn_path,

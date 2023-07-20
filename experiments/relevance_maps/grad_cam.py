@@ -9,10 +9,11 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from thingsvision import get_extractor
+from collections import defaultdict, Counter
 import torchvision.transforms as T
 import torch.nn.functional as F
 from PIL import Image
-from object_dimensions import ExperimentParser
+from tomlparse import argparse
 from experiments.visualization.visualize_embedding import plot_dim_3x3
 from object_dimensions.utils.utils import (
     img_to_uint8,
@@ -21,34 +22,44 @@ from object_dimensions.utils.utils import (
 )
 from object_dimensions.utils.latent_predictor import LatentPredictor
 
-parser = ExperimentParser(description="Searchlight analysis for one image.")
-parser.add_argument("--embedding_path", type=str, help="Path to the embedding file.")
-parser.add_argument(
-    "--img_root",
-    type=str,
-    default="./data/images",
-    help="Path to the all images used for the embedding.",
-)
-parser.add_argument(
-    "--analysis", type=str, default="regression", help="Type of analysis to perform."
-)
-parser.add_argument(
-    "--model_name", type=str, default="vgg16_bn", help="Name of the model to use."
-)
-parser.add_argument(
-    "--module_name", type=str, default="classifier.3", help="Name of the module to use."
-)
-parser.add_argument(
-    "--seed", type=int, default=42, help="Random seed to use for the searchlight."
-)
 
-# The queries of the database that we want to visualize!
 QUERIES = [
-    ("flashlight_01b", [58, 101, 7, 120, 37, 9, 69]),
-    ("basketball_plus", [82, 63, 64, 40, 23, 52, 68]),
-    ("wineglass_plus", [4, 69, 66]),
-    ("wine_01b", [9, 4, 66, 67, 36, 69, 4, 47]),
+    ("wine_01b", [2, 56, 22, 35, 15, 51]),
+    ("flashlight_01b", [25, 24, 44, 35, 51]),
+    ("basketball_plus", [37, 28, 39]),
 ]
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Searchlight analysis for one image.")
+    parser.add_argument(
+        "--embedding_path", type=str, help="Path to the embedding file."
+    )
+    parser.add_argument(
+        "--img_root",
+        type=str,
+        default="./data/images",
+        help="Path to the all images used for the embedding.",
+    )
+    parser.add_argument(
+        "--analysis",
+        type=str,
+        default="regression",
+        help="Type of analysis to perform.",
+    )
+    parser.add_argument(
+        "--model_name", type=str, default="vgg16_bn", help="Name of the model to use."
+    )
+    parser.add_argument(
+        "--module_name",
+        type=str,
+        default="classifier.3",
+        help="Name of the module to use.",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Random seed to use for the searchlight."
+    )
+    return parser.parse_args()
 
 
 def find_gradient_heatmap_(img, regression_predictor, latent_dim=1):
@@ -89,10 +100,10 @@ def search_image_spaces(
     base_path,
     regression_predictor,
     dataset,
+    indices_plus,
     img_idx,
     image_name,
-    img_root,
-    embedding_path,
+    sparse_codes,
     latent_dims=[1, 2, 3],
 ):
     out_path = os.path.join(base_path, "analyses", "grad_cam", "{}".format(image_name))
@@ -115,10 +126,6 @@ def search_image_spaces(
         bbox_inches="tight",
         pad_inches=0,
     )
-
-    images, indices = load_image_data(img_root, filter_plus=True)
-    Y = load_sparse_codes(embedding_path)
-    Y = Y[indices]
 
     save_dict = {"img": img_vis, "dim": latent_dims, "heatmaps": []}
 
@@ -155,7 +162,9 @@ def search_image_spaces(
 
         plt.close(fig)
 
-        fig_img = plot_dim_3x3(images, Y, dim, top_k=10)
+        images_plus = images[indices_plus]
+        sparse_codes_plus = sparse_codes[indices_plus]
+        fig_img = plot_dim_3x3(images_plus, sparse_codes_plus, dim, top_k=10)
         for ext in ["pdf"]:
             fname = os.path.join(out_path, f"{dim}_topk_plus.{ext}")
             fig_img.savefig(fname, bbox_inches="tight", pad_inches=0, dpi=300)
@@ -166,12 +175,44 @@ def search_image_spaces(
         pickle.dump(save_dict, f)
 
 
+def find_topk_per_image(embedding, topk=8):
+    """Finds the topk dimensions that activate each image in the embedding space.
+    Filters these topk images to only include the most important images that are
+    in many of the topk dimensions."""
+    n_dim = embedding.shape[1]
+    image_topk_counter = Counter()
+    image_dims = defaultdict(list)
+    topk_images = defaultdict(list)
+
+    for dim in range(n_dim):
+        codes = embedding[:, dim]
+        topk_indices = list(np.argsort(-codes)[:topk])
+        image_topk_counter.update(topk_indices)
+
+        # Append each index to the list of topk dims for that image
+        for idx in topk_indices:
+            image_dims[idx].append(dim)
+
+        # Create a list of topk images for that dimension
+        topk_images[dim].append(topk_indices)
+
+    most_common_topk = image_topk_counter.most_common(20)
+    most_common_topk = [x[0] for x in most_common_topk]
+
+    # Get the dict that has key = image_index, value = topk dims for that image
+    topk_images_shared = defaultdict(list)
+    for idx in most_common_topk:
+        topk_images_shared[idx] = image_dims[idx]
+
+    return topk_images_shared, topk_images
+
+
 if __name__ == "__main__":
-    args = parser.parse_args()
+    args = parse_args()
     np.random.seed(args.seed)
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
     extractor = get_extractor(
         model_name=args.model_name, pretrained=True, device=device, source="torchvision"
@@ -185,16 +226,21 @@ if __name__ == "__main__":
         args.model_name, args.module_name, device, regression_path
     )
     predictor.to(device)
-    # Find the images in the dataset that correspond to the query!
+
+    images_plus, indices_plus = load_image_data(args.img_root, filter_plus=True)
+    images, indices = load_image_data(args.img_root, filter_plus=False)
+    sparse_codes = load_sparse_codes(args.embedding_path)
+    sparse_codes = sparse_codes[indices]
+
     for query, latent_dims in QUERIES:
         img_idx = [i for i, img in enumerate(images) if query in img][0]
         search_image_spaces(
             base_path,
             predictor,
             images,
+            indices_plus,
             img_idx,
             query,
-            args.img_root,
-            args.embedding_path,
+            sparse_codes,
             latent_dims,
         )

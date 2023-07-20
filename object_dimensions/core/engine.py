@@ -11,7 +11,8 @@ import torch.nn.functional as F
 
 class Params(object):
     r"""The class stores the training configuration of the training pipeline
-    and updates the results depending on the type of the keyword arguments in the update (e.g. list, array)"""
+    and updates the results depending on the type of the keyword arguments in the update (e.g. list, array)
+    """
 
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
@@ -33,7 +34,8 @@ class Params(object):
 
     def update(self, **kwargs):
         """Update the parameters of the model depending on type.
-        If the type is a list, append the value to the list, else set new value as attribute"""
+        If the type is a list, append the value to the list, else set new value as attribute
+        """
         for k, v in kwargs.items():
             if k not in self.__dict__:
                 setattr(self, k, v)
@@ -130,7 +132,6 @@ class EmbeddingTrainer(object):
         """Compute the negative log likelihood of the data given the embedding"""
         indices = indices.unbind(1)
         ind_i, ind_j, ind_k = indices
-
         embedding_i = F.relu(embedding[ind_i])
         embedding_j = F.relu(embedding[ind_j])
         embedding_k = F.relu(embedding[ind_k])
@@ -162,10 +163,11 @@ class EmbeddingTrainer(object):
     def _kl_divergence(self, mu_prior, mu_q, scale_p, scale_q):
         """Compute the KL divergence between two Log Gaussians. This is the same as the KL divergence
         between two Gaussians. see
-        https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians"""
+        https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
+        """
         kl = (
             torch.log(scale_p / scale_q)
-            + (scale_q ** 2 + (mu_q - mu_prior) ** 2) / (2 * scale_p ** 2)
+            + (scale_q**2 + (mu_q - mu_prior) ** 2) / (2 * scale_p**2)
             - 0.5
         )
 
@@ -215,7 +217,7 @@ class EmbeddingTrainer(object):
         return nll, complex_loss, triplet_accuracy
 
     def variational_evaluation(self, indices):
-        """ Sample from the variational posterior and compute the likelihood of the data"""
+        """Sample from the variational posterior and compute the likelihood of the data"""
         sampled_likelihoods = torch.zeros(self.params.mc_samples)
         sampled_accuracies = torch.zeros(self.params.mc_samples)
         for s in range(self.params.mc_samples):
@@ -237,7 +239,6 @@ class EmbeddingTrainer(object):
         triplet_accuracies = torch.zeros(n_batches, device=self.device)
 
         for k, indices in enumerate(dataloader):
-
             if self.model.training:
                 nll, complex_loss, accuracy = self.step_triplet_batch(indices)
                 complex_losses[k] = complex_loss.detach()

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-__all__ = ["sample_latents", "optimize_latents"]
+__all__ = ["optimize_latents"]
 
 import torchvision
 import sys
@@ -25,87 +25,11 @@ from stylegan_xl.torch_utils import gen_utils
 from stylegan_xl.gen_images import make_transform
 
 from object_dimensions.utils.utils import img_to_uint8
-from object_dimensions import ExperimentParser
 from object_dimensions.utils.latent_predictor import LatentPredictor
 from torch.utils.data import DataLoader
 from torchvision import transforms
+from tomlparse import argparse
 from PIL import Image
-
-
-parser = ExperimentParser(description="Optimize and sample StyleGAN")
-parser.add_argument(
-    "--window_size",
-    type=int,
-    default=50,
-    help="Window size of trainer to check convergence of latent dimenisonality",
-)
-parser.add_argument(
-    "--embedding_path",
-    type=str,
-    default="./weights/params/pruned_q_mu_epoch_300.txt",
-    help="Path to weights directory",
-)
-parser.add_argument(
-    "--model_name", type=str, default="vgg16_bn", help="Model to load from THINGSvision"
-)
-parser.add_argument(
-    "--module_name",
-    type=str,
-    default="classifier.3",
-    help="Layer of the model to load from THINGSvision",
-)
-parser.add_argument(
-    "--n_samples",
-    type=int,
-    default=2_000_000,
-    help="Number of latent samples to generate",
-)
-parser.add_argument("--batch_size", type=int, default=8, help="Batch size for sampling")
-parser.add_argument(
-    "--truncation", type=float, default=1.0, help="Truncation value for noise sample"
-)
-parser.add_argument("--top_k", type=int, default=16, help="Top k values to sample from")
-
-parser.add_argument(
-    "--sample_dataset",
-    default=False,
-    action="store_true",
-    help="Sample entire dataset",
-)
-parser.add_argument(
-    "--find_topk",
-    default=False,
-    action="store_true",
-    help="Find top k latent dimensions",
-)
-parser.add_argument(
-    "--optimize_topk",
-    default=False,
-    action="store_true",
-    help="Optimize top k latent dimensions",
-)
-
-parser.add_argument(
-    "--max_iter", type=int, default=200, help="Number of optimizing iterations"
-)
-parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
-parser.add_argument("--seed", type=int, default=42, help="Random seed")
-parser.add_argument(
-    "--dim", type=int, default=(1, 2), nargs="+", help="Dimension to optimize for"
-)
-parser.add_argument(
-    "--alpha",
-    type=float,
-    default=0.1,
-    help="Weight of the absolute value in a dimension to optimize for",
-)
-parser.add_argument(
-    "--beta",
-    type=float,
-    default=1.0,
-    help="Weight for the softmax loss in the dimension optimization",
-)
-parser.add_argument("--device", type=str, default="cuda:0", help="Device to use")
 
 
 transforms = torchvision.transforms.Compose(
@@ -118,6 +42,94 @@ transforms = torchvision.transforms.Compose(
         ),
     ]
 )
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Optimize and sample StyleGAN")
+    parser.add_argument(
+        "--window_size",
+        type=int,
+        default=50,
+        help="Window size of trainer to check convergence of latent dimenisonality",
+    )
+    parser.add_argument(
+        "--embedding_path",
+        type=str,
+        default="./weights/params/pruned_q_mu_epoch_300.txt",
+        help="Path to weights directory",
+    )
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        default="vgg16_bn",
+        help="Model to load from THINGSvision",
+    )
+    parser.add_argument(
+        "--module_name",
+        type=str,
+        default="classifier.3",
+        help="Layer of the model to load from THINGSvision",
+    )
+    parser.add_argument(
+        "--n_samples",
+        type=int,
+        default=2_000_000,
+        help="Number of latent samples to generate",
+    )
+    parser.add_argument(
+        "--batch_size", type=int, default=8, help="Batch size for sampling"
+    )
+    parser.add_argument(
+        "--truncation",
+        type=float,
+        default=1.0,
+        help="Truncation value for noise sample",
+    )
+    parser.add_argument(
+        "--top_k", type=int, default=16, help="Top k values to sample from"
+    )
+
+    parser.add_argument(
+        "--sample_dataset",
+        default=False,
+        action="store_true",
+        help="Sample entire dataset",
+    )
+    parser.add_argument(
+        "--find_topk",
+        default=False,
+        action="store_true",
+        help="Find top k latent dimensions",
+    )
+    parser.add_argument(
+        "--optimize_topk",
+        default=False,
+        action="store_true",
+        help="Optimize top k latent dimensions",
+    )
+
+    parser.add_argument(
+        "--max_iter", type=int, default=200, help="Number of optimizing iterations"
+    )
+    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument(
+        "--dim", type=int, default=(1, 2), nargs="+", help="Dimension to optimize for"
+    )
+    parser.add_argument(
+        "--alpha",
+        type=float,
+        default=0.1,
+        help="Weight of the absolute value in a dimension to optimize for",
+    )
+    parser.add_argument(
+        "--beta",
+        type=float,
+        default=1.0,
+        help="Weight for the softmax loss in the dimension optimization",
+    )
+    parser.add_argument("--device", type=str, default="cuda:0", help="Device to use")
+    return parser.parse_args()
 
 
 def load_style_gan():
@@ -455,7 +467,7 @@ class SparseCodesPredictor(object):
         # Filter out codes that are too similar
         prev = topk_codes[0]
         filtered_indices = []
-        eps = 0.05
+        eps = 0.02
         for i in range(1, len(topk_codes)):
             if torch.abs((prev - topk_codes[i])) > eps:
                 filtered_indices.append(i)
@@ -572,7 +584,6 @@ class Optimizer(nn.Module):
             )
             optimized_latents[k] += optimized_latent.cpu()
             optimized_images.append(optimized_image.cpu().squeeze(0))
-            # optimized_images.append(gen÷erator(optimized_latent, self.truncation).detach().cpu().squeeze(0))
         self._save_latents(optimized_latents)
         self._save_images(optimized_images)
 
@@ -599,7 +610,7 @@ class Optimizer(nn.Module):
         for i in range(self.max_iter):
             # Get sparse codes from latent
             img = gen_utils.w_to_img(generator, latent.to(self.device), to_np=False)
-            img = img.clamp(0, 255)
+            img = torch.clamp(img, min=0, max=255)
             img = img / 255
             img = transforms(img)
             codes = comparator(img, transform=False)[1]
@@ -697,7 +708,7 @@ class Optimizer(nn.Module):
 
 
 if __name__ == "__main__":
-    args = parser.parse_args()
+    args = parse_args()
     np.random.seed(args.seed)
     random.seed(args.seed)
     torch.manual_seed(args.seed)

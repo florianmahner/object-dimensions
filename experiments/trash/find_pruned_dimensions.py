@@ -3,7 +3,7 @@ import torch
 import toml
 import numpy as np
 import matplotlib.pyplot as plt
-from object_dimensions.main import build_model
+from main import build_model
 from object_dimensions.utils.utils import load_image_data
 from object_dimensions.core.pruning import NormalDimensionPruning
 

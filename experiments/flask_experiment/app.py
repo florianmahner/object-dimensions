@@ -14,6 +14,7 @@ from pathlib import Path
 import uuid
 import pandas as pd
 from datetime import datetime, timedelta
+import numpy as np
 
 
 def generate_id():
@@ -59,8 +60,13 @@ def instructions():
 
 @app.route("/index", methods=["GET", "POST"])
 def show_index():
-    image_filepath = session["filepath"]
-    index = session["index"]
+    params = np.load(
+        os.path.join(THIS_FOLDER, "results", f"{session['session_id']}.npz")
+    )
+
+    image_filepath = params["filepath"]
+    index = params["index"]
+
     return render_template("index.html", image_filepath=image_filepath, index=index)
 
 
@@ -109,17 +115,17 @@ def index():
         return "No image files found in the upload folder."
 
     # Retrieve the current index from the URL query parameter or session, or set it to 0 if it doesn't exist
-    index = (
-        int(request.args.get("index"))
-        if request.args.get("index")
-        else session.get("index", 0)
-    )
+    if request.args.get("index"):
+        index = int(request.args["index"])
+
+    else:
+        index = session.get("index", 0)
 
     # Determine the index of the current image based on the 'index' form parameter
     if request.method == "POST":
         if request.form["submit_button"] == "Next":
-            descriptions = request.form.get("descriptions")
-            interpretability = request.form.get("interpretability")
+            descriptions = request.form.get("descriptions", "")
+            interpretability = request.form.get("interpretability", 0)
 
             image_files = session["image_files"]
             fname = image_files[index]
@@ -132,10 +138,15 @@ def index():
             output.loc[index] = [fname, dim, *descriptions, interpretability]
 
             # Save the results to a CSV file
-            output.to_csv(
-                os.path.join(THIS_FOLDER, "results", f"{session['session_id']}.csv"),
-                index=False,
-            )
+            try:
+                output.to_csv(
+                    os.path.join(
+                        THIS_FOLDER, "results", f"{session['session_id']}.csv"
+                    ),
+                    index=False,
+                )
+            except:
+                pass
 
             session["output"] = output.to_json()
 
@@ -145,17 +156,23 @@ def index():
                 if index == len(image_files):
                     return redirect(url_for("end"))
 
-        elif request.form["submit_button"] == "Previous":
-            index -= 1
-
     filename = image_files[index]
+
     filepath = os.path.join(
         "https://fmahner.pythonanywhere.com/static/images/", filename
     )
+
     session["filepath"] = filepath
     session["index"] = index
 
-    return redirect(url_for("show_index", session_id=session["session_id"]))
+    np.savez(
+        os.path.join(THIS_FOLDER, "results", f"{session['session_id']}.npz"),
+        image_files=image_files,
+        index=index,
+        filepath=filepath,
+    )
+
+    return redirect(url_for("show_index"))
 
 
 @app.route("/end")

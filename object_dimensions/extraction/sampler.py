@@ -6,9 +6,11 @@ import argparse
 import random
 import os
 import re
+import torch
 
 import numpy as np
 from collections import Counter
+from scipy.spatial.distance import cdist
 
 parser = argparse.ArgumentParser("Main tripletization script")
 parser.add_argument("--in_path", type=str, help="Path to deep net features")
@@ -24,7 +26,7 @@ parser.add_argument(
 parser.add_argument(
     "--similarity",
     type=str,
-    choices=["cosine", "dot"],
+    choices=["cosine", "dot", "euclidean"],
     help="Similarity function for pairiwse sampling",
 )
 parser.add_argument("--seed", type=int, default=42, help="Random seed")
@@ -34,7 +36,17 @@ parser.add_argument(
 
 
 class Sampler(object):
-    def __init__(self, in_path, out_path, n_samples, k=3, train_fraction=0.9, seed=42, similarity="dot"):
+    def __init__(
+        self,
+        in_path,
+        out_path,
+        n_samples,
+        k=3,
+        train_fraction=0.9,
+        seed=42,
+        similarity="dot",
+        behavior_triplet_path=None,
+    ):
         self.in_path = in_path
         self.out_path = out_path
         self.n_samples = int(n_samples)
@@ -42,6 +54,7 @@ class Sampler(object):
         self.train_fraction = train_fraction
         self.seed = seed
         self.similarity = similarity
+        self.behavior_triplet_path = behavior_triplet_path
 
     def load_domain(self):
         if not re.search(r"(npy)$", self.in_path):
@@ -53,7 +66,7 @@ class Sampler(object):
         np.random.seed(self.seed)
         X = np.load(self.in_path)
         X = self.remove_nans_(X)
-        X = self.remove_negatives_(X) # positivity constraint also on vgg features!
+        X = self.remove_negatives_(X)  # positivity constraint also on vgg features!
         return X
 
     @staticmethod
@@ -67,12 +80,12 @@ class Sampler(object):
 
     @staticmethod
     def softmax(z):
-        proba = np.exp(z) / np.sum(np.exp(z))        
+        proba = np.exp(z) / np.sum(np.exp(z))
         return proba
 
     @staticmethod
     def log_softmax_scaled(z, const):
-        """ see https://www.xarg.org/2016/06/the-log-sum-exp-trick-in-machine-learning/"""
+        """see https://www.xarg.org/2016/06/the-log-sum-exp-trick-in-machine-learning/"""
         z = z - const
         scaled_proba = np.exp(z) / np.sum(np.exp(z))
         scaled_log_proba = const + np.log(scaled_proba)
@@ -114,8 +127,14 @@ class Sampler(object):
         M = X.shape[0]
         if similarity == "cosine":
             S = self.cosine_matrix(X)
-        else:
+        elif similarity == "dot":
             S = X @ X.T
+        elif similarity == "euclidean":
+            S = np.linalg.norm(X[:, None, :] - X[None, :, :], axis=-1)
+
+        else:
+            raise NotImplementedError
+
         combs = self.get_combinations(M, self.k)
         random_sample = self.random_choice(self.n_samples, combs)
         return S, random_sample
@@ -125,15 +144,15 @@ class Sampler(object):
         pool = tuple(iterable)
         n = len(pool)
         # Sorting prevents adding duplicates!
-        indices = sorted(random.sample(range(n), r)) 
+        indices = sorted(random.sample(range(n), r))
         return tuple(pool[i] for i in indices)
-        
+
     def sample_adaptive_similarity_judgements(self):
         """Create similarity judgements."""
         X = self.load_domain()
         M = X.shape[0]
         S = self._get_similarity_matrx(X)
-        
+
         # Adaptive sampling of unique triplets
         unique_triplets = set()
         count = Counter()
@@ -178,16 +197,21 @@ class Sampler(object):
         for i, triplet in enumerate(unique_triplets):
             print(f"Process {i}/{self.n_samples} triplets", end="\r")
             choice = self.get_choice(S, triplet)
-            triplets[i] = choice # probably returns a list of indices of shape k where for that image the odd one out is
+            triplets[
+                i
+            ] = choice  # probably returns a list of indices of shape k where for that image the odd one out is
         return triplets
-    
+
     def _get_similarity_matrx(self, X):
-        if self.similarity == 'cosine':
+        if self.similarity == "cosine":
             S = self.cosine_matrix(X)
-        # This is a matrix of N x N (i.e. image_features x image_features). 
-        # i.e. The dot product between the corresponding network representations
+        elif self.similarity == "dot":
+            S = X @ X.T
+        elif self.similarity == "euclidean":
+            D = cdist(X, X, "euclidean")
+            S = 1 / (1 + D)  # transform a distance into a similarity measure
         else:
-            S = X @ X.T 
+            raise NotImplementedError
         return S
 
     def sample_similarity_judgements(self):
@@ -195,30 +219,59 @@ class Sampler(object):
         X = self.load_domain()
         M = X.shape[0]
         S = self._get_similarity_matrx(X)
-    
-        unique_triplets = set()
-        items = list(range(M))
-        n_tri = len(unique_triplets)
-        while n_tri < self.n_samples:
-            print(f"{n_tri} samples drawn, {n_tri}/{self.n_samples} added", end="\r")
-            sample = self.random_combination(items, 3)
-            
-            unique_triplets.add(sample)
-            n_tri = len(unique_triplets)
 
-        triplets = np.zeros((self.n_samples, self.k), dtype=int)
+        if self.behavior_triplet_path:
+            # Load triplets from behavior
+            unique_triplets = np.loadtxt(self.behavior_triplet_path)
+            unique_triplets = unique_triplets.astype(int)
+            unique_triplets.sort(axis=1)
+
+        else:
+            unique_triplets = set()
+            items = list(range(M))
+            n_tri = len(unique_triplets)
+            while n_tri < self.n_samples:
+                print(
+                    f"{n_tri} samples drawn, {n_tri}/{self.n_samples} added", end="\r"
+                )
+                sample = self.random_combination(items, 3)
+
+                unique_triplets.add(sample)
+                n_tri = len(unique_triplets)
+
+        n_samples = len(unique_triplets)
+        triplets = np.zeros((n_samples, self.k), dtype=int)
         for i, triplet in enumerate(unique_triplets):
-            print(f"Process {i}/{self.n_samples} triplets", end="\r")
+            print(f"Process {i}/{n_samples} triplets", end="\r")
             choice = self.get_choice(S, triplet)
-            triplets[i] = choice # probably returns a list of indices of shape k where for that image the odd one out is
+            triplets[
+                i
+            ] = choice  # probably returns a list of indices of shape k where for that image the odd one out is
         return triplets
 
     def create_train_test_split(self, similarity_judgements):
         """Split triplet data into train and test splits."""
-        N = similarity_judgements.shape[0]
-        rnd_perm = np.random.permutation(N)
-        train_split = similarity_judgements[rnd_perm[: int(len(rnd_perm) * self.train_fraction)]]
-        test_split = similarity_judgements[rnd_perm[int(len(rnd_perm) * self.train_fraction):]]
+
+        with open(os.path.join(self.out_path, "test_10.npy"), "wb") as train_file:
+            np.save(train_file, similarity_judgements)
+
+        breakpoint()
+
+        # random.seed(0)
+        # random.shuffle(similarity_judgements)
+        # N = similarity_judgements.shape[0]
+        # frac = int(N * self.train_fraction)
+        # train_split = similarity_judgements[:frac]
+        # test_split = similarity_judgements[frac:]
+
+        # N = similarity_judgements.shape[0]
+        # rnd_perm = np.random.permutation(N)
+        # train_split = similarity_judgements[
+        #     rnd_perm[: int(len(rnd_perm) * self.train_fraction)]
+        # ]
+        # test_split = similarity_judgements[
+        #     rnd_perm[int(len(rnd_perm) * self.train_fraction) :]
+        # ]
         return train_split, test_split
 
     def save_similarity_judgements(self, similarity_judgements):
@@ -235,7 +288,7 @@ class Sampler(object):
             similarity_judgements = self.sample_similarity_judgements()
         self.save_similarity_judgements(similarity_judgements)
 
-    def run_and_save_pairwise(self, similarity="cosine"):
+    def run_and_save_pairwise(self, similarity="dot"):
         S, random_sample = self.sample_pairs(args.similarity)
         self.save_similarity_judgements(random_sample)
         with open(
@@ -250,8 +303,15 @@ class Sampler(object):
         else:
             self.run_and_save_pairwise()
 
+
 if __name__ == "__main__":
     args = parser.parse_args()
-    sampler = Sampler(in_path=args.in_path, out_path=args.out_path, n_samples=args.n_samples, k=args.k, 
-                      seed=args.seed, similarity=args.similarity)
+    sampler = Sampler(
+        in_path=args.in_path,
+        out_path=args.out_path,
+        n_samples=args.n_samples,
+        k=args.k,
+        seed=args.seed,
+        similarity=args.similarity,
+    )
     sampler.run()

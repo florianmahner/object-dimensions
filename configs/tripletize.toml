@@ -1,17 +1,11 @@
 # TOML file to extract triplets from DNN representations
 
-# Sampling specifics
 seed = 0 
-n_samples = 1e4
-extract = true
+n_samples = 4_120_663
 adaptive = false
-
-# Data specifics
-# In path can be anything. A path of images if we want to extract features
-# or a path of features / activities if we want to extract triplets
-in_path = "./data/things/images" 
-
-# DNN Layer and Model to extract from
-model_name = "vgg16_bn"
-module_name = "classifier.3"
-batch_size = 64
+k = 3
+train_fraction = 0.9
+out_path = "./data/triplets_dependent_human_intersection"
+triplet_path = "./data/triplets/behavior/test_10.txt"
+similarity = "dot"
+feature_path = "./data/misc/intersection_dependent_human.npy"
