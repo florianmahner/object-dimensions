@@ -18,6 +18,7 @@ from object_dimensions.utils.utils import (
     load_deepnet_activations,
     create_path_from_params,
     save_figure,
+    correlation_matrix,
 )
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -28,7 +29,7 @@ sns.set_style("white")
 
 from tqdm import tqdm
 from itertools import combinations
-from typing import Tuple
+from typing import Tuple, Dict
 from scipy.stats import rankdata
 from tomlparse import argparse
 
@@ -66,12 +67,12 @@ def parse_args():
     return parser.parse_args()
 
 
-def load_concepts(path="./data/misc/category_mat_manual.tsv"):
+def load_concepts(path: str = "./data/misc/category_mat_manual.tsv") -> pd.DataFrame:
     concepts = pd.read_csv(path, encoding="utf-8", sep="\t")
     return concepts
 
 
-def plot_rsm(rsm, fname):
+def plot_rsm(rsm: np.ndarray, fname: str) -> None:
     fig, ax = plt.subplots(figsize=(3, 3))
     ax.axis("off")
     ax.imshow(rsm, cmap="viridis", interpolation="nearest")
@@ -136,65 +137,151 @@ def subset_rsm_analysis(
     return corr_hd
 
 
-def find_rsm_correlations(human: np.ndarray, dnn: np.ndarray, **kwargs):
+def fast_rsm_correlations(human: np.ndarray, rsm_dnn: np.ndarray) -> float:
     # NOTE / TODO Check if we don't want to generally use the DNN ground truth
-    rsm_h = rsm_pred_torch(human, **kwargs)
-    rsm_d = rsm_pred_torch(dnn, **kwargs)
-    corr = correlate_rsms_torch(rsm_h, rsm_d)
+    rsm_human = rsm_pred_torch(human, return_type="torch")
+    # rsm_dnn = rsm_pred_torch(dnn, return_type="torch")
+
+    corr = correlate_rsms_torch(rsm_human, rsm_dnn)
     corr = corr.detach()
     return corr
 
 
-def find_best_fit(
+def compute_histogram_of_fits(
     human: np.ndarray,
-    dnn: np.ndarray,
+    dnn_rsm: np.ndarray,
     out_path: str,
-    run_analysis: bool = True,
     ncomb: int = 10_000,
+    run_analysis: bool = True,
 ) -> None:
     """Sample combinations of `ncomb` dimensions for human and DNN embeddings that
     best correlate with each other"""
-    ndims = min(human.shape[1], dnn.shape[1])
+    ndims = human.shape[1]
     combs = list(combinations(range(ndims), 3))
+    random.seed(0)
     random.shuffle(combs)
     combs = combs[:ncomb]
     ncombs = len(combs)
     corrs = torch.zeros(ncombs)
+    fname = os.path.join(out_path, "correlations_combinations.pkl")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     human = torch.tensor(human, device=device)
-    dnn = torch.tensor(dnn, device=device)
+    dnn_rsm = torch.tensor(dnn_rsm, device=device)
 
-    pbar = tqdm(total=ncombs)
     # Iterate across all combinations and correlate the RSMs
-    for i, comb in enumerate(combs):
-        pbar.set_description(f"Combination {i} / {ncombs}")
-        pbar.update(1)
-        human_comb = human[:, comb]
-        dnn_comb = dnn[:, comb]
-        corrs[i] = find_rsm_correlations(human_comb, dnn_comb)
+    if run_analysis:
+        pbar = tqdm(total=ncombs)
+        for i, comb in enumerate(combs):
+            pbar.set_description(f"Combination {i} / {ncombs}")
+            pbar.update(1)
+            human_comb = human[:, comb]
+            corrs[i] = fast_rsm_correlations(
+                human_comb, dnn_rsm
+            )  # we always use the ground truth DNN RSM
 
-    corrs = corrs.cpu().numpy()
+        corrs = corrs.cpu().numpy()
+        human_sub = human[:, :3]
+        baseline_human = rsm_pred_torch(human_sub, return_type="torch")
+        baseline_corr = correlate_rsms_torch(baseline_human, dnn_rsm)
+        baseline_corr = baseline_corr.detach().cpu().numpy()
 
-    # Compute the baselone correlation between the RSMs
-    baseline_human = human[:, :3] @ human[:, :3].T
-    baseline_dnn = dnn[:, :3] @ dnn[:, :3].T
-    baseline_corr = correlate_rsms_torch(baseline_human, baseline_dnn, "pearson")
-    baseline_corr = baseline_corr.cpu().numpy()
+        with open(fname, "wb") as f:
+            pickle.dump((corrs, baseline_corr), f)
+
+    with open(fname, "rb") as f:
+        corrs, baseline_corr = pickle.load(f)
 
     # Plot the histogram of correlations
     fig, ax = plt.subplots(1)
-    ax.hist(corrs, bins=100)
+    sns.histplot(corrs, ax=ax, bins=100)
+    sns.despine()
     ax.set_xlabel("Pearson r between RSMs")
     ax.set_ylabel("Count")
 
     # Make a horizontal line at the baseline correlation
-    ax.axvline(baseline_corr, color="r", linestyle="--", label="Baseline")
+    ax.axvline(baseline_corr, color="r", linestyle="--", label="Dimensions 1-3")
+    ax.legend()
     fname = os.path.join(out_path, "histogram_correlations_combinations.png")
-    fig.savefig(fname, dpi=300)
+    fig.savefig(fname, dpi=300, bbox_inches="tight", pad_inches=0.05)
     best_combination = combs[np.argmax(corrs)]
     best_corr = np.max(corrs)
     print(f"Best combination: {best_combination}, correlation: {best_corr}")
+
+
+def calculate_rsm_corrs(
+    weights: np.ndarray,
+    weights_sum: np.ndarray,
+    rsm: np.ndarray,
+    dim_index: int,
+    corr_type: str = "pearson",
+    cumulative: bool = True,
+) -> Tuple[float, float]:
+    """Calculate the correlation between the RSMs for the given weights"""
+    corr_gt = subset_rsm_analysis(
+        weights, rsm, dim_index, corr=corr_type, cumulative=cumulative
+    )
+    corr_sum = subset_rsm_analysis(
+        weights_sum, rsm, dim_index, corr=corr_type, cumulative=cumulative
+    )
+    return corr_gt, corr_sum
+
+
+def plot_rsa_across_dims(rsa_dict: Dict[str, np.ndarray], out_path: str) -> None:
+    """Plot the RSA across dimensions for the given weights"""
+    df = pd.DataFrame(rsa_dict)
+    # Rename the columns
+    df = df.rename(
+        columns={
+            "dnn": "DNN",
+            "human": "Human",
+            "sum_dnn": "Sum DNN",
+            "sum_human": "Sum Human",
+            "individual_human": "Individual Human",
+            "individual_dnn": "Individual DNN",
+        }
+    )
+    df = df.reset_index()
+    df = df.rename(columns={"index": "Cumulative Dimension"})
+    df = df.melt(
+        id_vars="Cumulative Dimension", var_name="Type", value_name="Highest Pearson r"
+    )
+    df_dnn = df[df["Type"].isin(["DNN", "Sum DNN"])]
+    df_human = df[df["Type"].isin(["Human", "Sum Human"])]
+    df_both = df[df["Type"].isin(["DNN", "Human"])]
+    df_individual = df[df["Type"].isin(["Individual DNN", "Individual Human"])]
+
+    kwargs = {
+        "x": "Cumulative Dimension",
+        "y": "Highest Pearson r",
+        "hue": "Type",
+        "style": "Type",
+    }
+
+    # Make all figures at once
+    fnames = [
+        "rsa_across_dims_dnn",
+        "rsa_across_dims_human",
+        "rsa_across_dims_both",
+        "rsa_across_dims_individual",
+    ]
+    for data, fname in zip([df_dnn, df_human, df_both, df_individual], fnames):
+        fig, ax = plt.subplots(figsize=(6, 4), dpi=300)
+        sns.lineplot(
+            data=data,
+            ax=ax,
+            **kwargs,
+        )
+        sns.despine()
+        for ext in ["png", "pdf"]:
+            fig.savefig(
+                os.path.join(
+                    out_path,
+                    fname + "." + ext,
+                ),
+                bbox_inches="tight",
+                pad_inches=0.05,
+            )
 
 
 def plot_rsm_across_dims(
@@ -209,122 +296,100 @@ def plot_rsm_across_dims(
         human_embedding, dnn_embedding, duplicates=True, sort_by_corrs=True
     )
 
-    find_best_fit(weights_human, weights_dnn, out_path)
+    # Plot the histogram of correlations
+    compute_histogram_of_fits(
+        weights_human,
+        rsm_dnn_ground_truth,
+        out_path,
+        ncomb=1000,
+        run_analysis=True,
+    )
 
-    weights_human_sorted_human, weights_dnn_sorted_human, _ = correlate_modalities(
+    breakpoint()
+
+    weights_sum_human = correlate_modalities(
         human_embedding,
         dnn_embedding,
         base="human",
         duplicates=True,
         sort_by_corrs=False,
-    )
-    rsm_corrs = np.zeros(ndims)
-    rsm_corrs_human_sorted = np.zeros(ndims)
-    rsm_corrs_individual = np.zeros(ndims)
+    )[0]
+
+    weights_sum_dnn = correlate_modalities(
+        human_embedding,
+        dnn_embedding,
+        base="dnn",
+        duplicates=True,
+        sort_by_corrs=False,
+    )[0]
+
+    rsm_human_reconstructed = rsm_pred_torch(weights_human)
+    keys = [
+        "dnn",
+        "human",
+        "sum_dnn",
+        "sum_human",
+        "individual_human",
+        "individual_dnn",
+    ]
+    rsm_corrs = {key: np.zeros(ndims) for key in keys}
 
     if run_analysis:
         for i in range(ndims):
-            print("Calculating RSM correlation for dim {}".format(i), end="\r")
-            corr_dim = subset_rsm_analysis(
-                weights_human, rsm_dnn_ground_truth, i, corr="pearson", cumulative=True
+            print(f"Calculating RSM correlation for dim {i}", end="\r")
+
+            rsm_corrs["dnn"][i], rsm_corrs["sum_dnn"][i] = calculate_rsm_corrs(
+                weights_dnn,
+                weights_sum_dnn,
+                rsm_human_reconstructed,
+                i,
             )
 
-            corr_dim = subset_rsm_analysis(
+            rsm_corrs["human"][i], rsm_corrs["sum_human"][i] = calculate_rsm_corrs(
+                weights_human,
+                weights_sum_human,
+                rsm_dnn_ground_truth,
+                i,
+            )
+
+            rsm_corrs["individual_human"][i] = subset_rsm_analysis(
                 weights_human,
                 rsm_dnn_ground_truth,
                 i,
-                cumulative=True,
+                cumulative=False,
             )
-
-            corr_dim_human = subset_rsm_analysis(
-                weights_human_sorted_human,
-                rsm_dnn_ground_truth,
+            rsm_corrs["individual_dnn"][i] = subset_rsm_analysis(
+                weights_dnn,
+                rsm_human_reconstructed,
                 i,
-                cumulative=True,
+                cumulative=False,
             )
-
-            corr_individual = subset_rsm_analysis(
-                weights_human, rsm_dnn_ground_truth, i, cumulative=False
-            )
-
-            rsm_corrs[i] = corr_dim
-            rsm_corrs_human_sorted[i] = corr_dim_human
-            rsm_corrs_individual[i] = corr_individual
-
-        dict = {
-            "rsm_corrs": rsm_corrs,
-            "rsm_corrs_human_sorted": rsm_corrs_human_sorted,
-            "rsm_corrs_individual": rsm_corrs_individual,
-        }
 
         with open(os.path.join(out_path, "rsa_across_dims.pkl"), "wb") as f:
-            pickle.dump(dict, f)
+            pickle.dump(rsm_corrs, f)
 
     with open(os.path.join(out_path, "rsa_across_dims.pkl"), "rb") as f:
-        file = pickle.load(f)
-        rsm_corrs = file["rsm_corrs"]
-        rsm_corrs_human_sorted = file["rsm_corrs_human_sorted"]
-        rsm_corrs_individual = file["rsm_corrs_individual"]
+        rsm_corrs = pickle.load(f)
 
-    fig, ax = plt.subplots(figsize=(6, 4), dpi=300)
-    labels = ["Correlation", "Human Sum"]
-    colors = ["r", "b", "g"]
-    targets = [rsm_corrs, rsm_corrs_human_sorted]
-
-    for l, c, y in zip(labels, colors, targets):
-        sns.lineplot(x=range(ndims), y=y, label=l, color=c, alpha=0.6, ax=ax)
-    ax.set_xlabel("Cumulative Human Dimension")
-    ax.set_ylabel(r"Pearson r between RSMs")
-    ax.set_ylim(0, 0.8)
-
-    ax.set_xticks(range(0, ndims - 1, 6))
-    ax.set_xticklabels(range(1, ndims, 6))
-    ax.legend(title="Sorting method")
-    ax.set_title("Cumulative Dimension Correlations")
-    sns.despine()
-
-    save_figure(fig, os.path.join(out_path, "rsm_corrs_across_dims"))
-
-    fig, ax = plt.subplots(figsize=(6, 4), dpi=300)
-    sns.lineplot(
-        x=range(ndims),
-        y=rsm_corrs_individual,
-        color="b",
-        alpha=0.6,
-        ax=ax,
-    )
-    ax.set_xlabel("Individual Human Dimension")
-    ax.set_ylabel(r"Pearson r between RSMs")
-    ax.set_ylim(0, 0.8)
-    ax.set_xticks(range(0, ndims - 1, 6))
-    ax.set_xticklabels(range(1, ndims, 6))
-    sns.despine()
-    ax.set_title("Individual Dimension Correlations")
-    save_figure(fig, os.path.join(out_path, "rsm_corrs_individual"))
+    # Plot the RSA across dimensions
+    plot_rsa_across_dims(rsm_corrs, out_path)
 
     # Baseline dimensions we take into account
     n_comparisons = 3
-    rsm_top_human = rsm_pred_torch(human_embedding[:, :n_comparisons])
-    rsm_top_dnn = rsm_pred_torch(dnn_embedding[:, :n_comparisons])
 
-    # NOTE look and check into corrs here tomorrow!
-    # I feel like the plot shows that the first 25 are important, before it saturates!
+    # Calculate the RSMs
+    rsm_top_human = rsm_pred_torch(weights_human[:, :n_comparisons])
+    rsm_other_human = rsm_pred_torch(weights_human[:, n_comparisons:])
+    rsm_all_human = rsm_pred_torch(weights_human)
 
-    rsm_other_dnn = rsm_pred_torch(dnn_embedding[:, n_comparisons:])
-    rsm_other_human = rsm_pred_torch(human_embedding[:, n_comparisons:])
-
-    rsm_all_human = rsm_pred_torch(human_embedding)
-    rsm_all_dnn = rsm_pred_torch(dnn_embedding)
-
+    # Calculate the correlations
     corr_top = correlate_rsms(rsm_top_human, rsm_dnn_ground_truth, "pearson")
-    corr_other = correlate_rsms(rsm_other_human, rsm_other_dnn, "pearson")
+    corr_other = correlate_rsms(rsm_other_human, rsm_dnn_ground_truth, "pearson")
     corr_all = correlate_rsms(rsm_all_human, rsm_dnn_ground_truth, "pearson")
 
-    breakpoint()
-
-    print("Corr top: {}".format(corr_top))
-    print("Corr other: {}".format(corr_other))
-    print("Corr all: {}".format(corr_all))
+    print("Corr top {}: {}".format(n_comparisons, corr_top))
+    print("Corr other {}: {}".format(ndims - n_comparisons, corr_other))
+    print("Corr all {}: {}".format(ndims, corr_all))
 
 
 if __name__ == "__main__":
@@ -339,10 +404,10 @@ if __name__ == "__main__":
     print("Save all human dnn comparisons to {}".format(plot_dir))
     image_filenames, indices = load_image_data(args.img_root, filter_behavior=True)
     dnn_embedding = dnn_embedding[indices]
-    features = load_deepnet_activations(args.feature_path, center=True)
+    features = load_deepnet_activations(args.feature_path, center=True, relu=True)
     features = features[indices]
 
-    rsm_truth_dnn = features @ features.T
+    rsm_truth_dnn = correlation_matrix(dnn_embedding)
     rsm_recon_dnn = rsm_pred_torch(dnn_embedding, return_type="numpy")
     rsm_human = rsm_pred_torch(human_embedding, return_type="numpy")
 
@@ -369,7 +434,9 @@ if __name__ == "__main__":
     # NOTE -> I have taken the ground truth DNN embedding here.
     concepts = load_concepts(args.concept_path)
     rsm_human, rsm_truth_dnn = filter_rsm_by_concepts(
-        rsm_human, rsm_truth_dnn, concepts, plot_dir
+        rsm_human,
+        rsm_truth_dnn,
+        concepts,
     )
     for rsm, name in zip([rsm_truth_dnn, rsm_human], ["dnn", "human"]):
         fname = os.path.join(plot_dir, f"{name}_rsm.jpg")
