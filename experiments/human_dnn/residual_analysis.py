@@ -1,11 +1,9 @@
 import tqdm
 import os
-import pickle
 import multiprocessing
 import numpy as np
 import matplotlib.pyplot as plt
 from tomlparse import argparse
-from dataclasses import dataclass
 from object_dimensions.utils.utils import (
     load_sparse_codes,
     load_image_data,
@@ -14,7 +12,6 @@ from object_dimensions.utils.utils import (
 from typing import Tuple, List, Union
 from sklearn.linear_model import Ridge
 from sklearn.model_selection import GridSearchCV, KFold
-from sklearn.metrics import r2_score
 
 global NUM_WORKERS
 NUM_WORKERS = multiprocessing.cpu_count() - 1
@@ -67,14 +64,16 @@ def cross_validated_prediction(
     pbar = tqdm.tqdm(range(n_targets))
     residuals = np.zeros((n_objects, n_targets))
     intersection = np.zeros((n_objects, n_targets))
-    r2_scores = np.zeros(n_targets)
+    r2_scores = np.zeros((n_targets, k_folds))
+    optimal_alphas = np.zeros(
+        (n_targets, k_folds)
+    )  # each fold has its own optimal lambda
 
     for i, y in enumerate(Y.T):
         pbar.update(1)
         cv_outer = KFold(n_splits=k_folds, shuffle=True, random_state=0)
-        outer_r2_scores = []
         # This is the outer loop, where we split the data into k_folds
-        for train_idx, test_idx in cv_outer.split(X):
+        for fold, (train_idx, test_idx) in enumerate(cv_outer.split(X)):
             print("Outer loop")
             X_train, X_test = X[train_idx], X[test_idx]
             y_train, y_test = y[train_idx], y[test_idx]
@@ -98,9 +97,14 @@ def cross_validated_prediction(
             intersection[test_idx, i] = y_hat
 
             r2_score = best_model.score(X_test, y_test)
-            outer_r2_scores.append(r2_score)
 
-        r2_scores[i] = np.mean(outer_r2_scores)
+            r2_scores[i, fold] = r2_score
+            optimal_alphas[i, fold] = best_model.alpha
+
+    # We choose the r2 score for a dimension to be the average across folds
+    r2_scores = np.mean(r2_scores, axis=1)
+    optimal_alphas = np.mean(optimal_alphas, axis=1)  # same for lambda
+    print("Average optimal lambda per dimension: ", optimal_alphas)
 
     # Make our predicitions positive
     residuals = residuals + np.abs(np.min(residuals))
@@ -127,20 +131,22 @@ def run(
 ) -> None:
     out_path = "./data/misc/rsa"
     features, human_embedding = load_data(human_path, feature_path, img_root)
-    residuals, intersection, r2_scores = cross_validated_prediction(
-        features,
-        human_embedding,
-        k,
-        out_path,
-    )
-    plot_r2(r2_scores, out_path)
-    print("Average r2 score across all dimensions: ", np.mean(r2_scores))
 
-    for predictions, name in zip(
-        [residuals, intersection], ["residuals", "intersection"]
-    ):
-        fname = os.path.join(out_path, f"{name}_dependent_human.npy")
-        np.save(fname, predictions)
+    if run_search:
+        residuals, intersection, r2_scores = cross_validated_prediction(
+            features,
+            human_embedding,
+            k,
+            out_path,
+        )
+        plot_r2(r2_scores, out_path)
+        print("Average r2 score across all dimensions: ", np.mean(r2_scores))
+
+        for predictions, name in zip(
+            [residuals, intersection], ["residuals", "intersection"]
+        ):
+            fname = os.path.join(out_path, f"{name}_dependent_human.npy")
+            np.save(fname, predictions)
 
 
 if __name__ == "__main__":
