@@ -304,7 +304,6 @@ class Sampler(object):
         if self.triplet_path:
             unique_triplets = load_domain(self.triplet_path)
             unique_triplets = unique_triplets.astype(int)
-            unique_triplets.sort(axis=1)
             self.n_samples = unique_triplets.shape[0]
             choices = self.select_odd_one_outs(unique_triplets)
             fname = Path(self.triplet_path).stem + ".npy"
