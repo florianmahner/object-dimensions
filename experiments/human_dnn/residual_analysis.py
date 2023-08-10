@@ -55,7 +55,6 @@ def cross_validated_prediction(
     X: np.ndarray,
     Y: np.ndarray,
     k_folds: int,
-    out_path: str = None,
 ) -> Tuple[List, List, List]:
     r2_scores = []
 
@@ -74,14 +73,13 @@ def cross_validated_prediction(
         cv_outer = KFold(n_splits=k_folds, shuffle=True, random_state=0)
         # This is the outer loop, where we split the data into k_folds
         for fold, (train_idx, test_idx) in enumerate(cv_outer.split(X)):
-            print("Outer loop")
             X_train, X_test = X[train_idx], X[test_idx]
             y_train, y_test = y[train_idx], y[test_idx]
 
             # Define search space, i.e. the hyperparameters to evaluate. Requires to have
             # intuition about appropriate search space beforehand.
             search_space = dict()
-            search_space["alpha"] = np.linspace(100, 4000, 100)
+            search_space["alpha"] = np.linspace(100, 4000, 3)
 
             cv_inner = KFold(n_splits=k_folds, shuffle=True, random_state=1)
             model = Ridge(random_state=1)
@@ -106,9 +104,12 @@ def cross_validated_prediction(
     optimal_alphas = np.mean(optimal_alphas, axis=1)  # same for lambda
     print("Average optimal lambda per dimension: ", optimal_alphas)
 
+    breakpoint()
+
     # Make our predicitions positive
     residuals = residuals + np.abs(np.min(residuals))
     intersection = intersection + np.abs(np.min(intersection))
+
     return residuals, intersection, r2_scores
 
 
@@ -137,7 +138,6 @@ def run(
             features,
             human_embedding,
             k,
-            out_path,
         )
         plot_r2(r2_scores, out_path)
         print("Average r2 score across all dimensions: ", np.mean(r2_scores))

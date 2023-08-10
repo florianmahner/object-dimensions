@@ -12,7 +12,7 @@ from typing import Tuple, Union
 
 
 def parse_args():
-    parser = tomlparse.ArgumentParser()
+    parser = argparse.ArgumentParser()
     parser.add_argument("--human_path", type=str, default="./results/human")
     parser.add_argument("--dnn_path", type=str, default="./results/dnn")
     parser.add_argument(

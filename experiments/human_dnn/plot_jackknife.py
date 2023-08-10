@@ -1,10 +1,18 @@
 import os
+import toml
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.gridspec as gridspec
 from PIL import Image
+
+from scipy.io import loadmat
+from matplotlib.colors import ListedColormap
+import matplotlib as mpl
+
+import plotly.express as px
+import pandas as pd
 
 
 def plot_figure(
@@ -163,13 +171,21 @@ def plot_grid(
     plot_softmax_histogram(jackknife_dict, plot_dir)
     plot_weights(jackknife_dict, plot_dir)
 
-    ctr = 0
     save_path = os.path.join(plot_dir, key)
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
-    for triplet, dim_h, dim_d in zip(triplets, dims_human, dims_dnn):
-        ctr += 1
+    # Argsort diff human and diff dnn along axis 1
+    topk_human = np.argsort(-diff_human, axis=1)[:, :5]
+    topk_human = {str(i): list(a) for i, a in enumerate(topk_human)}
+
+    topk_dnn = np.argsort(-diff_dnn, axis=0)[:, :5]
+    topk_dnn = {str(i): list(a) for i, a in enumerate(topk_dnn)}
+    save = {"human": topk_human, "dnn": topk_dnn}
+    with open(os.path.join(save_path, "topk.toml"), "w") as f:
+        toml.dump(save, f)
+
+    for ctr, (triplet, dim_h, dim_d) in enumerate(zip(triplets, dims_human, dims_dnn)):
         fig = plot_figure(
             image_filenames,
             triplet,
@@ -181,7 +197,7 @@ def plot_grid(
             dnn_title,
         )
         fig.savefig(
-            os.path.join(save_path, softmax_key + "_" + str(ctr) + ".pdf"),
+            os.path.join(save_path, softmax_key + "_" + f"{str(ctr + 1)}" + ".pdf"),
             bbox_inches="tight",
             pad_inches=0,
             transparent=True,
@@ -189,11 +205,45 @@ def plot_grid(
 
         plt.close(fig)
 
-        if ctr == max:
-            break
-
         # Plot the rose plots
         plot_bar(diff_human[ctr], diff_dnn[ctr], ctr, save_path)
+
+
+def get_66dim_cmap(dimcol_mat="./data/misc/colors66.mat"):
+    dimcol_data = loadmat(dimcol_mat, simplify_cells=True)
+    arr = dimcol_data["colors66"]
+    dimcol_cmap = ListedColormap(arr, name="Behavioral dimensions", N=68)
+    return dimcol_cmap
+
+
+def plot_plotly(softmax, out_path):
+    dimcol_cmap = get_66dim_cmap()
+    dimcol_cmap_hex = [mpl.colors.to_hex(row) for row in dimcol_cmap.colors]
+
+    n = softmax.shape[0]
+    dims = np.arange(n)
+
+    df = pd.DataFrame({"softmax": softmax, "dims": dims})
+
+    fig = px.bar_polar(
+        df,
+        r="softmax",
+        color="dims",
+        color_continuous_scale=dimcol_cmap_hex,
+        template="simple_white",
+    )
+    # hide gridlines, labels, and ticks.
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(showticklabels=False, ticks=""),
+            angularaxis=dict(showticklabels=False, ticks=""),
+        )
+    )
+    fig.update_polars(
+        radialaxis_showline=False,
+        angularaxis_showline=False,
+    )
+    fig.write_image(out_path, width=800, height=800)
 
 
 def plot_bar(softmax_human, softmax_dnn, ctr, out_path="./rose.png"):
@@ -208,7 +258,7 @@ def plot_bar(softmax_human, softmax_dnn, ctr, out_path="./rose.png"):
     ax[0].set_ylabel("Count")
     fig.tight_layout()
     fig.savefig(
-        os.path.join(out_path, f"histogram_{ctr}.pdf"),
+        os.path.join(out_path, f"histogram_{ctr + 1}.pdf"),
         bbox_inches="tight",
         transparent=True,
     )
@@ -216,77 +266,8 @@ def plot_bar(softmax_human, softmax_dnn, ctr, out_path="./rose.png"):
 
     # Plot two rose plots
     for decisions, path in zip(
-        [softmax_human, softmax_dnn], [f"rose_human_{ctr}.png", f"rose_dnn_{ctr}.png"]
+        [softmax_human, softmax_dnn],
+        [f"rose_human_{ctr + 1}.pdf", f"rose_dnn_{ctr + 1}.pdf"],
     ):
-        dimensions = np.arange(1, len(decisions) + 1)
-        topk = 5
-        argsort = np.argsort(-decisions)
-        decisions = decisions[argsort][:topk]
-
-        # Filter the dimensions with the decisions larger than eps
-        dimensions = dimensions[argsort][:topk]
-        decisions = decisions / decisions.sum()
-        decisions = decisions * 1000
-        decisions = np.array(decisions, dtype=int)
-
-        dim = [f"Dim {str(i)}" for i in dimensions]
-        df = pd.DataFrame({"softmax": decisions, "dim": dim})
-
-        fig = plt.figure(figsize=(6, 6))
-        ax = plt.subplot(111, polar=True)
-        plt.axis("off")
-
-        lowerLimit = 0
-        palette = sns.color_palette("husl", 13)
-
-        # Compute the angle each bar is centered on:
-        indexes = list(range(1, len(df.index) + 1))
-        width2 = 2 * np.pi / len(df.index)
-        angles = [element * width2 for element in indexes]
-
-        # Draw bars
-        bars = ax.bar(
-            x=angles,
-            height=df["softmax"],
-            width=0.2,
-            bottom=lowerLimit,
-            linewidth=2,
-            edgecolor="white",
-            color=palette,
-        )
-
-        # little space between the bar and the label
-        labelPadding = 4
-
-        # Add labels
-        for bar, angle, height, label in zip(bars, angles, df["softmax"], df["dim"]):
-            # Labels are rotated. Rotation must be specified in degrees :(
-            rotation = np.rad2deg(angle)
-
-            # Flip some labels upside down
-            alignment = ""
-            if angle >= np.pi / 2 and angle < 3 * np.pi / 2:
-                alignment = "right"
-                rotation = rotation + 180
-            else:
-                alignment = "left"
-
-            # Add a label to the bar right below the bar rotated
-            ax.text(
-                x=angle,
-                y=height + labelPadding,
-                s=label,
-                rotation=rotation,
-                rotation_mode="anchor",
-                ha=alignment,
-                va="center_baseline",
-                fontsize=20,
-            )
-
-        modality = "Human" if "human" in path else "DNN"
-        ax.set_title("{}".format(modality), fontsize=20)
-
-        fig.tight_layout()
-        s_path = os.path.join(out_path, path)
-        plt.savefig(s_path, bbox_inches="tight", pad_inches=0, dpi=300)
-        plt.close(fig)
+        f_path = os.path.join(out_path, path)
+        plot_plotly(decisions, f_path)

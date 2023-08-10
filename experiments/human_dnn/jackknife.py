@@ -43,10 +43,6 @@ def parse_args():
     return parser.parse_args()
 
 
-def map_human_and_dnn_triplets():
-    pass
-
-
 def compute_softmax_per_batch(q_mu, q_var, indices, device):
     """This function extracts the embedding vectors at the indices of the most diverging triplets and computes the
     softmax decision for each of them"""
@@ -309,78 +305,80 @@ def main(
     plot_dir = create_path_from_params(dnn_path, "analyses", "jackknife")
     print("Save to '{}'".format(plot_dir))
 
-    # PLot this for the DNN for all
-    softmax_dnn_non_filtered, _ = compute_softmax_decisions(
-        dnn_weights, dnn_var, val_loader, device
-    )
-    sns.set(style="whitegrid", context="paper", font_scale=1.2)
-    column_labels = {0: "k", 1: "j", 2: "i"}
-    colors = {0: "blue", 1: "green", 2: "red"}
-
-    fig, ax = plt.subplots(figsize=(6, 3))
-    for k in range(3):
-        sns.histplot(
-            softmax_dnn_non_filtered[:, k],
-            ax=ax,
-            bins=100,
-            color=colors[k],
-            alpha=0.5,
-            label=f"{column_labels[k]}",
-        )
-
-    ax.set_xlabel("Softmax probability")
-    ax.set_ylabel("Count")
-    ax.legend(title="Odd one out")
-
-    fig.tight_layout()
-    plt.savefig(
-        os.path.join(plot_dir, "softmax_histogram_dnn_all.png"),
-        bbox_inches="tight",
-        dpi=300,
-        pad_inches=0.1,
-    )
-    plt.close(fig)
-
-    dnn_smaller_weights = dnn_weights[:, :84]
-    dnn_smaller_var = dnn_var[:, :84]
-
-    softmax_dnn_non_filtered, _ = compute_softmax_decisions(
-        dnn_smaller_weights, dnn_smaller_var, val_loader, device
-    )
-    sns.set(style="whitegrid", context="paper", font_scale=1.2)
-    column_labels = {0: "k", 1: "j", 2: "i"}
-    colors = {0: "blue", 1: "green", 2: "red"}
-
-    fig, ax = plt.subplots(figsize=(6, 3))
-    for k in range(3):
-        sns.histplot(
-            softmax_dnn_non_filtered[:, k],
-            ax=ax,
-            bins=100,
-            color=colors[k],
-            alpha=0.5,
-            label=f"{column_labels[k]}",
-        )
-
-    ax.set_xlabel("Softmax probability")
-    ax.set_ylabel("Count")
-    ax.legend(title="Odd one out")
-
-    fig.tight_layout()
-    plt.savefig(
-        os.path.join(plot_dir, "softmax_histogram_dnn_84dims.png"),
-        bbox_inches="tight",
-        dpi=300,
-        pad_inches=0.1,
-    )
-    plt.close(fig)
-
-    val_loader = build_dataloader(triplet_path)
-
     # Load image data
     image_filenames, indices = load_image_data(img_root, filter_behavior=True)
     dnn_weights = dnn_weights[indices]
     dnn_var = dnn_var[indices]
+
+    if run_jackknife:
+        # PLot this for the DNN for all
+        softmax_dnn_non_filtered, _ = compute_softmax_decisions(
+            dnn_weights, dnn_var, val_loader, device
+        )
+        sns.set(style="whitegrid", context="paper", font_scale=1.2)
+        column_labels = {0: "k", 1: "j", 2: "i"}
+        colors = {0: "blue", 1: "green", 2: "red"}
+
+        fig, ax = plt.subplots(figsize=(6, 3))
+        for k in range(3):
+            sns.histplot(
+                softmax_dnn_non_filtered[:, k],
+                ax=ax,
+                bins=100,
+                color=colors[k],
+                alpha=0.5,
+                label=f"{column_labels[k]}",
+            )
+
+        ax.set_xlabel("Softmax probability")
+        ax.set_ylabel("Count")
+        ax.legend(title="Odd one out")
+
+        fig.tight_layout()
+        plt.savefig(
+            os.path.join(plot_dir, "softmax_histogram_dnn_all.png"),
+            bbox_inches="tight",
+            dpi=300,
+            pad_inches=0.1,
+        )
+        plt.close(fig)
+
+        dnn_smaller_weights = dnn_weights[:, :84]
+        dnn_smaller_var = dnn_var[:, :84]
+
+        softmax_dnn_non_filtered, _ = compute_softmax_decisions(
+            dnn_smaller_weights, dnn_smaller_var, val_loader, device
+        )
+        sns.set(style="whitegrid", context="paper", font_scale=1.2)
+        column_labels = {0: "k", 1: "j", 2: "i"}
+        colors = {0: "blue", 1: "green", 2: "red"}
+
+        fig, ax = plt.subplots(figsize=(6, 3))
+        for k in range(3):
+            sns.histplot(
+                softmax_dnn_non_filtered[:, k],
+                ax=ax,
+                bins=100,
+                color=colors[k],
+                alpha=0.5,
+                label=f"{column_labels[k]}",
+            )
+
+        ax.set_xlabel("Softmax probability")
+        ax.set_ylabel("Count")
+        ax.legend(title="Odd one out")
+
+        fig.tight_layout()
+        plt.savefig(
+            os.path.join(plot_dir, "softmax_histogram_dnn_84dims.png"),
+            bbox_inches="tight",
+            dpi=300,
+            pad_inches=0.1,
+        )
+        plt.close(fig)
+
+        val_loader = build_dataloader(triplet_path)
+        print("Yay")
 
     if run_jackknife:
         compute_jackknife(
@@ -406,7 +404,13 @@ def main(
             )
 
         jackknife_dict = pickle.load(open(jackknife_path, "rb"))
-        for key in ["human_i_dnn_j", "human_j_dnn_i", "human_k_dnn_k"]:
+        for key in [
+            "human_i_dnn_j",
+            "human_j_dnn_i",
+            "human_k_dnn_k",
+            "human_k_dnn_j",
+            "human_k_dnn_i",
+        ]:
             # for key in [("human_k_dnn_k")]:
             print("Plotting {}".format(key))
             plot_grid(

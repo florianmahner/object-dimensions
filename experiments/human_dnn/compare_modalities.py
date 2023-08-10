@@ -24,6 +24,14 @@ from object_dimensions.utils.utils import (
 )
 from scipy.stats import rankdata, pearsonr, spearmanr
 
+import matplotlib
+
+matplotlib.rcParams["font.sans-serif"] = "Arial"
+matplotlib.rcParams["font.family"] = "sans-serif"
+
+sns.set(font_scale=1.5)
+sns.set_style("white")
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -42,11 +50,11 @@ def parse_args():
     parser.add_argument(
         "--diff_measure",
         type=str,
-        choices=["rank", "absolute"],
-        default="absolute",
+        choices=["rank", "signed"],
+        default="signed",
         help="Measure to use for comparing the two modalities in the scatter plot",
     )
-    return parse_args()
+    return parser.parse_args()
 
 
 def get_img_pairs(tril_indices, most_dissimilar):
@@ -448,16 +456,16 @@ def plot_mind_machine_corrs(
         {
             "Human Embedding Dimension": range(len(mind_machine_corrs)),
             "Unique": mind_machine_corrs,
-            "With Duplicates": mind_machine_corrs_w_duplicates,
+            "With Replacement": mind_machine_corrs_w_duplicates,
         }
     ).melt(
         "Human Embedding Dimension",
-        var_name="Type",
+        var_name="Pairing",
         value_name="Highest Pearson's r with DNN",
     )
 
     # Set the plot context and style
-    sns.set_context("paper", font_scale=1.5)
+    sns.set(font_scale=1.5)
     sns.set_style("white")
 
     # Create the figure
@@ -468,12 +476,21 @@ def plot_mind_machine_corrs(
         data=df,
         x="Human Embedding Dimension",
         y="Highest Pearson's r with DNN",
-        hue="Type",
-        style="Type",
+        hue="Pairing",
+        style="Pairing",
+        errorbar=("sd", 95),
+        n_boot=1000,
         ax=ax,
     )
 
     sns.despine()
+
+    xticks = np.arange(10, 70, 10).tolist()
+    xticks.insert(0, 1)
+    xticks.insert(-1, 68)
+    xticklabels = [str(x) for x in xticks]
+    ax.set_xticks(xticks)
+    ax.set_xticklabels(xticklabels)
 
     fig.tight_layout()
 
@@ -490,17 +507,20 @@ def plot_mind_machine_corrs(
     plt.close(fig)
 
 
-def concat_images(image_list, topk=8):
+def concat_images(image_list, topk=8, factor=2):
     images = []
-    per_row = topk // 2
+    per_row = topk // factor
     for image in image_list:
         image = resize(io.imread(image), (400, 400))
         images.append(image)
 
     image_row1 = np.concatenate(images[:per_row], axis=1)
-    image_row2 = np.concatenate(images[per_row : per_row * 2], axis=1)
-    large_image = np.concatenate([image_row1, image_row2], axis=0)
-    return large_image
+    if factor == 1:
+        return image_row1
+    elif factor == 2:
+        image_row2 = np.concatenate(images[per_row : per_row * 2], axis=1)
+        large_image = np.concatenate([image_row1, image_row2], axis=0)
+        return large_image
 
 
 def visualize_dims_across_modalities(
@@ -527,25 +547,122 @@ def visualize_dims_across_modalities(
         rank_diff_mod2 = rankdata(-w_mod2) - rankdata(-w_mod1)
         most_dissim_imgs_mod1 = ref_images[np.argsort(rank_diff_mod1)[:top_k]]
         most_dissim_imgs_mod2 = ref_images[np.argsort(rank_diff_mod2)[:top_k]]
+    elif difference == "signed":
+        diff_mod1 = w_mod1 - w_mod2
+        diff_mod2 = w_mod2 - w_mod1
+        most_dissim_imgs_mod1 = ref_images[np.argsort(diff_mod1)[::-1][:top_k]]
+        most_dissim_imgs_mod2 = ref_images[np.argsort(diff_mod2)[::-1][:top_k]]
     else:
-        abs_diff_mod1 = w_mod1 - w_mod2
-        abs_diff_mod2 = w_mod2 - w_mod1
-        most_dissim_imgs_mod1 = ref_images[np.argsort(abs_diff_mod1)[::-1][:top_k]]
-        most_dissim_imgs_mod2 = ref_images[np.argsort(abs_diff_mod2)[::-1][:top_k]]
+        raise ValueError("Difference must be either 'rank' or 'signed'.")
 
-    # Find a way to plot these images
+    # Plot the images in a grid themselves
+    def plot_image_grid(images):
+        images = images[:6]
+        fig, axs = plt.subplots(2, 3, figsize=(4, 6))
+        fig.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0.0, hspace=0.0)
+        for i, image in enumerate(images):
+            ax = axs[i // 3, i % 3]
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.axis("off")
+            img = io.imread(image)
+            ax.imshow(img)
 
-    most_dissim_imgs_mod1 = concat_images(most_dissim_imgs_mod1, topk=top_k)
-    most_dissim_imgs_mod2 = concat_images(most_dissim_imgs_mod2, topk=top_k)
-    topk_imgs_mod1 = concat_images(topk_imgs_mod1, topk=top_k)
-    topk_imgs_mod2 = concat_images(topk_imgs_mod2, topk=top_k)
-
-    titles = [r"Human Behavior", r"VGG 16"]
-    border_cols = ["r", "b", "b"]
+        return fig
 
     path = os.path.join(plots_dir, "compare_modalities", difference + "_diff")
     if not os.path.exists(path):
         os.makedirs(path)
+
+    for imgs, fnames in zip(
+        [topk_imgs_mod1, topk_imgs_mod2, most_dissim_imgs_mod1, most_dissim_imgs_mod2],
+        [
+            f"latent_dim_{latent_dim}_topk_human",
+            f"latent_dim_{latent_dim}_topk_dnn",
+            f"latent_dim_{latent_dim}_most_dissim_human",
+            f"latent_dim_{latent_dim}_most_dissim_dnn",
+        ],
+    ):
+        fig = plot_image_grid(imgs)
+        fig.savefig(
+            os.path.join(
+                plots_dir, "compare_modalities", difference + "_diff", f"{fnames}.pdf"
+            ),
+            bbox_inches="tight",
+            pad_inches=0.0,
+        )
+
+        plt.close(fig)
+
+    import pandas as pd
+
+    data = pd.DataFrame({"Human": w_mod1, "DNN": w_mod2})
+    # Make empty list of colors
+    data["colors"] = 0
+    high_dnn_low_human = np.argsort(diff_mod1)[::-1][:top_k]
+    high_human_low_dnn = np.argsort(diff_mod2)[::-1][:top_k]
+    top_k_common = np.intersect1d(topk_mod1, topk_mod2)
+
+    data.loc[topk_mod1, "colors"] = 1
+    data.loc[topk_mod2, "colors"] = 2
+    data.loc[high_dnn_low_human, "colors"] = 3
+    data.loc[high_human_low_dnn, "colors"] = 4
+    if len(top_k_common) > 0:
+        data.loc[top_k_common, "colors"] = 5
+
+    # Make an alphas array where all grey colors are 0.2 and all others are 1
+    alphas = np.where(data["colors"] == 0, 0.2, 1)
+    data["alphas"] = alphas
+
+    fig = plt.figure(figsize=(6, 4))
+    sns.set(font_scale=1.5)
+    sns.set_style("white")
+    palette = sns.color_palette()
+
+    blue, orange, green, red = palette[:4]
+    magenta = palette[6]
+
+    palette = {
+        0: "grey",
+        1: blue,
+        2: red,
+        3: orange,
+        4: green,
+        5: magenta,
+    }
+
+    ax = sns.scatterplot(
+        data=data,
+        x="Human",
+        y="DNN",
+        hue="colors",
+        alpha=alphas,
+        palette=palette,
+        s=100,
+    )
+    sns.despine()
+
+    ax.set_xlabel("Human Behavior")
+    ax.set_ylabel("DNN")
+    ax.legend([], [], frameon=False)
+
+    fig.savefig(
+        os.path.join(
+            path,
+            "latent_dim_{}_scatter.pdf".format(latent_dim),
+        ),
+        bbox_inches="tight",
+        pad_inches=0.05,
+    )
+
+    plt.close(fig)
+
+    most_dissim_imgs_mod1 = concat_images(most_dissim_imgs_mod1, topk=top_k, factor=2)
+    most_dissim_imgs_mod2 = concat_images(most_dissim_imgs_mod2, topk=top_k, factor=2)
+    topk_imgs_mod1 = concat_images(topk_imgs_mod1, topk=top_k, factor=2)
+    topk_imgs_mod2 = concat_images(topk_imgs_mod2, topk=top_k, factor=2)
+
+    titles = [r"Human Behavior", r"VGG 16"]
 
     n_rows = 2
     n_cols = 3
@@ -568,9 +685,12 @@ def visualize_dims_across_modalities(
     # Color differently based on the topk row or the most dissimlar row
     for i in range(n_rows):
         colors = np.array(["grey" for _ in range(len(w_mod1))])
+        alphas = np.array([0.2 for _ in range(len(w_mod1))])
         if i == 0:
             colors[topk_mod1] = "r"
             colors[topk_mod2] = "b"
+            alphas[topk_mod1] = 0.6
+            alphas[topk_mod2] = 0.6
             if len(top_k_common) > 0:
                 colors[top_k_common] = "m"
         else:
@@ -578,20 +698,26 @@ def visualize_dims_across_modalities(
                 colors[np.argsort(rank_diff_mod1)[:top_k]] = "r"
                 colors[np.argsort(rank_diff_mod2)[:top_k]] = "b"
             else:
-                colors[np.argsort(abs_diff_mod1)[::-1][:top_k]] = "r"
-                colors[np.argsort(abs_diff_mod2)[::-1][:top_k]] = "b"
+                colors[np.argsort(diff_mod1)[::-1][:top_k]] = "r"
+                colors[np.argsort(diff_mod2)[::-1][:top_k]] = "b"
+                alphas[np.argsort(diff_mod1)[::-1][:top_k]] = 0.7
+                alphas[np.argsort(diff_mod2)[::-1][:top_k]] = 0.7
 
-        axes[i, 2].scatter(w_mod1, w_mod2, c=colors, alpha=0.6)
+        axes[i, 2].scatter(w_mod1, w_mod2, c=colors, s=45, alpha=alphas)
 
     for ax in [axes[0, 2], axes[1, 2]]:
         ax.set_xlabel(r"Human Behavior")
         ax.set_ylabel(r"VGG 16")
         ax.set_xticks([])
         ax.set_yticks([])
+        ax.spines["right"].set_visible(False)
+        ax.spines["top"].set_visible(False)
 
     for ax in [axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]]:
         ax.set_xticks([])
         ax.set_yticks([])
+        for spine in ["left", "right", "top", "bottom"]:
+            ax.spines[spine].set_visible(False)
 
     fig.suptitle(r"Pearson r = {:.2f}".format(r))
 
