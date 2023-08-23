@@ -9,7 +9,7 @@ from thingsvision import get_extractor
 from thingsvision.utils.data import DataLoader
 from thingsvision.core.extraction import center_features
 
-from object_dimensions.utils.image_dataset import ImageDataset
+from object_dimensions.image_dataset import ImageDataset
 from tomlparse import argparse
 
 sys.path.append("./stylegan_xl")

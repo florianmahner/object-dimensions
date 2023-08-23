@@ -21,7 +21,7 @@ import numpy as np
 
 from numba import njit, prange
 from scipy.spatial.distance import pdist, squareform
-from object_dimensions.utils.image_dataset import ImageDataset
+from object_dimensions.image_dataset import ImageDataset
 
 
 # ------- Helper Functions for images ------- #
@@ -36,6 +36,14 @@ def img_to_uint8(img):
         img = img.astype(np.uint8)
 
     return img
+
+
+def load_data(human_path, feature_path, img_root):
+    features = load_deepnet_activations(feature_path, relu=True, center=True)
+    human_embedding = load_sparse_codes(human_path, relu=True)
+    indices = load_image_data(img_root, filter_behavior=True)[1]
+    features = features[indices]
+    return features, human_embedding
 
 
 def load_image_data(img_root, filter_behavior=False, filter_plus=False):
@@ -275,8 +283,9 @@ def compute_rsm(X, method="correlation"):
 
 
 def correlation_matrix(F, a_min=-1.0, a_max=1.0):
-    """Compute dissimilarity matrix based on correlation distance (on the matrix-level)."""
-    F_c = F - F.mean(axis=1)[:, np.newaxis]
+    # """Compute dissimilarity matrix based on correlation distance (on the matrix-level).
+    # Same as np.corrcoef(rowvar=True)"""
+    F_c = F - F.mean(axis=1)[..., None]
     cov = F_c @ F_c.T
     l2_norms = np.linalg.norm(F_c, axis=1)  # compute vector l2-norm across rows
     denom = np.outer(l2_norms, l2_norms)

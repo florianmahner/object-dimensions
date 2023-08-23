@@ -14,7 +14,7 @@ from collections import defaultdict
 from abc import ABC, abstractmethod
 from copy import deepcopy
 
-__all__ = ["DeepEmbeddingLogger", "DefaultLogger"]
+__all__ = ["ObjectDimensionLogger", "DefaultLogger"]
 
 
 class Logger(ABC):
@@ -63,8 +63,9 @@ class Logger(ABC):
         return self.log(*args, **kwargs)
 
 
-class DeepEmbeddingLogger:
+class ObjectDimensionLogger:
     r"""Class to log the data. This is the class that contains all the loggers"""
+
     # TODO Make subscriptable, so that I can do logger['abc'] and logger['des']
     def __init__(
         self,
@@ -149,7 +150,6 @@ class DefaultLogger(Logger):
     def log(self, *args, **kwargs):
         self.step_ctr += 1
         for name, (logger, update_interval) in self.extensions.items():
-
             if self.step_ctr % update_interval != 0:
                 continue
 

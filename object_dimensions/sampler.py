@@ -6,7 +6,6 @@ import argparse
 import random
 import os
 import re
-import torch
 
 import numpy as np
 from collections import Counter

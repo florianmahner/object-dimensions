@@ -9,10 +9,7 @@ import glob
 from thingsvision import get_extractor
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.models as models
-
 import torch.nn as nn
-import torchvision.transforms as T
 
 
 def load_regression_weights(path, in_features, out_features, to_numpy=False):
@@ -52,9 +49,12 @@ class LatentPredictor(nn.Module):
         else:
             device_type = device
             self.device = torch.device(device)
-            
+
         extractor = get_extractor(
-            model_name=model_name, pretrained=True, device=device_type, source="torchvision"
+            model_name=model_name,
+            pretrained=True,
+            device=device_type,
+            source="torchvision",
         )
         model = extractor.model
         model = model.eval()
