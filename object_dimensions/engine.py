@@ -4,9 +4,17 @@
 import torch
 import os
 import glob
+import argparse
 
 import numpy as np
 import torch.nn.functional as F
+
+from typing import List, Dict, Union, Any, Tuple
+
+from object_dimensions.model import VariationalEmbedding, DeterministicEmbedding
+from object_dimensions.priors import SpikeSlabPrior, LogGaussianPrior
+from object_dimensions.loggers import ObjectDimensionLogger
+from torch.utils.data import DataLoader
 
 
 class Params(object):
@@ -14,7 +22,7 @@ class Params(object):
     and updates the results depending on the type of the keyword arguments in the update (e.g. list, array)
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Dict[str, Any]) -> None:
         self.__dict__.update(kwargs)
         for key in (
             "train_complexity",
@@ -29,10 +37,10 @@ class Params(object):
             setattr(self, key, [])
         self.start_epoch = 1
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> Union[int, float, List, np.ndarray]:
         return self.__dict__[key]
 
-    def update(self, **kwargs):
+    def update(self, **kwargs: Dict[str, Union[int, float, List]]) -> None:
         """Update the parameters of the model depending on type.
         If the type is a list, append the value to the list, else set new value as attribute
         """
@@ -49,7 +57,7 @@ class Params(object):
             else:
                 setattr(self, k, v)
 
-    def save(self, path):
+    def save(self, path: str) -> None:
         """Save the parameters of the model as a dictionary"""
         np.savez_compressed(path, **self.__dict__)
 
@@ -59,19 +67,19 @@ class EmbeddingTrainer(object):
 
     def __init__(
         self,
-        model,
-        prior,
-        train_loader,
-        val_loader,
-        logger,
-        device="cpu",
-        load_model=False,
-        n_epochs=100,
-        mc_samples=5,
-        lr=0.001,
-        beta=1.0,
-        stability_time=200,
-        method="variational",
+        model: Union[VariationalEmbedding, DeterministicEmbedding],
+        prior: Union[SpikeSlabPrior, LogGaussianPrior],
+        train_loader: DataLoader,
+        val_loader: DataLoader,
+        logger: ObjectDimensionLogger,
+        device: str = "cpu",
+        load_model: bool = False,
+        n_epochs: int = 100,
+        mc_samples: int = 5,
+        lr: float = 0.001,
+        beta: float = 1.0,
+        stability_time: int = 200,
+        method: str = "variational",
     ):
         self.model = model
         self.train_loader = train_loader
@@ -95,16 +103,16 @@ class EmbeddingTrainer(object):
         self.device = device
         self.method = method
 
-    def parse_from_args(self, args):
+    def parse_from_args(self, args: argparse.Namespace):
         attrs = ["n_epochs", "mc_samples", "lr", "beta", "stability_time", "load_model"]
         for attr in attrs:
             if hasattr(args, attr):
                 setattr(self.params, attr, getattr(args, attr))
 
-    def _build_optimizer(self):
+    def _build_optimizer(self) -> None:
         self.optim = torch.optim.Adam(self.model.parameters(), lr=self.params.lr)
 
-    def init_model_from_checkpoint(self):
+    def init_model_from_checkpoint(self) -> None:
         print("Load model and optimizer from state dict to resume training")
 
         # Find file with .tar ending in directory
@@ -128,7 +136,9 @@ class EmbeddingTrainer(object):
             self.params.start_epoch = checkpoint["epoch"] + 1
             self.logger = checkpoint["logger"]  # only if exists!
 
-    def calculate_likelihood(self, embedding, indices):
+    def calculate_likelihood(
+        self, embedding: torch.Tensor, indices: torch.Tensor
+    ) -> Tuple(torch.Tensor, torch.Tensor):
         """Compute the negative log likelihood of the data given the embedding"""
         indices = indices.unbind(1)
         ind_i, ind_j, ind_k = indices
@@ -160,7 +170,13 @@ class EmbeddingTrainer(object):
 
         return nll, triplet_accuracy
 
-    def _kl_divergence(self, mu_prior, mu_q, scale_p, scale_q):
+    def _kl_divergence(
+        self,
+        mu_prior: torch.Tensor,
+        mu_q: torch.Tensor,
+        scale_p: torch.Tensor,
+        scale_q: torch.Tensor,
+    ) -> torch.Tensor:
         """Compute the KL divergence between two Log Gaussians. This is the same as the KL divergence
         between two Gaussians. see
         https://stats.stackexchange.com/questions/7440/kl-divergence-between-two-univariate-gaussians
@@ -173,7 +189,9 @@ class EmbeddingTrainer(object):
 
         return kl
 
-    def calculate_kl_div(self, embedding, loc, scale):
+    def calculate_kl_div(
+        self, embedding: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor
+    ) -> torch.Tensor:
         """Compute the KL divergence between the prior and the variational posterior"""
         n_train = len(self.train_loader.dataset)
         log_q = self.prior.log_pdf(embedding, loc, scale)
@@ -183,7 +201,7 @@ class EmbeddingTrainer(object):
 
         return kl_div
 
-    def calculate_spose_complexity(self, embedding):
+    def calculate_spose_complexity(self, embedding: torch.Tensor) -> torch.Tensor:
         """Compute the complexity loss for the SPOSE model"""
         l1_pen = self.model.l1_regularization()
         n_items = self.model.n_objects
@@ -195,7 +213,7 @@ class EmbeddingTrainer(object):
 
         return complexity_loss
 
-    def get_nitems(self):
+    def get_nitems(self) -> int:
         train_triplets = self.train_loader.dataset.triplet_indices
         # number of unique items in the data matrix
         n_items = torch.max(train_triplets).item()
@@ -203,7 +221,9 @@ class EmbeddingTrainer(object):
             n_items += 1
         return n_items
 
-    def step_triplet_batch(self, indices):
+    def step_triplet_batch(
+        self, indices: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Step the model for a single batch of data and extract embedding triplets"""
         if self.method == "variational":
             embedding, loc, scale = self.model()
@@ -216,7 +236,9 @@ class EmbeddingTrainer(object):
 
         return nll, complex_loss, triplet_accuracy
 
-    def variational_evaluation(self, indices):
+    def variational_evaluation(
+        self, indices: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Sample from the variational posterior and compute the likelihood of the data"""
         sampled_likelihoods = torch.zeros(self.params.mc_samples)
         sampled_accuracies = torch.zeros(self.params.mc_samples)
@@ -231,7 +253,9 @@ class EmbeddingTrainer(object):
 
         return nll, accuracy
 
-    def step_dataloader(self, dataloader):
+    def step_dataloader(
+        self, dataloader: DataLoader
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Step the model for a single epoch"""
         n_batches = len(dataloader)
         complex_losses = torch.zeros(n_batches, device=self.device)
@@ -293,19 +317,19 @@ class EmbeddingTrainer(object):
 
         return epoch_loss, epoch_accuracy
 
-    def train_one_epoch(self):
+    def train_one_epoch(self) -> Tuple[torch.Tensor, torch.Tensor]:
         self.model.train(True)
-        train_loss = self.step_dataloader(self.train_loader)
+        train_loss, train_acc = self.step_dataloader(self.train_loader)
 
-        return train_loss
+        return train_loss, train_acc
 
     @torch.no_grad()
-    def evaluate_one_epoch(self):
+    def evaluate_one_epoch(self) -> Tuple[torch.Tensor, torch.Tensor]:
         self.model.eval()
-        val_loss = self.step_dataloader(self.val_loader)
-        return val_loss
+        val_loss, val_acc = self.step_dataloader(self.val_loader)
+        return val_loss, val_acc
 
-    def evaluate_convergence(self):
+    def evaluate_convergence(self) -> bool:
         """We evaluate convergence as the representational stability of the number of dimensions across a certain time
         frame of epochs"""
         signal = self.model.prune_dimensions()[0]
@@ -324,7 +348,7 @@ class EmbeddingTrainer(object):
 
         return False
 
-    def train(self):
+    def train(self) -> None:
         if self.params.load_model:
             self.init_model_from_checkpoint()
 
@@ -389,7 +413,7 @@ class EmbeddingTrainer(object):
             print("Training interrupted by user. Saving model and exiting.")
             self.store_final_embeddings()
 
-    def store_final_embeddings(self):
+    def store_final_embeddings(self) -> None:
         pruned_params = self.model.sorted_pruned_params()
         params = self.model.detached_params()
         f_path = os.path.join(self.log_path, "params", "parameters.npz")

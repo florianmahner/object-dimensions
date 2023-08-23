@@ -7,12 +7,17 @@ import torch
 import glob
 
 from thingsvision import get_extractor
+from PIL import Image
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.nn as nn
+import numpy as np
+
+from typing import Union, Tuple
 
 
-def load_regression_weights(path, in_features, out_features, to_numpy=False):
+def load_regression_weights(
+    path: str, in_features: int, out_features: int, to_numpy: bool = False
+) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[np.ndarray, np.ndarray]]:
     # This loads the regression weight in the decoding layer!
     W = torch.zeros(out_features, in_features, dtype=torch.float32)
     b = torch.zeros(out_features, dtype=torch.float32)
@@ -37,11 +42,11 @@ class LatentPredictor(nn.Module):
 
     def __init__(
         self,
-        model_name="vgg16_bn",
-        module_name="classifier.3",
-        device="cpu",
-        regression_path="",
-    ):
+        model_name: str = "vgg16_bn",
+        module_name: str = "classifier.3",
+        device: str = "cpu",
+        regression_path: str = "",
+    ) -> None:
         super().__init__()
         if isinstance(device, torch.device):
             device_type = device.type
@@ -87,20 +92,22 @@ class LatentPredictor(nn.Module):
         self.regression = nn.Linear(n_clf_features, self.embedding_dim)
         self._update_weights(regression_path)
 
-    def activations_hook(self, grad):
+    def activations_hook(self, grad: torch.Tensor) -> None:
         self.gradients = grad
 
-    def get_activations_gradient(self):
+    def get_activations_gradient(self) -> torch.Tensor:
         return self.gradients
 
-    def _update_weights(self, path):
+    def _update_weights(self, path: str) -> None:
         W, b = load_regression_weights(
             path, self.regression.in_features, self.regression.out_features
         )
         self.regression.weight.data = W.to(self.device)
         self.regression.bias.data = b.to(self.device)
 
-    def forward(self, x, transform=True):
+    def forward(
+        self, x: Union[torch.Tensor, Image.Image], transform: bool = True
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Forward pass of the model give an image. First extracts VGG feature representations and then
         predicts the sparse codes from these using the learned regression weights."""
 
@@ -112,13 +119,15 @@ class LatentPredictor(nn.Module):
 
         return probas, latent_codes
 
-    def predict_codes_from_features(self, features):
+    def predict_codes_from_features(self, features: torch.Tensor) -> torch.Tensor:
         features = F.relu(features)
         latent_codes = self.regression(features)
         latent_codes = F.relu(latent_codes)
         return latent_codes.squeeze()
 
-    def get_activations(self, img, transform=True):
+    def get_activations(
+        self, img: Union[torch.Tensor, Image.Image], transform: bool = True
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Extracts the activations of the last layer of the feature extractor prior
         to pooling and classification etc."""
         if transform:
@@ -130,7 +139,9 @@ class LatentPredictor(nn.Module):
 
         return features, img
 
-    def extract_features_from_img(self, img, transform=True):
+    def extract_features_from_img(
+        self, img: Union[torch.Tensor, Image.Image], transform: bool = True
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         features, img = self.get_activations(img, transform=transform)
         # We register the hook before the maxpool layer of the feature extractor,
         # so that the resulting heatmap is twice the size
@@ -143,6 +154,8 @@ class LatentPredictor(nn.Module):
         probas = F.softmax(logits, dim=1)
         return probas, features
 
-    def predict_codes_from_img(self, img, transform=True):
+    def predict_codes_from_img(
+        self, img: Union[torch.Tensor, Image.Image], transform: bool = True
+    ) -> torch.Tensor:
         _, latent_codes = self.forward(img, transform=transform)
         return latent_codes

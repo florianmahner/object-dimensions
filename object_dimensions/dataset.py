@@ -6,8 +6,16 @@ import os
 import re
 import numpy as np
 
+from typing import Tuple, Optional
+from torch.utils.data import Dataset
 
-def build_triplet_dataset(triplet_path, n_train=None, n_val=None, device="cpu"):
+
+def build_triplet_dataset(
+    triplet_path: str,
+    n_train: Optional[int] = None,
+    n_val: Optional[int] = None,
+    device: str = "cpu",
+) -> Tuple[Dataset, Dataset]:
     """Build a triplet dataset from a triplet directory containing sample triplets for all objects"""
     # Find all files ending .npy or .txt and containing train or val
     files = os.listdir(triplet_path)
@@ -38,10 +46,15 @@ def build_triplet_dataset(triplet_path, n_train=None, n_val=None, device="cpu"):
     return train_dataset, val_dataset
 
 
-class TripletDataset(torch.utils.data.Dataset):
+class TripletDataset(Dataset):
     """Sample triplet indices from the list combinations"""
 
-    def __init__(self, triplet_indices, n_samples=None, device="cpu"):
+    def __init__(
+        self,
+        triplet_indices: np.ndarray,
+        n_samples: Optional[int] = None,
+        device: str = "cpu",
+    ):
         super().__init__()
         self.triplet_indices = triplet_indices
         self.triplets_indices = self.triplet_indices.astype(int)
@@ -49,46 +62,8 @@ class TripletDataset(torch.utils.data.Dataset):
         self.triplet_indices = self.triplet_indices.type("torch.LongTensor")
         self.n_indices = n_samples if n_samples else len(triplet_indices)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> torch.Tensor:
         return self.triplet_indices[idx]
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.n_indices
-
-
-class TensorDataloader:
-    """Dataloader for tensors when entire dataset is put on gpu and fits into memory"""
-
-    def __init__(self, data, batch_size, shuffle=True, random_seed=42, device="cpu"):
-        self.dataset = data
-        self.batch_size = batch_size
-        self.shuffle = shuffle
-        self.random_seed = random_seed
-        self.n_samples = data.shape[0]
-        self._get_batches()
-        self.dataset = torch.from_numpy(self.dataset).to(device)
-        self.dataset = self.dataset.type("torch.LongTensor")
-
-    def _get_batches(self):
-        # Check if number of samples can be divided by batch size and discard the last batch
-        if self.n_samples % self.batch_size != 0:
-            print(
-                "Number of samples is not divisible by batch size. Discarding last batch."
-            )
-            self.n_samples = self.n_samples - (self.n_samples % self.batch_size)
-            self.dataset = self.dataset[: self.n_samples]
-            self.n_batches = self.n_samples // self.batch_size
-
-    def __len__(self):
-        return self.n_batches
-
-    def __iter__(self):
-        if self.shuffle:
-            np.random.seed(self.random_seed)
-            indices = np.random.permutation(self.n_samples)
-        else:
-            indices = np.arange(self.n_samples)
-
-        for i in range(self.n_batches):
-            batch_indices = indices[i * self.batch_size : (i + 1) * self.batch_size]
-            yield self.dataset[batch_indices]
