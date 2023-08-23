@@ -12,7 +12,7 @@ import numpy as np
 import random
 
 from tomlparse import argparse
-from object_dimensions.utils.utils import load_sparse_codes, load_image_data
+from object_dimensions.utils import load_sparse_codes, load_image_data
 
 
 def parse_args():

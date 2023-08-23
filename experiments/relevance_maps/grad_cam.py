@@ -15,12 +15,12 @@ import torch.nn.functional as F
 from PIL import Image
 from tomlparse import argparse
 from experiments.visualization.visualize_embedding import plot_dim_3x3
-from object_dimensions.utils.utils import (
+from object_dimensions.utils import (
     img_to_uint8,
     load_image_data,
     load_sparse_codes,
 )
-from object_dimensions.utils.latent_predictor import LatentPredictor
+from object_dimensions.latent_predictor import LatentPredictor
 
 
 QUERIES = [

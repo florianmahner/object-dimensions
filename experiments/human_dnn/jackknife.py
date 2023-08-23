@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 from tomlparse import argparse
 from object_dimensions import build_triplet_dataset
 from object_dimensions import VariationalEmbedding as model
-from object_dimensions.utils.utils import (
+from object_dimensions.utils import (
     load_image_data,
     create_path_from_params,
     load_sparse_codes,

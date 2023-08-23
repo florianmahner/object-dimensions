@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from tomlparse import argparse
-from object_dimensions.utils.utils import (
+from object_dimensions.utils import (
     load_sparse_codes,
     load_image_data,
     correlate_rsms,

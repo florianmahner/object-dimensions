@@ -12,7 +12,7 @@ from copy import deepcopy
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 from tomlparse import argparse
-from object_dimensions.utils.utils import load_sparse_codes, load_image_data
+from object_dimensions.utils import load_sparse_codes, load_image_data
 
 
 def parse_args():

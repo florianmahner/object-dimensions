@@ -4,7 +4,7 @@ import multiprocessing
 import numpy as np
 import matplotlib.pyplot as plt
 from tomlparse import argparse
-from object_dimensions.utils.utils import (
+from object_dimensions.utils import (
     load_sparse_codes,
     load_image_data,
     load_deepnet_activations,

@@ -33,7 +33,7 @@ def parse_csv(fpath: str) -> pd.DataFrame:
     responses = responses.fillna("")
 
     # Correct spelling errors
-    # responses = correct_spelling_errors(responses)
+    responses = correct_spelling_errors(responses)
     df[response_headers] = responses
     df = df.sort_values(by=["dim"])
     df.drop(columns=["image_file"], inplace=True)
@@ -41,14 +41,14 @@ def parse_csv(fpath: str) -> pd.DataFrame:
     return df
 
 
-def compute_frequencies(x: List[str]) -> Dict[str, int]:
+def compute_word_frequencies(x: List[str]) -> Dict[str, int]:
     """count words, ignore duplicates and return a dict"""
     counter = Counter(x)
     counter = {k: v for k, v in counter.items() if k.strip()}
     return counter
 
 
-def compute_frequencies(*dataframes: pd.DataFrame) -> pd.DataFrame:
+def compute_statistics(*dataframes: pd.DataFrame) -> pd.DataFrame:
     df = pd.concat(dataframes, axis=0)
     # group responses based on dimension into a list
     grouped = df.groupby("dim").agg(list).reset_index()
@@ -72,7 +72,7 @@ def compute_frequencies(*dataframes: pd.DataFrame) -> pd.DataFrame:
 
     # compute most common words
     grouped["most_common_words"] = grouped["descriptions"].apply(
-        lambda x: compute_frequencies(x)
+        lambda x: compute_word_frequencies(x)
     )
 
     return grouped
@@ -100,7 +100,7 @@ def main() -> None:
         df = parse_csv(fpath)
         dataframes.append(df)
 
-    df = compute_frequencies(*dataframes)
+    df = compute_statistics(*dataframes)
 
     # Iterate over rows of df
     for dim in df["dim"]:

@@ -15,7 +15,7 @@ import skimage.io as io
 
 from experiments.human_dnn.reconstruction_accuracy import rsm_pred_torch
 
-from object_dimensions.utils.utils import (
+from object_dimensions.utils import (
     correlate_rsms,
     correlation_matrix,
     load_sparse_codes,
@@ -465,11 +465,14 @@ def plot_mind_machine_corrs(
     )
 
     # Set the plot context and style
-    sns.set(font_scale=1.5)
-    sns.set_style("white")
 
     # Create the figure
     fig, ax = plt.subplots(figsize=(6, 4))
+
+    colors = sns.color_palette()
+
+    breakpoint()
+    colors = [colors[2], colors[3]]
 
     # Create a lineplot
     sns.lineplot(
@@ -477,7 +480,7 @@ def plot_mind_machine_corrs(
         x="Human Embedding Dimension",
         y="Highest Pearson's r with DNN",
         hue="Pairing",
-        style="Pairing",
+        palette=colors,
         errorbar=("sd", 95),
         n_boot=1000,
         ax=ax,
@@ -485,12 +488,16 @@ def plot_mind_machine_corrs(
 
     sns.despine()
 
-    xticks = np.arange(10, 70, 10).tolist()
-    xticks.insert(0, 1)
-    xticks.insert(-1, 68)
+    xticks = [10, 20, 30, 40, 50, 60]
     xticklabels = [str(x) for x in xticks]
     ax.set_xticks(xticks)
     ax.set_xticklabels(xticklabels)
+
+    # Set the x- and y-labels
+    ax.set_xlabel("Human Dimension")
+    ax.set_ylabel("Pearson's r with DNN")
+
+    plt.legend(frameon=False)
 
     fig.tight_layout()
 
@@ -615,8 +622,6 @@ def visualize_dims_across_modalities(
     data["alphas"] = alphas
 
     fig = plt.figure(figsize=(6, 4))
-    sns.set(font_scale=1.5)
-    sns.set_style("white")
     palette = sns.color_palette()
 
     blue, orange, green, red = palette[:4]

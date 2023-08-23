@@ -10,7 +10,7 @@ import random
 import os
 from experiments.human_dnn.reconstruction_accuracy import rsm_pred_torch
 from experiments.human_dnn.compare_modalities import correlate_modalities
-from object_dimensions.utils.utils import (
+from object_dimensions.utils import (
     correlate_rsms,
     correlate_rsms_torch,
     load_sparse_codes,
@@ -314,9 +314,7 @@ def plot_rsa_across_dims(
         "hue": "Type",
         "style": "Type",
     }
-    xticks = np.arange(10, 70, 10).tolist()
-    xticks.insert(0, 1)
-    xticks.insert(-1, 68)
+    xticks = [10, 20, 30, 40, 50, 60]
     xticklabels = [str(x) for x in xticks]
 
     # Make all figures at once
@@ -355,7 +353,7 @@ def plot_rsa_across_dims(
         id_vars="index", var_name="Cumulative Dimension", value_name="Pearson r"
     )
 
-    color = sns.color_palette()[1]
+    color = sns.color_palette()[3]
     fig, ax = plt.subplots(figsize=(6, 4), dpi=300)
     sns.lineplot(
         data=boot_df,

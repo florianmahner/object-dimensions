@@ -9,7 +9,7 @@ import random
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-from object_dimensions.utils import utils
+import object_dimensions.utils as utils
 
 from sklearn.linear_model import Ridge, ElasticNet
 from sklearn.model_selection import KFold, GridSearchCV

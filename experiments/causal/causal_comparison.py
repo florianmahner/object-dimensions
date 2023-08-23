@@ -2,14 +2,22 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from object_dimensions.utils.utils import (
+
+sns.set(style="whitegrid", context="paper")
+
+from PIL import Image
+from object_dimensions.utils import (
     load_sparse_codes,
     load_image_data,
 )
-from object_dimensions.utils.latent_predictor import LatentPredictor
+from object_dimensions.latent_predictor import LatentPredictor
 from experiments.visualization.visualize_embedding import plot_dim_3x2
 from tomlparse import argparse
-from PIL import Image
+
+import matplotlib
+
+matplotlib.rcParams["font.sans-serif"] = "Arial"
+matplotlib.rcParams["font.family"] = "sans-serif"
 
 
 def parse_args():
@@ -36,6 +44,34 @@ CAUSAL_DIMS["toilet.jpg"] = {
     "decrease": 10,
     "relevant_control": 13,
     "irrelevant_control": 8,
+}
+
+# CAUSAL_DIMS["chocolate.jpg"] = {
+#     "increase": 37,
+#     "decrease": 4,
+#     "relevant_conrol": 12,
+#     "irrelevant_control": 8,
+# }
+
+# CAUSAL_DIMS["calf1.jpg"] = {
+#     "increase": 20,
+#     "decrease": 56,
+#     "relevant_control": 22,
+#     "irrelevant_control": 62,
+# }
+
+CAUSAL_DIMS["lifesaver.jpg"] = {
+    "increase": 28,
+    "decrease": 33,
+    "relevant_control": 26,
+    "irrelevant_control": 19,
+}
+
+CAUSAL_DIMS["manhole.jpg"] = {
+    "increase": 28,
+    "decrease": 33,
+    "relevant_control": 26,
+    "irrelevant_control": 19,
 }
 
 CAUSAL_DIMS["bottle.jpg"] = {
@@ -109,29 +145,80 @@ def run_causal_comparison(embedding_path, img_root):
 
         all_diffs = codes_manip - codes_orig
         # PLot the histogram of the differences
-        fig = plt.figure(1, figsize=(10, 6))
-        sns.set(font_scale=2)
-        sns.set_style("whitegrid")
-        ax = sns.barplot(x=np.arange(0, len(all_diffs), 1), y=all_diffs, color="gray")
+        fig = plt.figure(1, figsize=(6, 4))
+        sns.set(font_scale=1.5)
+        sns.set_style("white")
+        ax = sns.barplot(
+            x=np.arange(0, len(all_diffs), 1),
+            y=all_diffs,
+            edgecolor=".8",
+            facecolor=(0, 0, 0, 0),
+        )
 
-        custom_colors = ["#3399CC", "#FF6666", "#3CB371", "#DAA520"]
-        for i, dim in enumerate(dim_order.values()):
+        # colors = [
+        #     "#1f77b4",
+        #     "#ff7f0e",
+        #     "#2ca02c",
+        #     "#d62728",
+        #     "#9467bd",
+        #     "#8c564b",
+        #     "#e377c2",
+        #     "#7f7f7f",
+        #     "#bcbd22",
+        #     "#17becf",
+        # ]
+
+        colors = sns.color_palette("deep")
+
+        # give colors in rgb 0-255
+        colors_rgb = [
+            (int(x[0] * 255), int(x[1] * 255), int(x[2] * 255)) for x in colors
+        ]
+
+        # colors = [matplotlib.colors.rgb2hex(x) for x in colors]
+
+        # custom_colors = ["#3399CC", "#FF6666", "#3CB371"]
+
+        # custom_colors = ["#80a591", "#f3c38f", "#bc8ec0"]
+
+        # custom_colors = ["#1f77b4", "#ff7f0e", "#2ca02c"]
+
+        indices = [0, 2, 3]
+        custom_colors = [colors[i] for i in indices]
+        custom_colors_rgb = [colors_rgb[i] for i in indices]
+
+        print(custom_colors_rgb)
+
+        dims = list(dim_order.values())[:-1]
+        for i, dim in enumerate(dims):
             ax.patches[dim].set_facecolor(custom_colors[i])
+            ax.patches[dim].set_edgecolor(custom_colors[i])
 
         # Give a legend to each of these colors (increase, decrease, relevant control, irrelevant control)
-        labels = ["Increase", "Decrease", "Relevant Control", "Irrelevant Control"]
-        handles = [
-            plt.Rectangle((0, 0), 1, 1, color=custom_colors[i]) for i in range(4)
-        ]
-        ax.legend(
-            handles, labels, bbox_to_anchor=(0.5, 1.25), loc="upper center", ncol=2
-        )
+        # labels = ["Increase", "Decrease", "Relevant Control"]
+        # handles = [
+        #     plt.Rectangle((0, 0), 1, 1, color=custom_colors[i]) for i in range(3)
+        # ]
+        # # ax.legend(
+        # #     handles, labels, bbox_to_anchor=(0.5, 1.25), loc="upper center", ncol=2
+        # # )
         sns.despine()
 
         ax.set_xlabel("Dimension")
-        ax.set_ylabel("Difference in prediction")
-        ax.set_xticks(np.arange(0, len(all_diffs), 10))
-        ax.set_xticklabels(np.arange(0, len(all_diffs), 10))
+        ax.set_ylabel("Predicted Difference")
+
+        # xticks = np.arange(10, 70, ).tolist()
+        # xticks.insert(0, 1)
+        # xticks.insert(-1, 68)
+
+        xticks = [10, 20, 30, 40, 50, 60]
+
+        xticklabels = [str(x) for x in xticks]
+        ax.set_xticks(xticks)
+        ax.set_xticklabels(xticklabels)
+
+        # ax.set_xticks(np.arange(0, len(all_diffs), 10))
+        # ax.set_xticklabels(np.arange(0, len(all_diffs), 10))
 
         fig.savefig(
             os.path.join(out_path, img_name.split(".")[0] + "_histogram.pdf"),
@@ -142,33 +229,40 @@ def run_causal_comparison(embedding_path, img_root):
         )
         plt.close(fig)
 
-        dims = [*dim_order.values()]
-        codes_orig = codes_orig[dims]
-        codes_manip = codes_manip[dims]
-        diff_predictions = codes_manip - codes_orig
+        # dims = [*dim_order.values()]
+        # codes_orig = codes_orig[dims]
+        # codes_manip = codes_manip[dims]
+        # diff_predictions = codes_manip - codes_orig
 
-        fig, ax = plt.subplots(figsize=(12, 3))
-        sns.set_context("paper", font_scale=1)
-        sns.set_style("white")
+        # fig, ax = plt.subplots(figsize=(12, 3))
+        # sns.set_context("paper", font_scale=1)
+        # sns.set_style("white")
 
-        custom_colors = ["#3399CC", "#FF6666", "#3CB371", "#DAA520"]
-        sns.set_palette(custom_colors)
-        sns.barplot(y=diff_predictions, x=dims, order=dims, ax=ax)
-        sns.despine()
+        # custom_colors = ["#3399CC", "#FF6666", "#3CB371", "#DAA520"]
+        # sns.set_palette(custom_colors)
+        # sns.barplot(
+        #     y=diff_predictions,
+        #     x=dims,
+        #     order=dims,
+        #     ax=ax,
+        # )
 
-        ax.grid(False)
-        labels = ["Increase", "Decrease", "Relevant Control", "Irrelevant Control"]
-        ax.set_xticklabels(labels, fontsize=12)
-        ax.set_ylabel("Difference in Prediction", fontsize=12)
-        plt.tight_layout()
-        plt.show()
+        # sns.despine()
 
-        for ext in ["png", "pdf"]:
-            fname = os.path.join(f_path, f"{img_base}_histogram.{ext}")
-            fig.savefig(
-                fname, bbox_inches="tight", dpi=300, pad_inches=0, transparent=False
-            )
-        plt.close(fig)
+        # ax.grid(False)
+        # labels = ["Increase", "Decrease", "Relevant Control", "Irrelevant Control"]
+        # # labels = ["Increase", "Decrease", "Relevant Control"]
+        # ax.set_xticklabels(labels, fontsize=12)
+        # ax.set_ylabel("Difference in Prediction", fontsize=12)
+        # plt.tight_layout()
+        # plt.show()
+
+        # for ext in ["png", "pdf"]:
+        #     fname = os.path.join(f_path, f"{img_base}_histogram.{ext}")
+        #     fig.savefig(
+        #         fname, bbox_inches="tight", dpi=300, pad_inches=0, transparent=False
+        #     )
+        # plt.close(fig)
 
         for (name, index), color in zip(dim_order.items(), custom_colors):
             fig_img = plot_dim_3x2(images, Y, index, top_k=10)
