@@ -317,7 +317,7 @@ class Sampler(object):
             choices = self.sample_random()
 
         train_split, test_split = self.train_test_split(choices)
-        percentage = self.train_fraction * 100
+        percentage = int(self.train_fraction * 100)
         with open(os.path.join(self.out_path, f"train_{percentage}.npy"), "wb") as f:
             np.save(f, train_split)
         with open(
