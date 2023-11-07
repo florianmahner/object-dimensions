@@ -138,7 +138,7 @@ class EmbeddingTrainer(object):
 
     def calculate_likelihood(
         self, embedding: torch.Tensor, indices: torch.Tensor
-    ) -> Tuple(torch.Tensor, torch.Tensor):
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Compute the negative log likelihood of the data given the embedding"""
         indices = indices.unbind(1)
         ind_i, ind_j, ind_k = indices

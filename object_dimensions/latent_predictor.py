@@ -6,7 +6,6 @@ import joblib
 import torch
 import glob
 
-from thingsvision import get_extractor
 from PIL import Image
 import torch.nn as nn
 import torch.nn.functional as F
@@ -54,6 +53,8 @@ class LatentPredictor(nn.Module):
         else:
             device_type = device
             self.device = torch.device(device)
+
+        from thingsvision import get_extractor
 
         extractor = get_extractor(
             model_name=model_name,
