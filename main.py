@@ -5,15 +5,16 @@ import torch
 import toml
 import os
 import random
-import argparse
+import argparse as ap
 
 import numpy as np
 from tomlparse import argparse
 
-from object_dimensions.core.engine import EmbeddingTrainer
-from object_dimensions.core.model import VariationalEmbedding, DeterministicEmbedding
-from object_dimensions.core.priors import SpikeSlabPrior, LogGaussianPrior
-from object_dimensions import DeepEmbeddingLogger, build_triplet_dataset
+from object_dimensions.engine import EmbeddingTrainer
+from object_dimensions.model import VariationalEmbedding, DeterministicEmbedding
+from object_dimensions.priors import SpikeSlabPrior, LogGaussianPrior
+from object_dimensions.loggers import ObjectDimensionLogger
+from object_dimensions import build_triplet_dataset
 
 
 def parse_args():
@@ -172,7 +173,7 @@ def load_args(args, log_path, fresh):
             )
         )
         toml_config = toml.load(os.path.join(log_path, "config.toml"))
-        args = argparse.Namespace(**toml_config)
+        args = ap.Namespace(**toml_config)
     else:
         with open(os.path.join(log_path, "config.toml"), "w") as f:
             toml.dump(vars(args), f)
@@ -277,7 +278,7 @@ def train(args):
     model.to(device)
 
     # Build loggers and train the model!
-    logger = DeepEmbeddingLogger(
+    logger = ObjectDimensionLogger(
         log_path,
         model,
         args.fresh,
