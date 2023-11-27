@@ -5,16 +5,18 @@ import torch
 import toml
 import os
 import random
-import argparse as ap
 
 import numpy as np
 from tomlparse import argparse
+from argparse import Namespace
 
 from object_dimensions.engine import EmbeddingTrainer
 from object_dimensions.model import VariationalEmbedding, DeterministicEmbedding
 from object_dimensions.priors import SpikeSlabPrior, LogGaussianPrior
 from object_dimensions.loggers import ObjectDimensionLogger
-from object_dimensions import build_triplet_dataset
+from object_dimensions.dataset import build_triplet_dataset, TripletDataset
+
+from typing import Union, Tuple
 
 
 def parse_args():
@@ -126,23 +128,15 @@ def parse_args():
     return parser.parse_args()
 
 
-def _parse_number_of_objects(triplet_path, modality):
-    if modality == "behavior":
-        return 1854
-    else:
-        base_path = os.path.dirname(triplet_path)
-        feature_path = os.path.join(base_path, "features.npy")
-        features = np.load(feature_path)
-        return features.shape[0]
-
-
-def _set_global_seed(seed):
+def _set_global_seed(seed: int) -> None:
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
 
 
-def _build_prior(prior, n_objects, init_dim, scale):
+def _build_prior(
+    prior: str, n_objects: int, init_dim: int, scale: float
+) -> Union[SpikeSlabPrior, LogGaussianPrior]:
     if prior == "sslab":
         return SpikeSlabPrior(n_objects, init_dim)
     elif prior == "gauss":
@@ -151,11 +145,12 @@ def _build_prior(prior, n_objects, init_dim, scale):
         raise ValueError("Unknown prior: {}".format(prior))
 
 
-def _convert_samples_to_string(train_dataset, val_dataset):
+def _convert_samples_to_string(
+    train_dataset: TripletDataset, val_dataset: TripletDataset
+) -> str:
     """Finds the combined number of training and validation triplets
     and converts them to a printable representation in number of millions"""
     n_samples = len(train_dataset) + len(val_dataset)
-
     n_samples = round(n_samples / 1e6, 2)
     n_samples = str(n_samples)
     n_samples = n_samples.rstrip("0")
@@ -163,7 +158,7 @@ def _convert_samples_to_string(train_dataset, val_dataset):
     return n_samples
 
 
-def load_args(args, log_path, fresh):
+def load_args(args: Namespace, log_path: str, fresh: bool) -> Namespace:
     load_model = args.load_model
     # If we continue training we load the previous parameters
     if os.path.exists(os.path.join(log_path, "config.toml")) and not fresh:
@@ -173,7 +168,7 @@ def load_args(args, log_path, fresh):
             )
         )
         toml_config = toml.load(os.path.join(log_path, "config.toml"))
-        args = ap.Namespace(**toml_config)
+        args = Namespace(**toml_config)
     else:
         with open(os.path.join(log_path, "config.toml"), "w") as f:
             toml.dump(vars(args), f)
@@ -182,8 +177,13 @@ def load_args(args, log_path, fresh):
     return args
 
 
-def _build_model(args):
-    n_objects = _parse_number_of_objects(args.triplet_path, args.modality)
+def _build_model(
+    args: Namespace, n_objects: int
+) -> Union[
+    Tuple[VariationalEmbedding, Union[SpikeSlabPrior, LogGaussianPrior]],
+    Tuple[DeterministicEmbedding, None],
+]:
+    # Function implementation
     if args.method == "variational":
         model_prior = _build_prior(args.prior, n_objects, args.init_dim, args.scale)
         model = VariationalEmbedding(
@@ -195,12 +195,12 @@ def _build_model(args):
         return model, None
 
 
-def _check_args(args):
+def _check_args(args: Namespace) -> None:
     if args.fresh and args.load_model:
         raise ValueError("Cannot load a model and train from scratch at the same time")
 
 
-def train(args):
+def train(args: Namespace) -> None:
     device = (
         torch.device(f"cuda:{args.device_id}")
         if torch.cuda.is_available()
@@ -211,6 +211,7 @@ def train(args):
     g.manual_seed(args.seed)
 
     train_dataset, val_dataset = build_triplet_dataset(args.triplet_path, device=device)
+    n_objects = val_dataset.n_objects
 
     num_workers = torch.cuda.device_count() * 2  # make dependent on gpu count
     train_loader = torch.utils.data.DataLoader(
@@ -274,7 +275,7 @@ def train(args):
 
     args = load_args(args, log_path, args.fresh)
     _set_global_seed(args.seed)
-    model, model_prior = _build_model(args)
+    model, model_prior = _build_model(args, n_objects)
     model.to(device)
 
     # Build loggers and train the model!

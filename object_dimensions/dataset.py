@@ -61,6 +61,7 @@ class TripletDataset(Dataset):
         self.triplet_indices = torch.from_numpy(self.triplet_indices).to(device)
         self.triplet_indices = self.triplet_indices.type("torch.LongTensor")
         self.n_indices = n_samples if n_samples else len(triplet_indices)
+        self.n_objects = self.triplet_indices.max() + 1
 
     def __getitem__(self, idx: int) -> torch.Tensor:
         return self.triplet_indices[idx]
