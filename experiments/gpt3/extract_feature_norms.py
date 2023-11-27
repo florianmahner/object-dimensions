@@ -8,11 +8,13 @@ these features with the learned embedding and find the descriptions that best de
 import os
 
 import pandas as pd
+import numpy as np
 from copy import deepcopy
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 from tomlparse import argparse
 from object_dimensions.utils import load_sparse_codes, load_image_data
+import seaborn as sns
 
 
 def parse_args():
@@ -128,6 +130,15 @@ def matrix_to_top_list(df, topk=6):
     return df_list
 
 
+def rgb_to_hex(rgb_values):
+    hex_colors = []
+    for rgb in rgb_values:
+        r, g, b = [int(x * 255) for x in rgb]
+        hex_color = "#{:02x}{:02x}{:02x}".format(r, g, b)
+        hex_colors.append(hex_color)
+    return hex_colors
+
+
 def generate_gpt3_norms(
     embedding_path,
     img_root,
@@ -190,16 +201,38 @@ def generate_gpt3_norms(
         weights = [w * 1000 for w in weights]
         weights = [int(w) for w in weights]
 
-        x, y = np.ogrid[:300, :300]
-        mask = (x - 150) ** 2 + (y - 150) ** 2 > 130**2
-        mask = 255 * mask.astype(int)
+        frequencies = {k: v for k, v in zip(words, weights)}
+        max_words = 6
+
+        colors = sns.color_palette("deep")[:max_words]
+        colors = rgb_to_hex(colors)
+
+        # sort words by frequency
+        top_frequencies = {
+            k: v
+            for k, v in sorted(
+                frequencies.items(), key=lambda item: item[1], reverse=True
+            )
+        }
+
+        sorted_words = list(top_frequencies.keys())[:max_words]
+
+        # Map each word to a color based on its index
+        word_to_color = {
+            word: colors[i % len(colors)] for i, word in enumerate(sorted_words)
+        }
+
+        def custom_color_func(
+            word, font_size, position, orientation, random_state=None, **kwargs
+        ):
+            return word_to_color.get(word, "black")
+
         wordcloud = WordCloud(
             width=1600,
             height=800,
-            max_words=5,
+            max_words=6,
             background_color="white",
-            colormap="tab10",
-            mask=mask,
+            color_func=custom_color_func,
         ).generate_from_frequencies(dict(zip(words, weights)))
         plt.figure(figsize=(20, 10))
         plt.imshow(wordcloud, interpolation="bilinear")

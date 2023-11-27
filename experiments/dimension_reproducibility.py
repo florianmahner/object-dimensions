@@ -27,7 +27,7 @@ def parse_args():
     parser.add_argument("--run_analysis", action="store_true")
     return parser.parse_args()
 
-        
+
 def vectorized_pearsonr(base: np.ndarray, comp: np.ndarray) -> Union[float, np.ndarray]:
     """Alterntive to scipy.stats.pearsonr that is vectorized over the first dimension for
     fast pairwise correlation calculation."""
@@ -166,10 +166,12 @@ def plot_reliability(
     ax.set_ylabel("Reproducibility of dimensions (Pearson's r)".format(n_embeddings))
     ax.set_title("N = {} runs, Batch Size = 256".format(n_embeddings))
     ax.axvline(x=n_pruned, color="red", linestyle="--")
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
     plt.tight_layout()
     plt.savefig(
         os.path.join(
-            "./results", "plots", f"reproducibility_across_dimensions_{modality}.png"
+            "./results", "plots", f"reproducibility_across_dimensions_{modality}.pdf"
         ),
         dpi=300,
         bbox_inches="tight",
@@ -191,9 +193,18 @@ def plot_reliability_across_seeds(
     )
     ax.set_xlabel("Random Seed")
     ax.set_ylabel("Mean reproducibility (Pearson's r)")
+    ndim = len(mean_reliabilities)
+    # labels = [str(i) for i in range(1, ndim + 1)]
+    xticks = [0, 4, 9, 14, 19, 24, 29]
+    labels = [str(i + 1) for i in xticks]
+    ax.set_xticks(xticks)
+    ax.set_xticklabels(labels)
+    # Despine
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
     plt.savefig(
         os.path.join(
-            "./results", "plots", f"reproducibility_across_seeds_{modality}.png"
+            "./results", "plots", f"reproducibility_across_seeds_{modality}.pdf"
         ),
         dpi=300,
         bbox_inches="tight",
@@ -256,8 +267,6 @@ def run_analysis(
     print("Best embedding is for seed {}".format(best_seed))
     n_embeddings = len(embeddings)
     best_reliability_per_dim = np.squeeze(best_reliability_per_dim)
-
-    breakpoint()
 
     plot_reliability(
         best_reliability_per_dim,

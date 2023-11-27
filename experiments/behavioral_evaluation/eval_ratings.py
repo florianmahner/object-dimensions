@@ -2,12 +2,14 @@ import os
 import pandas as pd
 import glob
 import numpy as np
+import seaborn as sns
 from textblob import TextBlob, Word
 from itertools import chain
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 from collections import Counter
 from typing import List, Dict
+import hashlib
 
 
 def correct_spelling_errors(df: pd.DataFrame) -> pd.DataFrame:
@@ -33,7 +35,7 @@ def parse_csv(fpath: str) -> pd.DataFrame:
     responses = responses.fillna("")
 
     # Correct spelling errors
-    responses = correct_spelling_errors(responses)
+    # responses = correct_spelling_errors(responses)
     df[response_headers] = responses
     df = df.sort_values(by=["dim"])
     df.drop(columns=["image_file"], inplace=True)
@@ -46,6 +48,14 @@ def compute_word_frequencies(x: List[str]) -> Dict[str, int]:
     counter = Counter(x)
     counter = {k: v for k, v in counter.items() if k.strip()}
     return counter
+
+
+def convert_to_list(x):
+    """Remove empty string at beginning and end"""
+    x = list(chain(*x))
+    x = [i for i in x if i not in ["", "None"]]
+    x = [i.strip() for i in x]
+    return x
 
 
 def compute_statistics(*dataframes: pd.DataFrame) -> pd.DataFrame:
@@ -66,8 +76,9 @@ def compute_statistics(*dataframes: pd.DataFrame) -> pd.DataFrame:
     description_headers = [f"description_{i}" for i in range(1, 6)]
 
     grouped["descriptions"] = grouped[description_headers].apply(
-        lambda x: list(chain(*x)), axis=1
+        convert_to_list, axis=1
     )
+
     grouped = grouped.drop(columns=description_headers)
 
     # compute most common words
@@ -78,18 +89,60 @@ def compute_statistics(*dataframes: pd.DataFrame) -> pd.DataFrame:
     return grouped
 
 
-def make_wordclouds(df: pd.DataFrame) -> plt.Figure:
-    wc = WordCloud(width=1000, height=500)
+def rgb_to_hex(rgb_values):
+    hex_colors = []
+    for rgb in rgb_values:
+        r, g, b = [int(x * 255) for x in rgb]
+        hex_color = "#{:02x}{:02x}{:02x}".format(r, g, b)
+        hex_colors.append(hex_color)
+    return hex_colors
 
-    wc = wc.generate_from_frequencies(df["most_common_words"].iloc[0])
-    fig = plt.figure(figsize=(10, 10))
-    plt.imshow(wc)
-    plt.axis("off")
+
+def make_wordclouds(df: pd.DataFrame) -> plt.Figure:
+    max_words = 6
+    colors = sns.color_palette("deep")[:max_words]
+    colors = rgb_to_hex(colors)
+
+    words = df["most_common_words"].iloc[0]
+
+    # Filter out words that have a frequency of 1
+    words = {k: v for k, v in words.items() if v > 1}
+
+    # sort words by frequency
+    top_words = {
+        k: v for k, v in sorted(words.items(), key=lambda item: item[1], reverse=True)
+    }
+
+    sorted_words = list(top_words.keys())[:max_words]
+
+    # Map each word to a color based on its index
+    word_to_color = {
+        word: colors[i % len(colors)] for i, word in enumerate(sorted_words)
+    }
+
+    def custom_color_func(
+        word, font_size, position, orientation, random_state=None, **kwargs
+    ):
+        return word_to_color.get(word, "black")
+
+    wc = WordCloud(
+        width=1600,
+        height=800,
+        background_color="white",
+        color_func=custom_color_func,
+        max_words=max_words,
+        min_font_size=10,
+    )
+
+    wc = wc.generate_from_frequencies(words)
+    fig, ax = plt.subplots(figsize=(20, 10))
+    ax.imshow(wc, interpolation="bilinear")
+    ax.axis("off")
     return fig
 
 
 def main() -> None:
-    fpaths = glob.glob("./behavior-res/*.csv")
+    fpaths = glob.glob("./behavior-results/*.csv")
     assert len(fpaths) > 0, "No csv files found"
     out_path = "./results/dnn/variational/vgg16_bn/classifier.3/20.mio/sslab/150/256/1.0/14/analyses/behavior_wordclouds"
     if not os.path.exists(out_path):
@@ -102,12 +155,35 @@ def main() -> None:
 
     df = compute_statistics(*dataframes)
 
+    # Make a dataframe out of most common words and average interpretability
+    df_save = df[["dim", "avg_interpretability", "most_common_words"]]
+
+    # Save dataframe
+    df_save.to_csv(
+        os.path.join(os.path.dirname(out_path), "behavior_ratings_processed.csv"),
+        index=False,
+    )
+
     # Iterate over rows of df
     for dim in df["dim"]:
         print("Making wordcloud for dimension: ", dim, "...", end="\r")
         dim_df = df[df["dim"] == dim]
         fig = make_wordclouds(dim_df)
-        fig.savefig(os.path.join(out_path, f"word_cloud{dim}.png"))
+
+        for ext in ["pdf", "png"]:
+            plt.savefig(
+                os.path.join(out_path, f"word_cloud{dim}_human.{ext}"),
+                dpi=300,
+                bbox_inches="tight",
+                pad_inches=0,
+            )
+
+        # fig.savefig(
+        #     os.path.join(out_path, f"word_cloud{dim}.pdf"),
+        #     bbox_inches="tight",
+        #     pad_inches=0,
+        #     dpi=300,
+        # )
         plt.close(fig)
 
 

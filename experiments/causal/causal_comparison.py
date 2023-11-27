@@ -147,7 +147,7 @@ def run_causal_comparison(embedding_path, img_root):
         # PLot the histogram of the differences
         fig = plt.figure(1, figsize=(6, 4))
         sns.set(font_scale=1.5)
-        sns.set_style("white")
+        sns.set_style("whitegrid")
         ax = sns.barplot(
             x=np.arange(0, len(all_diffs), 1),
             y=all_diffs,

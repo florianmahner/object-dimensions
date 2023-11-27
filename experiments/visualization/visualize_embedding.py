@@ -248,20 +248,14 @@ def plot_per_dim(args):
 
 def plot_dimensions(args):
     W = load_sparse_codes(args.embedding_path)
+
+    breakpoint()
     images, indices = load_image_data(
         args.img_root,
         filter_behavior=args.filter_behavior,
         filter_plus=args.filter_plus,
     )
-
-    images, indices = load_image_data(
-        args.img_root,
-        filter_behavior=args.filter_behavior,
-        filter_plus=args.filter_plus,
-    )
-
-    if W.shape[0] != len(images):
-        W = W[indices]
+    W = W[indices]
 
     print("Shape of weight Matrix", W.shape)
     W = W.T

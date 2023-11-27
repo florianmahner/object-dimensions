@@ -54,7 +54,7 @@ def compute_softmax_per_batch(q_mu, q_var, indices, device):
     embedding = model.reparameterize_sslab(q_mu, q_var)
 
     # nll, acc = calculate_likelihood(embedding, indices)
-    indices = indices.type("torch.LongTensor").to(device)
+    # indices = indices.type("torch.LongTensor").to(device)
     indices = indices.unbind(1)
     ind_i, ind_j, ind_k = indices
     embedding_i = F.relu(embedding[ind_i])
@@ -300,20 +300,23 @@ def main(
     dnn_weights, dnn_var = load_sparse_codes(dnn_path, with_var=True, relu=True)
     human_weights, human_var = load_sparse_codes(human_path, with_var=True, relu=True)
 
-    triplet_path_dnn = "./data/triplets/vgg16_bn/classifier.3/triplets_20mio"
-    val_loader = build_dataloader(triplet_path_dnn)
+    # triplet_path_dnn = "./data/triplets/vgg16_bn/classifier.3/triplets_20mio"
+    triplet_path = "./data/triplets/behavior"
+
+    val_loader = build_dataloader(triplet_path)
+
     plot_dir = create_path_from_params(dnn_path, "analyses", "jackknife")
     print("Save to '{}'".format(plot_dir))
 
     # Load image data
     image_filenames, indices = load_image_data(img_root, filter_behavior=True)
-    dnn_weights = dnn_weights[indices]
-    dnn_var = dnn_var[indices]
+    dnn_weights_behavior = dnn_weights[indices]
+    dnn_var_behavior = dnn_var[indices]
 
     if run_jackknife:
         # PLot this for the DNN for all
         softmax_dnn_non_filtered, _ = compute_softmax_decisions(
-            dnn_weights, dnn_var, val_loader, device
+            dnn_weights_behavior, dnn_var_behavior, val_loader, device
         )
         sns.set(style="whitegrid", context="paper", font_scale=1.2)
         column_labels = {0: "k", 1: "j", 2: "i"}
@@ -343,8 +346,8 @@ def main(
         )
         plt.close(fig)
 
-        dnn_smaller_weights = dnn_weights[:, :84]
-        dnn_smaller_var = dnn_var[:, :84]
+        dnn_smaller_weights = dnn_weights_behavior[:, :84]
+        dnn_smaller_var = dnn_var_behavior[:, :84]
 
         softmax_dnn_non_filtered, _ = compute_softmax_decisions(
             dnn_smaller_weights, dnn_smaller_var, val_loader, device
@@ -370,7 +373,7 @@ def main(
 
         fig.tight_layout()
         plt.savefig(
-            os.path.join(plot_dir, "softmax_histogram_dnn_84dims.png"),
+            os.path.join(plot_dir, "softmax_histogram_dnn.png"),
             bbox_inches="tight",
             dpi=300,
             pad_inches=0.1,
@@ -385,8 +388,8 @@ def main(
             val_loader,
             human_weights,
             human_var,
-            dnn_weights,
-            dnn_var,
+            dnn_weights_behavior,
+            dnn_var_behavior,
             plot_dir,
             device,
             topk=topk,
@@ -413,13 +416,23 @@ def main(
         ]:
             # for key in [("human_k_dnn_k")]:
             print("Plotting {}".format(key))
+
+            image_filenames, indices = load_image_data(
+                img_root,
+                filter_plus=True,
+            )
+            # NOTE we needed human behavior ones to make the comparison. for plotting we
+            # now take the plus images
+            dnn_weights_plus = dnn_weights[indices]
+            jackknife_dict["dnn_weights"] = dnn_weights_plus
+
             plot_grid(
                 plot_dir,
                 image_filenames,
                 jackknife_dict,
                 key,
                 softmax_key="high_both",
-                max=topk,
+                max_topk=5,
             )
 
 
@@ -430,7 +443,7 @@ if __name__ == "__main__":
         args.dnn_path,
         args.img_root,
         args.triplet_path,
-        12,
+        24,
         args.run_jackknife,
         args.plot,
     )

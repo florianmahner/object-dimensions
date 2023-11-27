@@ -1,7 +1,6 @@
 import numpy as np
 from object_dimensions.utils import load_sparse_codes, load_deepnet_activations
 from object_dimensions.latent_predictor import load_regression_weights
-from sklearn.metrics import r2_score
 from object_dimensions.utils import correlate_rsms
 
 
@@ -42,23 +41,26 @@ def invert_regression(B, X, y, dtype=np.float64):
 X = load_deepnet_activations(
     "./data/triplets/vgg16_bn/classifier.3/",
     zscore=False,
-    center=False,
+    center=True,
     relu=True,
     to_torch=False,
 )
 y = load_sparse_codes(
-    "./results/sslab_final/deep/vgg16_bn/classifier.3/20.mio/sslab/300/256/0.24/0/params/params_epoch_2000.npz",
-    zscore=False,
+    "./results/dnn/variational/vgg16_bn/classifier.3/20.mio/sslab/150/256/1.0/14/params/parameters.npz",
 )
+
 B, _ = load_regression_weights(
-    "./results/sslab_final/deep/vgg16_bn/classifier.3/20.mio/sslab/300/256/0.24/0/analyses/sparse_codes",
+    "./results/dnn/variational/vgg16_bn/classifier.3/20.mio/sslab/150/256/1.0/14/analyses/sparse_codes",
     X.shape[1],
     y.shape[1],
     to_numpy=True,
 )
+
 y, B = y.T, B.T
 
 map_X = invert_regression(B, X, y)
+
+breakpoint()
 
 X_rsm = X @ X.T
 X_map_rsm = map_X @ map_X.T

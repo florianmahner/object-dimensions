@@ -3,6 +3,8 @@ import toml
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+import json
 import seaborn as sns
 import matplotlib.gridspec as gridspec
 from PIL import Image
@@ -13,21 +15,20 @@ import matplotlib as mpl
 
 import plotly.express as px
 import pandas as pd
+import skimage.io as io
 
 
 def plot_figure(
     image_filenames, triplet, human_weights, dnn_weights, dim_h, dim_d, title_1, title_2
 ):
     """Plot figure for jackknife analysis as a grid of the triplet and the topk images in a dimension"""
-    fig = plt.figure(figsize=(12, 8))
+    fig = plt.figure(figsize=(18, 12))
     gs0 = gridspec.GridSpec(1, 3, figure=fig)
     gs0.update(top=0.95, bottom=0.7, left=0.25, right=0.75, wspace=0.0, hspace=0.0)
     lookup = ["i", "j", "k"]
     for ctr, img_index in enumerate(triplet):
         ax = plt.subplot(gs0[ctr])
-        img = Image.open(image_filenames[img_index])
-        img = img.resize((224, 224))
-
+        img = io.imread(image_filenames[img_index])
         ax.imshow(img)
 
         ax.set_ylabel("")
@@ -48,8 +49,9 @@ def plot_figure(
 
     for ctr, human_idx in enumerate(human):
         ax = plt.subplot(gs1[ctr])
-        img = Image.open(image_filenames[human_idx])
-        img = img.resize((224, 224), Image.Resampling.BILINEAR)
+        # img = Image.open(image_filenames[human_idx])
+        img = io.imread(image_filenames[human_idx])
+        # img = img.resize((224, 224), Image.Resampling.BILINEAR)
         ax.imshow(img)
         ax.axis("off")
 
@@ -60,8 +62,7 @@ def plot_figure(
 
     for ctr, dnn_idx in enumerate(dnn):
         ax = plt.subplot(gs2[ctr])
-        img = Image.open(image_filenames[dnn_idx])
-        img = img.resize((224, 224))
+        img = io.imread(image_filenames[dnn_idx])
         ax.imshow(img)
         ax.axis("off")
     plt.subplot(gs2[1]).set_title(title_2, fontsize=20)
@@ -152,7 +153,7 @@ def plot_grid(
     jackknife_dict,
     key="dnn_k_human_k",
     softmax_key="high_both",
-    max=5,
+    max_topk=5,
     start_index=0,
 ):
     human_weights = jackknife_dict["human_weights"]
@@ -165,8 +166,8 @@ def plot_grid(
     diff_human = value["softmax_diff_human"][start_index:]
     diff_dnn = value["softmax_diff_dnn"][start_index:]
 
-    human_title = "Human - " + key[-1]
-    dnn_title = "DNN - " + key.split("_")[1]
+    dnn_title = "DNN - " + key[-1]
+    human_title = "Human - " + key.split("_")[1]
 
     plot_softmax_histogram(jackknife_dict, plot_dir)
     plot_weights(jackknife_dict, plot_dir)
@@ -176,12 +177,13 @@ def plot_grid(
         os.makedirs(save_path)
 
     # Argsort diff human and diff dnn along axis 1
-    topk_human = np.argsort(-diff_human, axis=1)[:, :5]
+    topk_human = np.argsort(-diff_human, axis=1)[:, :max_topk]
     topk_human = {str(i): list(a) for i, a in enumerate(topk_human)}
 
-    topk_dnn = np.argsort(-diff_dnn, axis=0)[:, :5]
+    topk_dnn = np.argsort(-diff_dnn, axis=1)[:, :max_topk]
     topk_dnn = {str(i): list(a) for i, a in enumerate(topk_dnn)}
     save = {"human": topk_human, "dnn": topk_dnn}
+
     with open(os.path.join(save_path, "topk.toml"), "w") as f:
         toml.dump(save, f)
 
@@ -197,10 +199,12 @@ def plot_grid(
             dnn_title,
         )
         fig.savefig(
-            os.path.join(save_path, softmax_key + "_" + f"{str(ctr + 1)}" + ".pdf"),
+            os.path.join(save_path, softmax_key + "_" + f"{str(ctr)}" + ".pdf"),
             bbox_inches="tight",
             pad_inches=0,
             transparent=True,
+            dpi=300,
+            compression="tiff_lzw",
         )
 
         plt.close(fig)
@@ -216,14 +220,71 @@ def get_66dim_cmap(dimcol_mat="./data/misc/colors66.mat"):
     return dimcol_cmap
 
 
-def plot_plotly(softmax, out_path):
+def savefig(fig, path):
+    fig.savefig(
+        path,
+        bbox_inches="tight",
+        pad_inches=0,
+        transparent=True,
+        dpi=300,
+        compression="tiff_lzw",
+    )
+
+
+def plot_bar_1d(human, dnn, ctr, out_path):
+    sns.set(style="whitegrid", context="paper")
+    fig, ax = plt.subplots(1, 1, figsize=(6, 3))
+    n = len(human)
+    sns.barplot(x=np.arange(n), y=sorted(human, reverse=True), ax=ax, color="black")
+    ax.set_xlabel("")
+    ax.set_xticklabels([])
+    sns.despine(offset=5)
+
+    path_human = os.path.join(out_path, f"bar_human_{ctr}.pdf")
+    savefig(fig, path_human)
+
+    fig, ax = plt.subplots(1, 1, figsize=(6, 3))
+    n = len(dnn)
+    sns.barplot(x=np.arange(n), y=sorted(dnn, reverse=True), ax=ax, color="black")
+    path_dnn = os.path.join(
+        out_path,
+        f"bar_dnn_{ctr}.pdf",
+    )
+    ax.set_xlabel("")
+    ax.set_xticklabels([])
+    sns.despine(offset=5)
+
+    savefig(fig, path_dnn)
+
+
+def plot_rose(softmax, out_path):
     dimcol_cmap = get_66dim_cmap()
     dimcol_cmap_hex = [mpl.colors.to_hex(row) for row in dimcol_cmap.colors]
 
     n = softmax.shape[0]
     dims = np.arange(n)
 
+    # Save the colors with the softmax values sorted by the softmax values to json in outpath
+    sort_index = np.argsort(-softmax)
+    softmax_sorted = softmax[sort_index]
+    dims_sorted = dims[sort_index]
+    with open(out_path.replace(".pdf", ".json"), "w") as f:
+        json.dump(
+            {
+                "softmax_sorted": softmax_sorted.tolist(),
+                "dims_sorted": dims_sorted.tolist(),
+            },
+            f,
+        )
+
     df = pd.DataFrame({"softmax": softmax, "dims": dims})
+
+    max_softmax = np.max(softmax)
+
+    breakpoint()
+    # put all values below 1/10th of the max to 1/10th and set the colors at this index to gray
+    df.loc[df["softmax"] < max_softmax / 10, "softmax"] = max_softmax / 10
+    df.loc[df["softmax"] < max_softmax / 10, "dims"] = 67
 
     fig = px.bar_polar(
         df,
@@ -258,7 +319,7 @@ def plot_bar(softmax_human, softmax_dnn, ctr, out_path="./rose.png"):
     ax[0].set_ylabel("Count")
     fig.tight_layout()
     fig.savefig(
-        os.path.join(out_path, f"histogram_{ctr + 1}.pdf"),
+        os.path.join(out_path, f"histogram_{ctr}.pdf"),
         bbox_inches="tight",
         transparent=True,
     )
@@ -267,7 +328,7 @@ def plot_bar(softmax_human, softmax_dnn, ctr, out_path="./rose.png"):
     # Plot two rose plots
     for decisions, path in zip(
         [softmax_human, softmax_dnn],
-        [f"rose_human_{ctr + 1}.pdf", f"rose_dnn_{ctr + 1}.pdf"],
+        [f"rose_human_{ctr}.pdf", f"rose_dnn_{ctr}.pdf"],
     ):
         f_path = os.path.join(out_path, path)
-        plot_plotly(decisions, f_path)
+        plot_rose(decisions, f_path)

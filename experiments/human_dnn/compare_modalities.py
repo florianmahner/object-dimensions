@@ -13,6 +13,7 @@ from skimage.transform import resize
 from tomlparse import argparse
 import skimage.io as io
 
+
 from experiments.human_dnn.reconstruction_accuracy import rsm_pred_torch
 
 from object_dimensions.utils import (
@@ -471,7 +472,6 @@ def plot_mind_machine_corrs(
 
     colors = sns.color_palette()
 
-    breakpoint()
     colors = [colors[2], colors[3]]
 
     # Create a lineplot
@@ -601,8 +601,6 @@ def visualize_dims_across_modalities(
 
         plt.close(fig)
 
-    import pandas as pd
-
     data = pd.DataFrame({"Human": w_mod1, "DNN": w_mod2})
     # Make empty list of colors
     data["colors"] = 0
@@ -636,6 +634,9 @@ def visualize_dims_across_modalities(
         5: magenta,
     }
 
+    corrs = pearsonr(w_mod1, w_mod2)[0]
+    corr_str = r"$r$" + " = " + str(corrs.round(2))
+
     ax = sns.scatterplot(
         data=data,
         x="Human",
@@ -645,10 +646,14 @@ def visualize_dims_across_modalities(
         palette=palette,
         s=100,
     )
-    sns.despine()
+    sns.despine(offset=10)
 
     ax.set_xlabel("Human Behavior")
     ax.set_ylabel("DNN")
+
+    loc_x = np.min(w_mod1)
+    loc_y = np.max(w_mod2)
+    ax.annotate(corr_str, (loc_x, loc_y))
     ax.legend([], [], frameon=False)
 
     fig.savefig(
