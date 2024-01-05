@@ -9,6 +9,10 @@ from collections import defaultdict
 from argparse import ArgumentParser
 from tqdm import tqdm
 from typing import Dict, Union, List, Tuple
+import seaborn as sns
+
+sns.set_style("white")
+sns.set_context("paper", font_scale=1.5, rc={"lines.linewidth": 2})
 
 
 def parse_args():
@@ -160,14 +164,15 @@ def plot_reliability(
 ) -> None:
     """Plot the reliability of each dimension across all models."""
     ndim = len(reliability_per_dim)
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(6, 4))
     ax.plot(range(ndim), reliability_per_dim)
     ax.set_xlabel("Dimension number")
-    ax.set_ylabel("Reproducibility of dimensions (Pearson's r)".format(n_embeddings))
-    ax.set_title("N = {} runs, Batch Size = 256".format(n_embeddings))
-    ax.axvline(x=n_pruned, color="red", linestyle="--")
+    ax.set_ylabel("Reproducibility of dimensions\n(Pearson's r)".format(n_embeddings))
+    # ax.set_title("N = {} runs, Batch Size = 256".format(n_embeddings))
+    ax.axvline(x=n_pruned, color="red", linestyle="--", label="Pruned dimensions")
     ax.spines["right"].set_visible(False)
     ax.spines["top"].set_visible(False)
+    ax.legend()
     plt.tight_layout()
     plt.savefig(
         os.path.join(
@@ -175,7 +180,7 @@ def plot_reliability(
         ),
         dpi=300,
         bbox_inches="tight",
-        pad_inches=0.1,
+        pad_inches=0.0,
     )
     plt.close(fig)
 
@@ -185,7 +190,7 @@ def plot_reliability_across_seeds(
     out_path: str,
     modality: str,
 ) -> None:
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(6, 4))
     ax.bar(
         list(mean_reliabilities.keys()),
         list(mean_reliabilities.values()),
@@ -208,7 +213,7 @@ def plot_reliability_across_seeds(
         ),
         dpi=300,
         bbox_inches="tight",
-        pad_inches=0.1,
+        pad_inches=0.0,
     )
     plt.close(fig)
 

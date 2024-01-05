@@ -99,14 +99,14 @@ def rgb_to_hex(rgb_values):
 
 
 def make_wordclouds(df: pd.DataFrame) -> plt.Figure:
-    max_words = 6
+    max_words = 8
     colors = sns.color_palette("deep")[:max_words]
     colors = rgb_to_hex(colors)
 
     words = df["most_common_words"].iloc[0]
 
-    # Filter out words that have a frequency of 1
-    words = {k: v for k, v in words.items() if v > 1}
+    # Take all words. Alternative is filtering out words that have a frequency larger 0 (i.e. appear at least once)
+    words = {k: v for k, v in words.items() if v > 0}
 
     # sort words by frequency
     top_words = {
@@ -164,15 +164,29 @@ def main() -> None:
         index=False,
     )
 
+    out_path_wc = "./results/dnn/variational/vgg16_bn/classifier.3/20.mio/sslab/150/256/1.0/14/analyses/"
+
+    # new_path = os.path.join(out_path_wc, "per_dim", "**", "*10x50*")
+
+    # files = glob.glob(new_path, recursive=True)
+
+    # for f in files:
+    #     os.remove(f)
+
     # Iterate over rows of df
     for dim in df["dim"]:
         print("Making wordcloud for dimension: ", dim, "...", end="\r")
         dim_df = df[df["dim"] == dim]
         fig = make_wordclouds(dim_df)
-
-        for ext in ["pdf", "png"]:
+        dim_str = str(dim).zfill(2)
+        for ext in ["pdf"]:
             plt.savefig(
-                os.path.join(out_path, f"word_cloud{dim}_human.{ext}"),
+                os.path.join(
+                    out_path_wc,
+                    "per_dim",
+                    dim_str,
+                    f"{str(dim)}_word_cloud_human.{ext}",
+                ),
                 dpi=300,
                 bbox_inches="tight",
                 pad_inches=0,

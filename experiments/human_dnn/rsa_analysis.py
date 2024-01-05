@@ -7,6 +7,7 @@ import numpy as np
 import torch
 import pickle
 import random
+import scipy.io as io
 import os
 from experiments.human_dnn.reconstruction_accuracy import rsm_pred_torch
 from experiments.human_dnn.compare_modalities import correlate_modalities
@@ -64,6 +65,18 @@ def parse_args():
         default="./features",
         help="Path to DNN features directory",
     )
+    parser.add_argument(
+        "--words48_path",
+        type=str,
+        default="./data/misc/words48.csv",
+        help="Path to words48 file containing object categories used to fully sample things similarity matrix for noise ceilings",
+    )
+    parser.add_argument(
+        "--human_rd_gt",
+        type=str,
+        help="Path to human RDM ground truth",
+        default="./data/misc/rdm48_human.mat",
+    )
     return parser.parse_args()
 
 
@@ -117,8 +130,8 @@ def filter_rsm_by_concepts(
 
 
 def subset_rsm_analysis(
-    human: np.ndarray,
-    rsm_dnn: np.ndarray,
+    base: np.ndarray,
+    rsm_comp: np.ndarray,
     dim_index: int,
     corr: str = "pearson",
     cumulative: bool = False,
@@ -128,13 +141,13 @@ def subset_rsm_analysis(
     we only select the embedding dimension at the index to construct and correlate
     both RSMs"""
     if cumulative:
-        dim_human = human[:, : dim_index + 1]
+        dim_base = base[:, : dim_index + 1]
     else:
-        dim_human = human[:, dim_index].reshape(-1, 1)
+        dim_base = base[:, dim_index].reshape(-1, 1)
 
-    rsm_human = rsm_pred_torch(dim_human)
-    corr_hd = correlate_rsms(rsm_human, rsm_dnn, corr)
-    return corr_hd, rsm_human
+    rsm_base = rsm_pred_torch(dim_base)
+    corr_hd = correlate_rsms(rsm_human, rsm_comp, corr)
+    return corr_hd, rsm_base
 
 
 def fast_rsm_correlations(human: np.ndarray, rsm_dnn: np.ndarray) -> float:
@@ -188,9 +201,7 @@ def compute_histogram_of_fits(
             pbar.set_description(f"Combination {i} / {ncomb}")
             pbar.update(1)
             human_comb = human[:, comb]
-            corrs[i] = fast_rsm_correlations(
-                human_comb, dnn_rsm
-            )  # we always use the ground truth DNN RSM
+            corrs[i] = fast_rsm_correlations(human_comb, dnn_rsm)
 
         corrs = corrs.cpu().numpy()
         human_sub = human[:, :n_gt]
@@ -231,40 +242,51 @@ def calculate_rsm_corrs(
     cumulative: bool = True,
 ) -> Tuple[float, float]:
     """Calculate the correlation between the RSMs for the given weights"""
-    corr_gt, rsm_human_corr = subset_rsm_analysis(
+    corr_gt, rsm_corr = subset_rsm_analysis(
         weights, rsm, dim_index, corr=corr_type, cumulative=cumulative
     )
-    corr_sum, rsm_human_sum = subset_rsm_analysis(
+    corr_sum, rsm_sum = subset_rsm_analysis(
         weights_sum, rsm, dim_index, corr=corr_type, cumulative=cumulative
     )
-    return corr_gt, corr_sum, rsm_human_corr, rsm_human_sum
+    return corr_gt, corr_sum, rsm_corr, rsm_sum
 
 
 def compute_bootstrap_corrs(
     rsms: Dict[str, np.ndarray], nboot: int = 100
 ) -> Dict[str, np.ndarray]:
-    cumulative_human = rsms["human"]
-    dnn_rsm_gt = rsms["indidual_dnn"][0]
+    cumulative_dnn = rsms["dnn"]
+    human_rsm_gt = rsms["human_reconstructed"]
 
-    ndims = len(cumulative_human)
-    n_objects = dnn_rsm_gt.shape[0]
+    ndims = len(cumulative_dnn)
+    n_objects = human_rsm_gt.shape[0]
     tril_inds = np.triu_indices(n_objects, k=1)
-    dnn_rdv = dnn_rsm_gt[tril_inds]
+    human_rdv = human_rsm_gt[tril_inds]
+
+    # cumulative_human = rsms["human"]
+    # dnn_rsm_gt = rsms["individual_dnn"][0]
+    # ndims = len(cumulative_human)
+    # n_objects = dnn_rsm_gt.shape[0]
+    # tril_inds = np.triu_indices(n_objects, k=1)
+    # dnn_rdv = dnn_rsm_gt[tril_inds]
 
     # Create random 1d bootstrap samples w/ replacement
-    n = len(dnn_rdv)
+    # n = len(dnn_rdv)
+    n = len(human_rdv)
     random.seed(0)
     inds = np.random.randint(0, n, size=(nboot, n))
+
     pbar = tqdm(total=ndims)
     boot_corrs = np.zeros((ndims, nboot))
 
+    human_rdv_boot = human_rdv[inds]
+
     for i in range(ndims):
         pbar.update(1)
-        human = cumulative_human[i]
-        human_rdv = human[tril_inds]
+
+        dnn = cumulative_dnn[i]
+        dnn_rdv = dnn[tril_inds]
 
         dnn_rdv_boot = dnn_rdv[inds]
-        human_rdv_boot = human_rdv[inds]
 
         dnn_mean = np.mean(dnn_rdv_boot, axis=1, keepdims=True)
         human_mean = np.mean(human_rdv_boot, axis=1, keepdims=True)
@@ -272,9 +294,26 @@ def compute_bootstrap_corrs(
         human_std = human_rdv_boot.std(axis=1)
 
         # Compute Pearson correlation coefficients
+        # boot_corrs[i, :] = ((dnn_rdv_boot - dnn_mean) * (human_rdv_boot - human_mean)).sum(axis=1) / (n * dnn_std * human_std)
         boot_corrs[i, :] = (
-            (dnn_rdv_boot - dnn_mean) * (human_rdv_boot - human_mean)
-        ).sum(axis=1) / (n * dnn_std * human_std)
+            (human_rdv_boot - human_mean) * (dnn_rdv_boot - dnn_mean)
+        ).sum(axis=1) / (n * human_std * dnn_std)
+
+        # human = cumulative_human[i]
+        # human_rdv = human[tril_inds]
+
+        # dnn_rdv_boot = dnn_rdv[inds]
+        # human_rdv_boot = human_rdv[inds]
+
+        # dnn_mean = np.mean(dnn_rdv_boot, axis=1, keepdims=True)
+        # human_mean = np.mean(human_rdv_boot, axis=1, keepdims=True)
+        # dnn_std = human_rdv_boot.std(axis=1)
+        # human_std = human_rdv_boot.std(axis=1)
+
+        # # Compute Pearson correlation coefficients
+        # boot_corrs[i, :] = (
+        #     (dnn_rdv_boot - dnn_mean) * (human_rdv_boot - human_mean)
+        # ).sum(axis=1) / (n * dnn_std * human_std)
 
     boot_mean = boot_corrs.mean(axis=1)
     boot_std = boot_corrs.std(axis=1)
@@ -366,8 +405,10 @@ def plot_rsa_across_dims(
         lw=1,
     )
     sns.despine()
-    ax.set_xlabel("Cumulative Human Dimension")
-    ax.set_ylabel("Pearson's r to DNN RSM")
+    # ax.set_xlabel("Cumulative Human Dimension")
+    # ax.set_ylabel("Pearson's r to DNN RSM")
+    ax.set_xlabel("Cumulative DNN Dimension")
+    ax.set_ylabel("Pearson's r to Human RSM")
     ax.set_xticks(xticks)
     ax.set_xticklabels(xticklabels)
 
@@ -384,11 +425,12 @@ def plot_rsa_across_dims(
     pearson_95_idx = np.where(boot["boot_mean"] >= pearson_95)[0][0]
     ax.axvline(pearson_95_idx, ls="--", color="black", lw=1, label=r"95% $R^2$")
 
-    ax.legend(loc="lower right", frameon=True)
+    print("Number of dimensions need to explain 95% var", pearson_95_idx)
+    ax.legend(loc="best", frameon=True)
 
     # fig.legend()
 
-    fname = os.path.join(out_path, "rsa_across_dims_human_boot.{}")
+    fname = os.path.join(out_path, "rsa_across_dims_dnn_boot.{}")
     for ext in ["png", "pdf"]:
         fig.savefig(fname.format(ext), bbox_inches="tight", pad_inches=0.05)
 
@@ -421,20 +463,24 @@ def curve_fit_graph(rsa_corrs):
 def plot_rsm_across_dims(
     human_embedding,
     dnn_embedding,
-    rsm_dnn_ground_truth,
+    rsm_dnn,
     out_path,
     run_analysis=True,
 ):
     ndims = min(human_embedding.shape[1], dnn_embedding.shape[1])
     n_objects = human_embedding.shape[0]
-    weights_human, weights_dnn = correlate_modalities(
-        human_embedding, dnn_embedding, duplicates=True, sort_by_corrs=True
+    # weights_human, weights_dnn = correlate_modalities(
+    #     human_embedding, dnn_embedding, duplicates=True, sort_by_corrs=True
+    # )[:2]
+
+    weights_dnn, weights_human = correlate_modalities(
+        dnn_embedding, human_embedding, duplicates=True, sort_by_corrs=True
     )[:2]
 
     # Plot the histogram of correlations
     compute_histogram_of_fits(
         weights_human,
-        rsm_dnn_ground_truth,
+        rsm_dnn,
         out_path,
         ncomb=10_000,
         run_analysis=False,
@@ -465,8 +511,13 @@ def plot_rsm_across_dims(
         "individual_human",
         "individual_dnn",
     ]
+
+    ndims = 70
     rsm_corrs = {key: np.zeros(ndims) for key in keys}
     rsms = {key: np.zeros((ndims, n_objects, n_objects)) for key in keys}
+    rsms["human_reconstructed"] = rsm_human_reconstructed
+
+    run_analysis = False
 
     if run_analysis:
         for i in range(ndims):
@@ -484,34 +535,35 @@ def plot_rsm_across_dims(
                 i,
             )
 
-            (
-                rsm_corrs["human"][i],
-                rsm_corrs["sum_human"][i],
-                rsms["human"][i],
-                rsms["sum_human"][i],
-            ) = calculate_rsm_corrs(
-                weights_human,
-                weights_sum_human,
-                rsm_dnn_ground_truth,
-                i,
-            )
+            # (
+            #     rsm_corrs["human"][i],
+            #     rsm_corrs["sum_human"][i],
+            #     rsms["human"][i],
+            #     rsms["sum_human"][i],
+            # ) = calculate_rsm_corrs(
+            #     weights_human,
+            #     weights_sum_human,
+            #     rsm_dnn,
+            #     i,
+            # )
 
-            (
-                rsm_corrs["individual_human"][i],
-                rsms["individual_human"][i],
-            ) = subset_rsm_analysis(
-                weights_human,
-                rsm_dnn_ground_truth,
-                i,
-                cumulative=False,
-            )
+            # (
+            #     rsm_corrs["individual_human"][i],
+            #     rsms["individual_human"][i],
+            # ) = subset_rsm_analysis(
+            #     weights_human,
+            #     rsm_dnn,
+            #     i,
+            #     cumulative=False,
+            # )
+
             rsm_corrs["individual_dnn"][i], _ = subset_rsm_analysis(
                 weights_dnn,
                 rsm_human_reconstructed,
                 i,
                 cumulative=False,
             )
-            rsms["individual_dnn"][i] = rsm_dnn_ground_truth
+            rsms["individual_dnn"][i] = rsm_dnn
 
         with open(os.path.join(out_path, "rsa_across_dims.pkl"), "wb") as f:
             pickle.dump((rsms, rsm_corrs), f)
@@ -519,6 +571,7 @@ def plot_rsm_across_dims(
     with open(os.path.join(out_path, "rsa_across_dims.pkl"), "rb") as f:
         rsms, rsm_corrs = pickle.load(f)
 
+    run_analysis = False
     if run_analysis:
         boot = compute_bootstrap_corrs(rsms, nboot=100)
         with open(os.path.join(out_path, "bootstrap_corrs.pkl"), "wb") as f:
@@ -541,9 +594,9 @@ def plot_rsm_across_dims(
         rsm_all_human = rsm_pred_torch(weights_human)
 
         # Calculate the correlations
-        corr_top = correlate_rsms(rsm_top_human, rsm_dnn_ground_truth, "pearson")
-        corr_other = correlate_rsms(rsm_other_human, rsm_dnn_ground_truth, "pearson")
-        corr_all = correlate_rsms(rsm_all_human, rsm_dnn_ground_truth, "pearson")
+        corr_top = correlate_rsms(rsm_top_human, rsm_dnn, "pearson")
+        corr_other = correlate_rsms(rsm_other_human, rsm_dnn, "pearson")
+        corr_all = correlate_rsms(rsm_all_human, rsm_dnn, "pearson")
 
         print("Corr top {}: {}".format(ncomp, corr_top))
         print("Corr other {}: {}".format(ndims - ncomp, corr_other))
@@ -572,6 +625,9 @@ if __name__ == "__main__":
     corr_recon = correlate_rsms(rsm_recon_dnn, rsm_human, args.corr_type)
     corr_gt = correlate_rsms(rsm_truth_dnn, rsm_human, args.corr_type)
 
+    corr_dnn_dnn_gt = correlate_rsms(rsm_truth_dnn, rsm_recon_dnn, args.corr_type)
+    print("Correlation between DNN and DNN ground truth: {}".format(corr_dnn_dnn_gt))
+
     for corr, identifier in zip(
         [corr_recon, corr_gt], ["Reconstructed", "Ground Truth"]
     ):
@@ -584,18 +640,53 @@ if __name__ == "__main__":
     plot_rsm_across_dims(
         human_embedding,
         dnn_embedding,
-        rsm_truth_dnn,
+        rsm_recon_dnn,  # NOTE here is where i either use ground truth or reonstructed RSM.
         plot_dir,
         run_analysis=args.run_analysis,
     )
 
-    # NOTE -> I have taken the ground truth DNN embedding here.
+    # NOTE -> I have taken the recon DNN embedding here.
     concepts = load_concepts(args.concept_path)
     rsm_human, rsm_truth_dnn = filter_rsm_by_concepts(
         rsm_human,
-        rsm_truth_dnn,
+        rsm_recon_dnn,
         concepts,
     )
+
+    words48 = pd.read_csv(args.words48_path, encoding="utf-8")
+
+    cls_names = sorted(words48["Word"].values)  # we sort alphabetically
+    rsm_human_gt = io.loadmat(args.human_rd_gt)["RDM48_triplet"]
+
+    concept_path = "./data/misc/things_concepts.tsv"
+    concepts = load_concepts(concept_path)
+
+    # Concepts has a column of words. i want to find the indices of the words that are in the cls_names
+    # and then sort the rsm by those indices.
+    indices_48 = []
+    exclude = ["camera", "file"]
+    exclude = []
+
+    for i, row in enumerate(concepts["Word"].values):
+        if row in cls_names:
+            if row not in exclude:
+                indices_48.append(i)
+
+    excluded_indices = [i for i, name in enumerate(cls_names) if name in exclude]
+    # Remove these indices from the rsm rdm_human_gt
+    rsm_human_gt = np.delete(rsm_human_gt, excluded_indices, axis=0)
+    rsm_human_gt = np.delete(rsm_human_gt, excluded_indices, axis=1)
+
+    human_embedding_46 = human_embedding[indices_48]
+    rsm_human_46_recon = rsm_pred_torch(human_embedding_46, return_type="numpy")
+
+    corr_human_human_gt = correlate_rsms(
+        rsm_human_gt, rsm_human_46_recon, args.corr_type
+    )
+
+    # TODO I still have to correct the RSM for noise ceilings! Right now, the bug does not work
+
+
     for rsm, name in zip([rsm_truth_dnn, rsm_human], ["dnn", "human"]):
         fname = os.path.join(plot_dir, f"{name}_rsm.jpg")
         plot_rsm(rsm, fname)

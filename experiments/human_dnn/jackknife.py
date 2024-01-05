@@ -308,6 +308,12 @@ def main(
     plot_dir = create_path_from_params(dnn_path, "analyses", "jackknife")
     print("Save to '{}'".format(plot_dir))
 
+    _, indices_plus = load_image_data(
+        img_root,
+        filter_plus=True,
+    )
+    dnn_weights_plus = dnn_weights[indices_plus]
+
     # Load image data
     image_filenames, indices = load_image_data(img_root, filter_behavior=True)
     dnn_weights_behavior = dnn_weights[indices]
@@ -407,24 +413,29 @@ def main(
             )
 
         jackknife_dict = pickle.load(open(jackknife_path, "rb"))
+        jackknife_dict["dnn_weights_plus"] = dnn_weights_plus
         for key in [
             "human_i_dnn_j",
-            "human_j_dnn_i",
-            "human_k_dnn_k",
             "human_k_dnn_j",
             "human_k_dnn_i",
+            "human_k_dnn_k",
+            "human_j_dnn_i",
         ]:
             # for key in [("human_k_dnn_k")]:
             print("Plotting {}".format(key))
 
-            image_filenames, indices = load_image_data(
-                img_root,
-                filter_plus=True,
-            )
+            # Here we replace for visualization purposes the behavior with plus images
+            image_filenames = [i.replace("01b", "plus") for i in image_filenames]
+
+            # image_filenames, indices = load_image_data(
+            #     img_root,
+            #     filter_plus=True,
+            # )
+
             # NOTE we needed human behavior ones to make the comparison. for plotting we
             # now take the plus images
-            dnn_weights_plus = dnn_weights[indices]
-            jackknife_dict["dnn_weights"] = dnn_weights_plus
+            # dnn_weights_plus = dnn_weights[indices]
+            # jackknife_dict["dnn_weights"] = dnn_weights_plus
 
             plot_grid(
                 plot_dir,
@@ -443,7 +454,7 @@ if __name__ == "__main__":
         args.dnn_path,
         args.img_root,
         args.triplet_path,
-        24,
+        2000,
         args.run_jackknife,
         args.plot,
     )

@@ -147,6 +147,24 @@ def plot_weights(jackknife_dict, save_path):
     plt.close(fig)
 
 
+def get_dominant_row_indices(matrix, top=2, threshold=0.50):
+    """Get the indices of the rows that are dominant in the matrix, e.g. where the
+    top elements of the row sum to 0.X of total sum"""
+    dominant_indices = set()
+    for i, row in enumerate(matrix):
+        row = np.abs(row)
+        sorted_dims = np.argsort(-row)
+        row = row[sorted_dims]
+        sum_dims = np.sum(row)
+        sum_top = np.sum(row[:top])
+        # I want that they explain less than the threshold in terms of variance, e.g. that they
+        # are not sparse
+        if sum_top / sum_dims <= threshold:
+            dominant_indices.add(i)
+
+    return dominant_indices
+
+
 def plot_grid(
     plot_dir,
     image_filenames,
@@ -158,6 +176,8 @@ def plot_grid(
 ):
     human_weights = jackknife_dict["human_weights"]
     dnn_weights = jackknife_dict["dnn_weights"]
+    dnn_weights_plus = jackknife_dict["dnn_weights_plus"]
+
     jackknife = jackknife_dict[key]
     value = jackknife[softmax_key]
     triplets = value["triplets"][start_index:]
@@ -165,6 +185,27 @@ def plot_grid(
     dims_dnn = value["dims_dnn"][start_index:]
     diff_human = value["softmax_diff_human"][start_index:]
     diff_dnn = value["softmax_diff_dnn"][start_index:]
+
+    # Here we filter non sparse triplets!
+    # TODO Start of here again! NOTE I saw some images twice in the fucking plot of dimension visualization
+    # No idea why, check code again based on what triplet I filter and what triplets I visualize later!
+    # Also need to check if the dimensions of the DNN plus images actually match?? It seems like I use the
+    # DNN behavior images for the comparison, but then try to visualize it for the plus...
+
+    non_sparse_dnn = get_dominant_row_indices(diff_dnn, top=3, threshold=0.25)
+    non_sparse_human = get_dominant_row_indices(diff_human, top=3, threshold=0.25)
+    intersection_dominant_indices = list(non_sparse_dnn.intersection(non_sparse_human))
+    diff_human = diff_human[intersection_dominant_indices, :]
+    diff_dnn = diff_dnn[intersection_dominant_indices, :]
+    dims_dnn = dims_dnn[intersection_dominant_indices]
+    dims_human = dims_human[intersection_dominant_indices]
+    triplets = triplets[intersection_dominant_indices]
+    n_start = 0
+    n_end = 200
+    diff_human = diff_human[n_start:n_end]
+    diff_dnn = diff_dnn[n_start:n_end]
+    dims_dnn = dims_dnn[n_start:n_end]
+    dims_human = dims_human[n_start:n_end]
 
     dnn_title = "DNN - " + key[-1]
     human_title = "Human - " + key.split("_")[1]
@@ -192,18 +233,24 @@ def plot_grid(
             image_filenames,
             triplet,
             human_weights,
-            dnn_weights,
+            dnn_weights_plus,
             dim_h,
             dim_d,
             human_title,
             dnn_title,
         )
+
+        if ctr in [143, 60, 67, 37, 28]:
+            dpi = 450
+        else:
+            dpi = 50
+
         fig.savefig(
-            os.path.join(save_path, softmax_key + "_" + f"{str(ctr)}" + ".pdf"),
+            os.path.join(save_path, f"{str(ctr)}_" + softmax_key + ".pdf"),
             bbox_inches="tight",
             pad_inches=0,
             transparent=True,
-            dpi=300,
+            dpi=dpi,
             compression="tiff_lzw",
         )
 
@@ -268,23 +315,46 @@ def plot_rose(softmax, out_path):
     sort_index = np.argsort(-softmax)
     softmax_sorted = softmax[sort_index]
     dims_sorted = dims[sort_index]
-    with open(out_path.replace(".pdf", ".json"), "w") as f:
-        json.dump(
-            {
-                "softmax_sorted": softmax_sorted.tolist(),
-                "dims_sorted": dims_sorted.tolist(),
-            },
-            f,
-        )
+    # with open(out_path.replace(".pdf", ".json"), "w") as f:
+    #     json.dump(
+    #         {
+    #             "softmax_sorted": softmax_sorted.tolist(),
+    #             "dims_sorted": dims_sorted.tolist(),
+    #         },
+    #         f,
+    #     )
 
     df = pd.DataFrame({"softmax": softmax, "dims": dims})
 
-    max_softmax = np.max(softmax)
+    # max_softmax = np.max(df["softmax"])
+    # hex_gray = "#cdcdcd"
+    # dimcol_cmap_hex.append(hex_gray)  # Add gray color to the end of your color map
+    # gray_color_index = (
+    #     len(dimcol_cmap_hex) - 1
+    # )  # Index of gray color in the extended cmap
 
-    breakpoint()
-    # put all values below 1/10th of the max to 1/10th and set the colors at this index to gray
-    df.loc[df["softmax"] < max_softmax / 10, "softmax"] = max_softmax / 10
-    df.loc[df["softmax"] < max_softmax / 10, "dims"] = 67
+    # # Update 'dims' in your DataFrame for gray color mapping
+    # df.loc[df["softmax"] <= max_softmax / 10, "dims"] = gray_color_index
+    # df.loc[df["softmax"] <= max_softmax / 10, "softmax"] = max_softmax / 10
+
+    # # Plot with the updated 'dims'
+    # fig = px.bar_polar(
+    #     df,
+    #     r="softmax",
+    #     color="dims",
+    #     color_discrete_sequence=dimcol_cmap_hex,  # Use your color map
+    #     template="simple_white",
+    # )
+
+    # # # # Add shade of gray
+
+    # max_softmax = np.max(softmax)
+    # hex_gray = "#cdcdcd"
+    # dimcol_cmap_hex.append(hex_gray)
+    # ncolors = len(dimcol_cmap_hex)
+
+    # df.loc[df["softmax"] <= max_softmax / 10, "dims"] = ncolors - 1
+    # df.loc[df["softmax"] <= max_softmax / 10, "softmax"] = max_softmax / 10
 
     fig = px.bar_polar(
         df,
@@ -319,7 +389,7 @@ def plot_bar(softmax_human, softmax_dnn, ctr, out_path="./rose.png"):
     ax[0].set_ylabel("Count")
     fig.tight_layout()
     fig.savefig(
-        os.path.join(out_path, f"histogram_{ctr}.pdf"),
+        os.path.join(out_path, f"{ctr}_histogram.pdf"),
         bbox_inches="tight",
         transparent=True,
     )
@@ -328,7 +398,7 @@ def plot_bar(softmax_human, softmax_dnn, ctr, out_path="./rose.png"):
     # Plot two rose plots
     for decisions, path in zip(
         [softmax_human, softmax_dnn],
-        [f"rose_human_{ctr}.pdf", f"rose_dnn_{ctr}.pdf"],
+        [f"{ctr}_rose_human.pdf", f"{ctr}_rose_dnn.pdf"],
     ):
         f_path = os.path.join(out_path, path)
         plot_rose(decisions, f_path)

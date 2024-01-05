@@ -239,7 +239,7 @@ def generate_gpt3_norms(
         plt.axis("off")
         for ext in ["pdf", "png"]:
             plt.savefig(
-                os.path.join(out_path, f"{dim:02d}", f"{dim}_word_cloud.{ext}"),
+                os.path.join(out_path, f"{dim:02d}", f"{dim}_word_cloud_gpt.{ext}"),
                 dpi=300,
                 bbox_inches="tight",
                 pad_inches=0,

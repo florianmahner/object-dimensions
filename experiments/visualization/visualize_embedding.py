@@ -126,6 +126,29 @@ def plot_dim_1x8(images, codes, dim, top_k=10):
     return fig
 
 
+def plot_top_50(images, codes, dim, topk=50):
+    # Check if codes is 2d or 1d
+    if len(codes.shape) == 1:
+        weight = codes
+    else:
+        weight = codes[:, dim]
+
+    top_k = 50
+    top_k_samples = np.argsort(-weight)[:top_k]  # this is over the image dimension
+    fig, axes = plt.subplots(5, 10, figsize=(10, 5))
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0, wspace=0.05, hspace=0.0)
+
+    for k, sample in enumerate(top_k_samples):
+        ax = axes[k // 10, k % 10]
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.axis("off")
+        img = io.imread(images[sample])
+
+        ax.imshow(img)
+    return fig
+
+
 def plot_behavior(images, codes, dim, top_k=6):
     # Check if codes is 2d or 1d
     if len(codes.shape) == 1:
@@ -227,6 +250,7 @@ def plot_per_dim(args):
         fig_5x2 = plot_dim(images, W, dim, 10)
         fig_3x3 = plot_dim_3x3(images, W, dim, 9)
         fig_1x8 = plot_dim_1x8(images, W, dim, 8)
+        fig_5x10 = plot_top_50(images, W, dim, 50)
 
         # fig.suptitle("Dimension: {}".format(dim))
         out_path = os.path.join(results_path, f"{dim:02d}")
@@ -240,16 +264,19 @@ def plot_per_dim(args):
             fig_3x3.savefig(fname, dpi=300, bbox_inches="tight", pad_inches=0)
             fname = os.path.join(out_path, f"{dim}_topk{append}_1x8.{ext}")
             fig_1x8.savefig(fname, dpi=300, bbox_inches="tight", pad_inches=0)
+            fname = os.path.join(out_path, f"{dim}_topk{append}_5x10.{ext}")
+            fig_5x10.savefig(fname, dpi=150, bbox_inches="tight", pad_inches=0)
+
         plt.close(fig_5x2)
         plt.close(fig_3x3)
         plt.close(fig_1x8)
+        plt.close(fig_5x10)
         print(f"Done plotting for dim {dim}")
 
 
 def plot_dimensions(args):
     W = load_sparse_codes(args.embedding_path)
 
-    breakpoint()
     images, indices = load_image_data(
         args.img_root,
         filter_behavior=args.filter_behavior,

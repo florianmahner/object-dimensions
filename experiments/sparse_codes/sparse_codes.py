@@ -47,14 +47,19 @@ def parse_args():
 
 
 def plot_predictions(r2_scores, results_path):
-    fig, ax = plt.subplots(1, 1)
-    sns.lineplot(x=range(len(r2_scores)), y=r2_scores, ax=ax)
+    fig, ax = plt.subplots(1, 1, figsize=(6, 4))
+
+    sns.set_style("white")
+    sns.set_context("paper", font_scale=1.5)
+    sns.lineplot(x=range(len(r2_scores)), y=r2_scores, ax=ax, color="black")
     ax.set_xlabel("Dimension")
-    ax.set_ylabel("R2 score")
-    ax.set_title("DNN regression on embedding matrix.")
+    ax.set_ylabel(r"$R^2$ score")
+    # ax.set_title("DNN regression on embedding matrix.")
     fig.tight_layout()
 
-    out_path = os.path.join(results_path, "r2_scores.png")
+    out_path = os.path.join(
+        results_path, "r2_scores.pdf", dpi=300, bbox_inches="tight", pad_inches=0
+    )
     plt.savefig(out_path, dpi=300)
 
 
@@ -70,11 +75,20 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
         print("\n...Creating directories.\n")
         os.makedirs(results_path)
 
-    # Delete all previous sparse codes in the dir
-    print(f"\n...Deleting all previous results in {results_path} to start fresh.\n")
-    for file in os.listdir(results_path):
-        if file.endswith(".joblib"):
-            os.remove(os.path.join(results_path, file))
+    # Check if we want to delete and wait for input
+    if os.listdir(results_path):
+        print(
+            f"\n\n...Directory {results_path} is not empty. Do you want to delete all previous results? [y/n]"
+        )
+        user_input = input()
+        if user_input == "y":
+            # Delete all previous sparse codes in the dir
+            print(
+                f"\n...Deleting all previous results in {results_path} to start fresh.\n"
+            )
+            for file in os.listdir(results_path):
+                if file.endswith(".joblib"):
+                    os.remove(os.path.join(results_path, file))
 
     X = utils.load_deepnet_activations(dnn_path, center=True, zscore=False, relu=True)
     Y = utils.load_sparse_codes(embedding_path)

@@ -15,6 +15,7 @@ import torch.nn.functional as F
 from PIL import Image
 from tomlparse import argparse
 from experiments.visualization.visualize_embedding import plot_dim_3x3
+from pathlib import Path
 from object_dimensions.utils import (
     img_to_uint8,
     load_image_data,
@@ -24,9 +25,10 @@ from object_dimensions.latent_predictor import LatentPredictor
 
 
 QUERIES = [
-    ("wine_01b", [2, 56, 22, 35, 15, 51]),
-    ("flashlight_01b", [25, 24, 44, 35, 51]),
-    ("basketball_plus", [37, 28, 39]),
+    # ("wine_01b", [2, 56, 22, 35, 15, 51]),
+    # ("flashlight_01b", [25, 24, 44, 35, 51]),
+    # ("basketball_plus", [37, 28, 39]),
+    (list(range(71)), [None]),
 ]
 
 
@@ -96,7 +98,7 @@ def find_gradient_heatmap_(img, regression_predictor, latent_dim=1):
     return heatmap
 
 
-def search_image_spaces(
+def search_image_spaces_name(
     base_path,
     regression_predictor,
     dataset,
@@ -107,6 +109,7 @@ def search_image_spaces(
     latent_dims=[1, 2, 3],
 ):
     out_path = os.path.join(base_path, "analyses", "grad_cam", "{}".format(image_name))
+
     if not os.path.exists(out_path):
         print("\n...Creating directories.\n")
         os.makedirs(out_path)
@@ -175,6 +178,66 @@ def search_image_spaces(
         pickle.dump(save_dict, f)
 
 
+def search_image_spaces_dim(
+    base_path,
+    regression_predictor,
+    dataset,
+    img_indices,
+    image_name,
+    latent_dim=1,
+):
+    out_path = os.path.join(base_path, "analyses", "grad_cam", f"{latent_dim:02d}")
+
+    if not os.path.exists(out_path):
+        print("\n...Creating directories.\n")
+        os.makedirs(out_path)
+
+    fig, axes = plt.subplots(4, 4, figsize=(8, 8))
+
+    for i, img_idx in enumerate(img_indices):
+        img = Image.open(dataset[img_idx])
+        path = Path(dataset[img_idx])
+        img_name = path.stem
+        # img_name = os.path.basename(dataset[img_idx])
+
+        # img_name = os.path.splitext(img_name)[0].split("_")[0]
+
+        reshape = T.Compose([T.Resize(800), T.CenterCrop(700)])
+        img_vis = reshape(img)
+        img_vis = np.array(img_vis)
+
+        save_dict = {"img": img_vis, "dim": latent_dims, "heatmaps": []}
+        dim = latent_dim
+
+        print(f"\n...Currently performing grad-cam analysis for image {img_name}.")
+
+        heatmap_grads = find_gradient_heatmap_(img, regression_predictor, dim)
+        save_dict["heatmaps"].append(heatmap_grads)
+        heatmap = heatmap_grads
+        heatmap = img_to_uint8(heatmap)
+        heatmap = cv2.resize(heatmap, (img_vis.shape[1], img_vis.shape[0]))
+
+        # Invert heatmap so that 255 is 0 and 0 is 255
+        heatmap = cv2.bitwise_not(heatmap)
+        cmap = cv2.COLORMAP_JET
+        heatmap_img = cv2.applyColorMap(heatmap, cmap)
+        super_imposed_img = cv2.addWeighted(heatmap_img, 0.4, img_vis, 0.6, 0)
+
+        # fig, ax = plt.subplots(frameon=False, dpi=300)
+        axes[i // 4, i % 4].imshow(super_imposed_img)
+        axes[i // 4, i % 4].axis("off")
+
+    path = os.path.join(out_path, f"./{latent_dim:02d}_topk_cam_superimposed.pdf")
+    fig.tight_layout()
+    plt.savefig(path, bbox_inches="tight", pad_inches=0)
+
+    plt.close(fig)
+
+    # store save dict as pickle file in directory
+    with open(os.path.join(out_path, f"./cam_all.pkl"), "wb") as f:
+        pickle.dump(save_dict, f)
+
+
 def find_topk_per_image(embedding, topk=8):
     """Finds the topk dimensions that activate each image in the embedding space.
     Filters these topk images to only include the most important images that are
@@ -233,14 +296,30 @@ if __name__ == "__main__":
     sparse_codes = sparse_codes[indices]
 
     for query, latent_dims in QUERIES:
-        img_idx = [i for i, img in enumerate(images) if query in img][0]
-        search_image_spaces(
-            base_path,
-            predictor,
-            images,
-            indices_plus,
-            img_idx,
-            query,
-            sparse_codes,
-            latent_dims,
-        )
+        if isinstance(query, str):
+            img_idx = [i for i, img in enumerate(images) if query in img][0]
+
+            search_image_spaces_name(
+                base_path,
+                predictor,
+                images,
+                indices_plus,
+                img_idx,
+                query,
+                sparse_codes,
+                latent_dims,
+            )
+
+        elif isinstance(query, list):
+            for latent_dim in query:
+                # Get top images for latent dim
+                img_indices = np.argsort(-sparse_codes[:, latent_dim])[:16]
+
+                search_image_spaces_dim(
+                    base_path,
+                    predictor,
+                    images,
+                    img_indices,
+                    query,
+                    latent_dim,
+                )
