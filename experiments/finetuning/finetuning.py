@@ -111,10 +111,18 @@ class InverseClassifier(nn.Module):
         n = len(self.weights)
         self.bias = nn.Parameter(torch.randn(n), requires_grad=True)
 
+    def shrink_dimensions(self, dimensions: torch.Tensor, k: int) -> torch.Tensor:
+        sorted_dims = torch.argsort(dimensions, dim=1, descending=False)
+        dimensions_sparse = torch.zeros_like(dimensions)
+        for i, x in enumerate(X):
+            x[sorted_dims[i][:k]] = 0
+            dimensions_sparse[i] += x
+        return dimensions_sparse
+
     def forward(self, features: torch.Tensor):
         dimensions = F.relu(features @ self.weights.T)
-        # imagenet specific dimension bias. lukas makes it different somehow
-        dimensions = dimensions * self.bias.abs()
+        dimensions = self.shrink_dimensions(dimensions, 100)
+        dimensions = dimensions * self.bias.abs()  # NOTE Check why we do this
         y_hat = dimensions @ torch.pinverse(self.weights).T
         probas_hat = F.softmax(self.clf(y_hat), dim=1)
         return probas_hat
