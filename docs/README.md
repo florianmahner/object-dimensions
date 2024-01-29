@@ -1,9 +1,9 @@
 # Object Dimensions in Humans :elf: and DNNs :spider_web:
 
-Before using this repository, we recommend to install all packages. We provide a `makefile` for this:
+Before using this repository, we recommend to install all packages into a conda environment
 
 ```bash
-make install
+conda env create -f environment.yaml python=3.9
 ```
 
 Finally activate the environment and install the package locally
@@ -20,7 +20,7 @@ We learn interpretable object embeddings using a triplet task. We therefore need
 
 ## Example Data
 
-We provide an example script to download all the things and things+ data. Execute it as 
+We provide an example script to download all the things and things+ data. Simply run
 
 ```bash
 bash scripts/get_things_data.sh
@@ -28,7 +28,7 @@ bash scripts/get_things_data.sh
 
 ## Extracting Triplets
 
-We can pass arguments to the all python scripts using a `config.toml` file. A couple of example config files are provided in `./configs`. To extract triplets from DNN representations we can for example call:
+We can pass arguments to the all python scripts using a `config.toml` file. A couple of example config files are provided in `./configs`. To extract triplets from DNN representations we can for example call. See [tomlparse](https://github.com/florianmahner/tomlparse) for more details on how to use TOML files with the argparse module.
 
 ```bash
 python tripletize.py --config "./configs/tripletize.toml"
