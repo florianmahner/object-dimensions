@@ -18,7 +18,6 @@ from experiments.human_dnn.reconstruction_accuracy import rsm_pred_torch
 
 from object_dimensions.utils import (
     correlate_rsms,
-    correlation_matrix,
     load_sparse_codes,
     load_image_data,
     create_path_from_params,
@@ -840,7 +839,7 @@ def run_embedding_analysis(
 
     """Compare the human and DNN embeddings"""
     dnn_embedding, dnn_var = load_sparse_codes(dnn_path, with_var=True, relu=True)
-    human_embedding, human_var = load_sparse_codes(human_path, with_var=True, relu=True)
+    human_embedding = load_sparse_codes(human_path, with_var=False, relu=True)
 
     # # Load the image data
     plot_dir = create_path_from_params(dnn_path, "analyses", "human_dnn")
@@ -868,9 +867,6 @@ def run_embedding_analysis(
         zip(human_embedding_sorted.T[:50], dnn_embedding_sorted.T[:50])
     ):
         print("Vis dim across modalities for dim {}".format(j), end="\r")
-        # w_b += np.min(w_b)
-        # w_dnn += np.min(w_dnn)
-
         pearson = corrs[j]
 
         w_b /= np.max(w_b)
@@ -886,7 +882,10 @@ def run_embedding_analysis(
         )
 
     dnn_embedding, dnn_var = load_sparse_codes(dnn_path, with_var=True, relu=True)
-    human_embedding, human_var = load_sparse_codes(human_path, with_var=True, relu=True)
+    human_embedding = load_sparse_codes(human_path, with_var=False, relu=True)
+    rsm_human = rsm_pred_torch(human_embedding)
+    rsm_dnn = rsm_pred_torch(dnn_embedding)
+    concepts = pd.read_csv(concept_path, encoding="utf-8", sep="\t")
 
     print("Plot density scatters for each object category")
 
@@ -909,14 +908,6 @@ def run_embedding_analysis(
         mod_1="Human Behavior",
         mod_2="VGG 16",
         top_k=20,
-    )
-
-    plot_most_dissim_dims(
-        plot_dir,
-        mind_machine_corrs,
-        image_filenames,
-        human_embedding_sorted,
-        dnn_embedding_sorted,
     )
     find_rank_transformed_dissimilarities(
         human_embedding_sorted, dnn_embedding_sorted, image_filenames, plot_dir, topk=4

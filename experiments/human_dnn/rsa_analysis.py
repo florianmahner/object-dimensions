@@ -27,11 +27,10 @@ import seaborn as sns
 sns.set(font_scale=1.5)
 sns.set_style("white")
 
+from numba import njit, prange
+
 from tqdm import tqdm
-from itertools import combinations
-from typing import Tuple, Dict, Union
-from scipy.stats import rankdata, pearsonr
-from scipy.spatial.distance import squareform
+from typing import Tuple, Dict
 from tomlparse import argparse
 
 
@@ -603,6 +602,37 @@ def plot_rsm_across_dims(
         print("Corr all {}: {}".format(ndims, corr_all))
 
 
+@njit(parallel=False, fastmath=False)
+def matmul(A: np.ndarray, B: np.ndarray) -> np.ndarray:
+    I, K = A.shape
+    K, J = B.shape
+    C = np.zeros((I, J))
+    for i in prange(I):
+        for j in prange(J):
+            for k in prange(K):
+                C[i, j] += A[i, k] * B[k, j]
+    return C
+
+
+@njit(parallel=False, fastmath=False)
+def rsm_pred_numba(W: np.ndarray, indices: np.ndarray) -> np.ndarray:
+    """convert weight matrix corresponding to the mean of each dim distribution for an object into a RSM"""
+    N = W.shape[0]
+    S = matmul(W, W.T)
+    S_e = np.exp(S)  # exponentiate all elements in the inner product matrix S
+    rsm = np.zeros((N, N))
+    for i in prange(N):
+        for j in prange(i + 1, N):
+            for k in indices:
+                if k != i and k != j:
+                    rsm[i, j] += S_e[i, j] / (S_e[i, j] + S_e[i, k] + S_e[j, k])
+
+    rsm /= 48
+    rsm += rsm.T  # make similarity matrix symmetric
+    np.fill_diagonal(rsm, 1)
+    return rsm
+
+
 if __name__ == "__main__":
     """Compare the human and DNN embeddings"""
     args = parse_args()
@@ -618,7 +648,10 @@ if __name__ == "__main__":
     features = load_deepnet_activations(args.feature_path, center=True, relu=True)
     features = features[indices]
 
-    rsm_truth_dnn = correlation_matrix(dnn_embedding)
+    # rsm_truth_dnn = features @ features.T
+    rsm_truth_dnn = correlation_matrix(features)
+
+    # rsm_truth_dnn = correlation_matrix(features)
     rsm_recon_dnn = rsm_pred_torch(dnn_embedding, return_type="numpy")
     rsm_human = rsm_pred_torch(human_embedding, return_type="numpy")
 
@@ -626,7 +659,7 @@ if __name__ == "__main__":
     corr_gt = correlate_rsms(rsm_truth_dnn, rsm_human, args.corr_type)
 
     corr_dnn_dnn_gt = correlate_rsms(rsm_truth_dnn, rsm_recon_dnn, args.corr_type)
-    print("Correlation between DNN and DNN ground truth: {}".format(corr_dnn_dnn_gt))
+    print("Pearson r between DNN and DNN ground truth: {}".format(corr_dnn_dnn_gt))
 
     for corr, identifier in zip(
         [corr_recon, corr_gt], ["Reconstructed", "Ground Truth"]
@@ -645,6 +678,9 @@ if __name__ == "__main__":
         run_analysis=args.run_analysis,
     )
 
+    # Note here is where we compute the RSMs for the human upper bound based on the similarity
+    # of the concepts
+
     # NOTE -> I have taken the recon DNN embedding here.
     concepts = load_concepts(args.concept_path)
     rsm_human, rsm_truth_dnn = filter_rsm_by_concepts(
@@ -655,8 +691,15 @@ if __name__ == "__main__":
 
     words48 = pd.read_csv(args.words48_path, encoding="utf-8")
 
-    cls_names = sorted(words48["Word"].values)  # we sort alphabetically
-    rsm_human_gt = io.loadmat(args.human_rd_gt)["RDM48_triplet"]
+    cls_names = words48["Word"].values
+    # sort aslphabveticaly
+    sorted_indices = np.argsort(cls_names)
+    cls_names = cls_names[sorted_indices]
+    rdm_human_gt = io.loadmat(args.human_rd_gt)["RDM48_triplet"]
+    rdm_human_gt = rdm_human_gt[np.ix_(sorted_indices, sorted_indices)]
+    rsm_human_gt = 1 - rdm_human_gt
+
+    # rsm_human_gt = rsm_human_gt[sorted_indices, :][:, sorted_indices]
 
     concept_path = "./data/misc/things_concepts.tsv"
     concepts = load_concepts(concept_path)
@@ -664,28 +707,31 @@ if __name__ == "__main__":
     # Concepts has a column of words. i want to find the indices of the words that are in the cls_names
     # and then sort the rsm by those indices.
     indices_48 = []
-    exclude = ["camera", "file"]
-    exclude = []
 
-    for i, row in enumerate(concepts["Word"].values):
-        if row in cls_names:
-            if row not in exclude:
-                indices_48.append(i)
+    def filter_concepts_cls_names(concepts, cls_names):
+        """Filter by cls names"""
+        cls_names = cls_names[(cls_names != "camera") & (cls_names != "file")]
+        cls_names = np.append(cls_names, ["camera1", "file1"])
+        # Replace white space with underscore in cls_names
+        cls_names = [s.replace(" ", "_") for s in cls_names]
+        regex_pattern = "|".join([rf"\b{s}\b" for s in cls_names])
+        filtered_concepts = concepts[
+            concepts["uniqueID"].str.contains(regex_pattern, regex=True)
+        ]
+        indices = filtered_concepts.index
+        return indices
 
-    excluded_indices = [i for i, name in enumerate(cls_names) if name in exclude]
-    # Remove these indices from the rsm rdm_human_gt
-    rsm_human_gt = np.delete(rsm_human_gt, excluded_indices, axis=0)
-    rsm_human_gt = np.delete(rsm_human_gt, excluded_indices, axis=1)
+    indices_48 = filter_concepts_cls_names(concepts, cls_names)
+    rsm_pred_human_filter = rsm_pred_numba(human_embedding, np.array(indices_48))
+    rsm_pred_human_filter = rsm_pred_human_filter[np.ix_(indices_48, indices_48)]
 
-    human_embedding_46 = human_embedding[indices_48]
-    rsm_human_46_recon = rsm_pred_torch(human_embedding_46, return_type="numpy")
-
-    corr_human_human_gt = correlate_rsms(
-        rsm_human_gt, rsm_human_46_recon, args.corr_type
+    corr_human_human_gt, pval = correlate_rsms(
+        rsm_pred_human_filter, rsm_human_gt, args.corr_type, return_pval=True
     )
 
-    # TODO I still have to correct the RSM for noise ceilings! Right now, the bug does not work
-
+    print(
+        f"Pearson r between human and human ground truth: {corr_human_human_gt}, pval {pval:.20f}"
+    )
 
     for rsm, name in zip([rsm_truth_dnn, rsm_human], ["dnn", "human"]):
         fname = os.path.join(plot_dir, f"{name}_rsm.jpg")

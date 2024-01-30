@@ -421,22 +421,10 @@ def main(
             "human_k_dnn_k",
             "human_j_dnn_i",
         ]:
-            # for key in [("human_k_dnn_k")]:
             print("Plotting {}".format(key))
 
             # Here we replace for visualization purposes the behavior with plus images
             image_filenames = [i.replace("01b", "plus") for i in image_filenames]
-
-            # image_filenames, indices = load_image_data(
-            #     img_root,
-            #     filter_plus=True,
-            # )
-
-            # NOTE we needed human behavior ones to make the comparison. for plotting we
-            # now take the plus images
-            # dnn_weights_plus = dnn_weights[indices]
-            # jackknife_dict["dnn_weights"] = dnn_weights_plus
-
             plot_grid(
                 plot_dir,
                 image_filenames,
