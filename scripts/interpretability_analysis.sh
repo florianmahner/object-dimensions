@@ -2,7 +2,6 @@
 
 vis=false
 sparse_codes=false
-big_gan=false
 grad_cam=false
 gpt3=false
 causal=false
@@ -12,7 +11,6 @@ while getopts "vcbgsay" opt; do
   case $opt in
     v) vis=true ;;
     c) sparse_codes=true ;;
-    b) big_gan=true ;;
     g) gpt3=true ;;
     s) grad_cam=true ;;
     a) causal=true ;;
@@ -27,32 +25,32 @@ done
 if $vis; then
     echo "Visualize the image maximally activating embedding dimensions"
     python experiments/visualization/visualize_embedding.py \
-        --config "./configs/interpretability.toml" --section "visualization"   
+        --config "./configs/interpretability.toml" --table "visualization"   
 fi
 
 if $sparse_codes; then
     echo "Learn the sparse code predictions using Ridge / ElasticNet Regression CV"
     sleep 2
     python experiments/sparse_codes/sparse_codes.py \
-        --config "./configs/interpretability.toml" --section "sparse_codes"
+        --config "./configs/interpretability.toml" --table "sparse_codes"
 fi
 
 if $gpt3; then
     echo "Label dimensions using GPT3"
     python experiments/gpt3/extract_feature_norms.py \
-        --config "./configs/interpretability.toml" --section "gpt3"
-fi
-
-if $big_gan; then
-    echo "Generate images from the embedding using BigGAN"
-    python experiments/image_generation/optimize_and_sample.py \
-        --config "./configs/interpretability.toml" --section "big_gan"
+        --config "./configs/interpretability.toml" --table "gpt3"
 fi
 
 if $grad_cam
+# then
+#     echo "Grad CAM"
+#     python experiments/relevance_maps/grad_cam.py \
+#         --config "./configs/interpretability.toml" # does not need a section
+# fi
+
 then
-    echo "Grad CAM"
-    python experiments/relevance_maps/grad_cam.py \
+    echo "Rise"
+    python experiments/relevance_maps/rise.py \
         --config "./configs/interpretability.toml" # does not need a section
 fi
 
@@ -67,5 +65,5 @@ if $style
 then
     echo "Style gan analysis"
     python experiments/image_generation/optimize_and_sample_stylegan.py \
-        --config "./configs/interpretability.toml" --section "act_max"
+        --config "./configs/interpretability.toml" --table "act_max"
 fi

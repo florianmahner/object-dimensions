@@ -288,11 +288,11 @@ def correlation_matrix(F, a_min=-1.0, a_max=1.0):
     corr_mat = cov / denom
     corr_mat = np.nan_to_num(corr_mat, nan=0.0)
     corr_mat = corr_mat.clip(min=a_min, max=a_max)
-
+    corr_mat = fill_diag(corr_mat)
     return corr_mat
 
 
-def correlate_rsms(rsm_a, rsm_b, correlation="pearson"):
+def correlate_rsms(rsm_a, rsm_b, correlation="pearson", return_pval=False):
     assert correlation in [
         "pearson",
         "spearman",
@@ -304,12 +304,11 @@ def correlate_rsms(rsm_a, rsm_b, correlation="pearson"):
     corr_func = (
         scipy.stats.pearsonr if correlation == "pearson" else scipy.stats.spearmanr
     )
-    rho = corr_func(rsm_a[triu_inds], rsm_b[triu_inds])[0]
-
-    return rho
-
-
-import torch
+    rho, p = corr_func(rsm_a[triu_inds], rsm_b[triu_inds])
+    if return_pval:
+        return rho, p
+    else:
+        return rho
 
 
 def fill_diag_torch(tensor):
