@@ -1,0 +1,7 @@
+
+feature_path = "./data/misc/residuals_dependent_dnn.npy"
+out_path = "./data/triplets_dependent_dnn/"
+seed = 0 
+n_samples = 4_120_663
+similarity = "dot"
+behavior_triplet_path = "./data/triplets/behavior/test_10.txt"

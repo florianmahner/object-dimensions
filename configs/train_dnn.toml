@@ -1,0 +1,26 @@
+# Path parameters
+log_path = "./results"
+identifier = "sslab_final"
+
+# General parameters
+triplet_path = "./data/triplets_dependent_human/triplets_4mio"
+modality = "behavior" 
+load_model = true
+fresh = false  
+tensorboard = true
+params_interval = 200
+checkpoint_interval = 20  # we dont save the model in principle!
+device_id = 0
+
+
+# Model parameters
+prior = "sslab"
+init_dim = 300
+n_epochs = 5000
+stability_time = 500
+seed = 0
+batch_size = 256
+non_zero_weights = 5
+mc_samples = 20
+beta = 0.24
+lr = 0.001
