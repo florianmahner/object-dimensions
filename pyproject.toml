@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "object_dimensions"
+version = "0.1.0"
+description = ""
+authors = ["florianmahner <florian.mahner@icloud.com>"]
+readme = "docs/README.md"
+package-mode = true
+
+[tool.poetry.dependencies]
+python = "3.9.12"
+thingsvision = "2.3.17"
+numpy = "^1.26.4"
+scikit-learn = "^1.4.1.post1"
+tomlparse = "^1.0.2"
+tensorboard = "2.9"
+tensorboardx = "^2.6.2.2"
+seaborn = "^0.13.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,16 +1,18 @@
 # Object Dimensions in Humans :elf: and DNNs :spider_web:
 
-Before using this repository, we recommend to install all packages into a conda environment
+Before using this repository, we recommend to install all packages using [poetry](https://python-poetry.org/). Please install poetry first
+
+
 
 ```bash
-conda env create -f environment.yaml python=3.9
+curl -sSL https://install.python-poetry.org | python3 -
 ```
 
-Finally activate the environment and install the package locally
+Then, install the packages using the following command:
 
 ```bash
-conda activate objdim
-pip install -e .
+poetry shell
+poetry install
 ```
 
 
@@ -20,10 +22,10 @@ We learn interpretable object embeddings using a triplet task. We therefore need
 
 ## Example Data
 
-We provide an example script to download all the things and things+ data. Simply run
+We provide makefile to download all the things and things+ data. Simply execute
 
 ```bash
-bash scripts/get_things_data.sh
+make data
 ```
 
 ## Extracting Triplets

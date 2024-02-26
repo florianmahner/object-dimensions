@@ -9,7 +9,6 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import skimage.io as io
 import numpy as np
-import random
 
 from tomlparse import argparse
 from object_dimensions.utils import load_sparse_codes, load_image_data

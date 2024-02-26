@@ -1,26 +1,11 @@
 # TOML file to extract triplets from DNN representations
-
 seed = 0 
-# n_samples = 4_120_663
-n_samples = 20_000_000
-adaptive = false
 k = 3
-train_fraction = 0.9
-# out_path = "./data/triplets_dependent_human_residuals"
 
-# out_path = "./data/triplets/resnet50/avgpool"
-# out_path = "./data/triplets/barlowtwins-rn50/avgpool"
-# feature_path = "./data/triplets/barlowtwins-rn50/avgpool/features.npy"
-
-# feature_path = "./data/triplets/resnet50/avgpool/features.npy"
-
-# triplet_path = "./data/triplets/behavior/test_10.txt"
-
-
-# out_path = "./data/triplets/VGG16_ecoset/classifier.3"
-# feature_path = "./data/triplets/VGG16_ecoset/classifier.3/features.npy"
-
-
-out_path = "./data/triplets/vit_b_32/encoder.ln"
-feature_path = "./data/triplets/vit_b_32/encoder.ln/features.npy"
+adaptive = false
 similarity = "dot"
+train_fraction = 0.9
+n_samples = 20_000_000
+
+out_path = "./data/Imagenet1k/densenet/global_pool/"
+feature_path = "./data/triplets/Imagenet1k/densenet/global_pool/features.npy"
