@@ -2,17 +2,20 @@
 # -*- coding: utf-8 -*-
 
 import os
-from tomlparse import argparse
-import itertools
-import random
-import os
 import re
-from dataclasses import dataclass
-from typing import Union, Callable, Optional, Iterable
+import random
+import itertools
+
 import numpy as np
-from collections import Counter
-from scipy.spatial.distance import cdist
+
 from pathlib import Path
+from tomlparse import argparse
+from collections import Counter
+from dataclasses import dataclass
+from scipy.spatial.distance import cdist
+from typing import Union, Callable, Optional, Iterable
+
+Array = np.ndarray
 
 
 def parse_args():
@@ -76,7 +79,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def cosine_matrix(X: np.ndarray, a_min: float = -1.0, a_max: float = 1.0):
+def cosine_matrix(X: Array, a_min: float = -1.0, a_max: float = 1.0):
     """Compute cosine-similarity matrix."""
     num = X @ X.T
     l2_norms = np.linalg.norm(X, axis=1)
@@ -85,22 +88,20 @@ def cosine_matrix(X: np.ndarray, a_min: float = -1.0, a_max: float = 1.0):
     return S
 
 
-def dot_matrix(X: np.ndarray) -> np.ndarray:
+def dot_matrix(X: Array) -> Array:
     """Compute dot-product matrix."""
     S = X @ X.T
     return S
 
 
-def euclidean_matrix(X: np.ndarray) -> np.ndarray:
+def euclidean_matrix(X: Array) -> Array:
     """Compute euclidean similarity matrix."""
     D = cdist(X, X, "euclidean")
     S = 1 / (1 + D)
     return S
 
 
-def get_similarity(
-    X: np.ndarray, similarity: Union[str, Callable] = "dot"
-) -> np.ndarray:
+def get_similarity(X: Array, similarity: Union[str, Callable] = "dot") -> Array:
     similarity_functions = {
         "cosine": cosine_matrix,
         "dot": dot_matrix,
@@ -119,7 +120,7 @@ def get_similarity(
     return S
 
 
-def load_domain(path: str) -> np.ndarray:
+def load_domain(path: str) -> Array:
     """Load features from a file can either be a .npy or .txt file."""
     search = re.search(r"(npy|txt)$", path)
     if not os.path.exists(path):
@@ -164,17 +165,17 @@ class Sampler(object):
         self.S = get_similarity(self.X, similarity=self.similarity)
         self.n_objects, self.n_features = self.X.shape
 
-    def default_transforms(self, X: np.ndarray) -> np.ndarray:
+    def default_transforms(self, X: Array) -> Array:
         X = np.maximum(0, X)
         nan_indices = np.isnan(X[:, :]).any(axis=1)
         X = X[~nan_indices]
         return X
 
-    def softmax(self, z: np.ndarray) -> np.ndarray:
+    def softmax(self, z: Array) -> Array:
         proba = np.exp(z) / np.sum(np.exp(z))
         return proba
 
-    def get_choice(self, S: np.ndarray, triplet: np.ndarray) -> np.ndarray:
+    def get_choice(self, S: Array, triplet: Array) -> Array:
         combs = list(itertools.combinations(triplet, 2))
         sims = [S[comb[0], comb[1]] for comb in combs]
         positive = combs[np.argmax(sims)]
@@ -183,14 +184,14 @@ class Sampler(object):
 
         return choice
 
-    def log_softmax_scaled(self, X: np.ndarray, const: float = 0.0) -> np.ndarray:
+    def log_softmax_scaled(self, X: Array, const: float = 0.0) -> Array:
         """see https://www.xarg.org/2016/06/the-log-sum-exp-trick-in-machine-learning/"""
         X = X - const
         scaled_proba = np.exp(X) / np.sum(np.exp(X))
         scaled_log_proba = const + np.log(scaled_proba)
         return scaled_log_proba
 
-    def find_triplet_argmax(self, S: np.ndarray, triplet: np.ndarray) -> np.ndarray:
+    def find_triplet_argmax(self, S: Array, triplet: Array) -> Array:
         combs = list(itertools.combinations(triplet, 2))
         sims = [S[comb[0], comb[1]] for comb in combs]
         positive = combs[np.argmax(sims)]
@@ -198,7 +199,7 @@ class Sampler(object):
         choice = np.hstack((positive, ooo))
         return choice
 
-    def select_odd_one_outs(self, triplets: Iterable) -> np.ndarray:
+    def select_odd_one_outs(self, triplets: Iterable) -> Array:
         ooo = np.zeros((self.n_samples, self.k), dtype=int)
         for i, triplet in enumerate(triplets):
             ooo[i] = self.find_triplet_argmax(self.S, triplet)
@@ -259,7 +260,7 @@ class Sampler(object):
         )  # sorting prevents adding duplicates!
         return tuple(pool[i] for i in indices)
 
-    def sample_random(self) -> np.ndarray:
+    def sample_random(self) -> Array:
         """Sample triplets based on the similarity matrix."""
         unique_triplets = set()
         items = list(range(self.n_objects))
@@ -273,7 +274,7 @@ class Sampler(object):
         ooo_choices = self.select_odd_one_outs(unique_triplets)
         return ooo_choices
 
-    def sample_pairs(self) -> np.ndarray:
+    def sample_pairs(self) -> Array:
         combs = np.array(list(itertools.combinations(range(self.n_objects), self.k)))
         random_sample = combs[
             np.random.choice(
@@ -282,7 +283,7 @@ class Sampler(object):
         ]
         return random_sample
 
-    def train_test_split(self, ooo_choices):
+    def train_test_split(self, ooo_choices: Union[list, Array]):
         """Split triplet data into train and test splits."""
         random.seed(0)
         random.shuffle(ooo_choices)
