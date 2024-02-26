@@ -23,6 +23,7 @@ from object_dimensions.utils import (
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+from scipy.stats import rankdata
 
 sns.set(font_scale=1.5)
 sns.set_style("white")
@@ -722,6 +723,8 @@ if __name__ == "__main__":
         return indices
 
     indices_48 = filter_concepts_cls_names(concepts, cls_names)
+
+    breakpoint()
     rsm_pred_human_filter = rsm_pred_numba(human_embedding, np.array(indices_48))
     rsm_pred_human_filter = rsm_pred_human_filter[np.ix_(indices_48, indices_48)]
 
