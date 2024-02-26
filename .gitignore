@@ -2,6 +2,7 @@ data
 results
 stylegan_xl
 .vscode
+trash
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
