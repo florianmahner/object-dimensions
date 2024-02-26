@@ -54,6 +54,7 @@ def extract_features(
     from thingsvision.core.extraction import center_features
 
     extractor = load_model(model_name)
+
     dataset = ImageDataset(
         root=img_root,
         out_path=out_path,
@@ -61,15 +62,6 @@ def extract_features(
         backend=extractor.get_backend(),
     )
     assert len(dataset) > 0, "Dataset from path {} is empty!".format(img_root)
-
-    filenames = dataset.images
-    with open(out_path + "/filenames.txt", "w") as f:
-        f.write("\n".join(filenames))
-
-    # get a subset of the dataset
-    from torch.utils.data import Subset
-
-    dataset = Subset(dataset, range(100))
 
     batches = DataLoader(
         dataset=dataset, batch_size=batch_size, backend=extractor.get_backend()
@@ -81,6 +73,7 @@ def extract_features(
 
     if model_name in ["clip", "OpenCLIP"]:
         features = center_features(features)
+
     save_features(features, out_path, file_format="npy")
 
 
@@ -136,7 +129,6 @@ if __name__ == "__main__":
     args = parse_args()
     extract_features(
         img_root=args.img_root,
-        out_path=args.out_path,
         model_name=args.model_name,
         module_name=args.module_name,
         batch_size=args.batch_size,
