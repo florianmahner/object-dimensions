@@ -58,39 +58,35 @@ def compare_modalities(weights_vice, weights_spose, duplicates=False, not_sorted
         return mod1_dims_sorted, mod2_dims_sorted, corrs
 
 
-path_vice = (
-    "./results/behavior/variational/4.12mio/sslab/150/256/1.0/21/params/parameters.npz"
-)
-path_spose_martin = "./data/misc/spose_embedding_66d_sorted.txt"
-path_spose = "./results/behavior/deterministic/4.12mio/sslab/300/256/0.0037/0.0037/1/params/parameters.npz"
+if __name__ == "__main__":
+    path_vice = "./results/behavior/variational/4.12mio/sslab/150/256/1.0/21/params/parameters.npz"
+    path_spose_martin = "./data/misc/spose_embedding_66d_sorted.txt"
+    path_spose = "./results/behavior/deterministic/4.12mio/sslab/300/256/0.0037/0.0037/1/params/parameters.npz"
 
-weights_spose_martin = load_sparse_codes(path_spose_martin)
-weights_vice = load_sparse_codes(path_vice)
-weights_spose = load_sparse_codes(path_spose)
+    weights_spose_martin = load_sparse_codes(path_spose_martin)
+    weights_vice = load_sparse_codes(path_vice)
+    weights_spose = load_sparse_codes(path_spose)
 
+    # Compare the modalities
+    # mod1_dims_sorted, mod2_dims_sorted, corrs = compare_modalities(
+    #     weights_spose_martin, weights_spose, duplicates=False, not_sorted=False
+    #     )
 
-# Compare the modalities
-# mod1_dims_sorted, mod2_dims_sorted, corrs = compare_modalities(
-#     weights_spose_martin, weights_spose, duplicates=False, not_sorted=False
-#     )
+    # # Compare the modalities
+    mod1_dims_sorted, mod2_dims_sorted, corrs = compare_modalities(
+        weights_spose_martin, weights_vice, duplicates=False, not_sorted=False
+    )
 
-# # Compare the modalities
-mod1_dims_sorted, mod2_dims_sorted, corrs = compare_modalities(
-    weights_spose_martin, weights_vice, duplicates=False, not_sorted=False
-)
+    # Plot the correlations using seaborn
+    fig, ax = plt.subplots()
+    sns.lineplot(x=range(len(mod1_dims_sorted)), y=corrs, ax=ax)
+    ax.set_xlabel("Dimension")
+    ax.set_ylabel("Pearson r")
+    ax.set_title("Correlation between VICE and VICE (Lukas)")
+    # ax.set_title("Correlation between SPoSE and SPOSE (Martin's embedding)")
 
-# Plot the correlations using seaborn
-fig, ax = plt.subplots()
-sns.lineplot(x=range(len(mod1_dims_sorted)), y=corrs, ax=ax)
-ax.set_xlabel("Dimension")
-ax.set_ylabel("Pearson r")
-ax.set_title("Correlation between VICE and VICE (Lukas)")
-# ax.set_title("Correlation between SPoSE and SPOSE (Martin's embedding)")
-
-# fig.savefig("./results/plots/spose_spose_correlations.png", dpi=300, bbox_inches="tight")
-fig.savefig("./results/plots/vice_spose_correlations.png", dpi=300, bbox_inches="tight")
-
-
-labels = np.loadtxt("./data/misc/labels_short.txt", dtype=str, delimiter=",")
-
-breakpoint()
+    # fig.savefig("./results/plots/spose_spose_correlations.png", dpi=300, bbox_inches="tight")
+    fig.savefig(
+        "./results/plots/vice_spose_correlations.png", dpi=300, bbox_inches="tight"
+    )
+    labels = np.loadtxt("./data/misc/labels_short.txt", dtype=str, delimiter=",")
