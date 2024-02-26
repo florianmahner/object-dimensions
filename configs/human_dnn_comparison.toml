@@ -4,7 +4,7 @@ dnn_path = "./results/dnn/variational/vgg16_bn/classifier.3/20.mio/sslab/150/256
 
 triplet_path = "./data/triplets/behavior"
 img_root = "./data/image_data/images12_plus"
-feature_path = "./data/triplets/vgg16_bn/classifier.3/"
+feature_path = "./data/triplets/Imagenet1k/vgg16_bn/classifier.3/"
 
 [jackknife]
 run_jackknife = false
