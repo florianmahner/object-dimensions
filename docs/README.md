@@ -2,17 +2,16 @@
 
 Before using this repository, we recommend to install all packages using [poetry](https://python-poetry.org/). Please install poetry first
 
-
-
 ```bash
 curl -sSL https://install.python-poetry.org | python3 -
 ```
 
-Then, install the packages using the following command:
-
+Then, navigate to the project root and install the packages using poetry
 ```bash
-poetry shell
+git clone git@github.com:florianmahner/object-dimensions.git
+cd object-dimensions
 poetry install
+poetry shell
 ```
 
 
