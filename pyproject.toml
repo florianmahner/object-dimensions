@@ -4,7 +4,6 @@ version = "0.1.0"
 description = ""
 authors = ["florianmahner <florian.mahner@icloud.com>"]
 readme = "docs/README.md"
-package-mode = true
 
 [tool.poetry.dependencies]
 python = "3.9.12"
