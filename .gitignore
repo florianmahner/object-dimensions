@@ -3,6 +3,9 @@ results
 stylegan_xl
 .vscode
 trash
+experiments/flask_experiment/static
+experiments/flask_experiment/session
+scripts/slurm
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
