@@ -11,7 +11,7 @@ from object_dimensions.utils import (
     load_image_data,
 )
 from object_dimensions.latent_predictor import LatentPredictor
-from experiments.visualization.visualize_embedding import plot_dim_3x2
+from experiments.visualize_embedding import plot_dim_3x2
 from tomlparse import argparse
 
 import matplotlib

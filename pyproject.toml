@@ -14,6 +14,9 @@ tomlparse = "^1.0.2"
 tensorboard = "2.9"
 tensorboardx = "^2.6.2.2"
 seaborn = "^0.13.2"
+textblob = "^0.18.0.post0"
+wordcloud = "^1.9.3"
+protobuf = "3.20.0"
 
 
 [build-system]

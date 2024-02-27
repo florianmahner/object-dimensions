@@ -129,6 +129,7 @@ if __name__ == "__main__":
     args = parse_args()
     extract_features(
         img_root=args.img_root,
+        out_path=args.out_path,
         model_name=args.model_name,
         module_name=args.module_name,
         batch_size=args.batch_size,
