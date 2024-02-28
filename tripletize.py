@@ -286,7 +286,7 @@ class Sampler(object):
     def train_test_split(self, ooo_choices: Union[list, Array]):
         """Split triplet data into train and test splits."""
         random.seed(0)
-        random.shuffle(ooo_choices)
+        np.random.shuffle(ooo_choices)
         N = ooo_choices.shape[0]
         frac = int(N * self.train_fraction)
         train_split = ooo_choices[:frac]
