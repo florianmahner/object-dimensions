@@ -1,6 +1,6 @@
 # Object Dimensions in Humans :elf: and DNNs :spider_web:
 
-Before using this repository, we recommend to install all packages using [poetry](https://python-poetry.org/). Please install poetry first adn add it to your path
+Before using this repository, we recommend to install all packages using [poetry](https://python-poetry.org/). Please install poetry first and add it to your path
 
 ```bash
 curl -sSL https://install.python-poetry.org | python3 -
