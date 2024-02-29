@@ -5,7 +5,8 @@ k = 3
 adaptive = false
 similarity = "dot"
 train_fraction = 0.9
-n_samples = 20_000_000
+n_samples = 100_000
 
-out_path = "./data/Imagenet1k/densenet/global_pool/"
+# out_path = "./data/Imagenet1k/densenet/global_pool/"
+out_path = "./data/test_triplets"
 feature_path = "./data/triplets/Imagenet1k/densenet/global_pool/features.npy"

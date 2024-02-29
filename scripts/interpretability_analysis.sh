@@ -36,9 +36,9 @@ while getopts "vcbgsay" opt; do
 done
 
 # Execute scripts based on flags
-$vis && execute_script "visualize_embedding.py" "visualization"
+$vis && execute_script "visualization.py" "visualization"
 $sparse_codes && execute_script "sparse_codes.py" "sparse_codes"
 $gpt3 && execute_script "extract_feature_norms.py" "gpt3"
-$grad_cam && execute_script "grad_cam.py"
+$grad_cam && execute_script "rise.py"
 $causal && execute_script "causal_comparison.py"
 $style && execute_script "optimize_and_sample_stylegan.py" "act_max"
