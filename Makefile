@@ -1,8 +1,7 @@
-.PHONY: data
-.PHONY: stylegan
+.PHONY: data stylegan
 
 data:
-    bash scripts/get_things_data.sh
+	@python scripts/get_things_data.py
 
 stylegan:
-	python scripts/get_stylegan_xl.sh
+	@bash scripts/get_stylegan_xl.sh
