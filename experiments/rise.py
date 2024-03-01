@@ -15,7 +15,6 @@ from skimage.transform import resize
 from tomlparse import argparse
 
 from object_dimensions.utils import (
-    img_to_uint8,
     load_image_data,
     load_sparse_codes,
 )
@@ -24,24 +23,18 @@ import random
 import torch
 import os
 import pickle
-import cv2
 import numpy as np
-import matplotlib.pyplot as plt
 from thingsvision import get_extractor
-from collections import defaultdict, Counter
-import torchvision.transforms as T
-import torch.nn.functional as F
+from collections import defaultdict
 from PIL import Image
 from tomlparse import argparse
-from experiments.visualization import plot_dim_3x3
+
 
 
 QUERIES = [
     ("wine_01b", [2, 56, 22, 35, 15, 51]),
     ("flashlight_01b", [25, 24, 44, 35, 51]),
     ("basketball_plus", [37, 28, 39]),
-    # (list(range(71)), [None]),
-    # ([50], [None])
 ]
 
 
@@ -185,7 +178,7 @@ class MaskLoader:
 
 
 def run():
-    device = f"cuda" if torch.cuda.is_available() else "cpu"
+    device = f"cuda:0" if torch.cuda.is_available() else "cpu"
 
     args = parse_args()
     np.random.seed(args.seed)
@@ -217,10 +210,9 @@ def run():
 
     explainer = RISE(predictor, input_size, n_cls, gpu_batch)
 
-    s = 7
+    s = 8
     p1 = 0.1
-    # combinations = [(x, y) for x in s for y in p1]
-    n_masks = 40000
+    n_masks = 40_000
 
     maskspath = f"./data/masks/mask_{n_masks}_{s}_{p1}.hdf5"
     os.makedirs(os.path.dirname(maskspath), exist_ok=True)
@@ -231,15 +223,9 @@ def run():
         explainer.load_masks(maskspath)
         print("Masks are loaded.")
 
-    object_names = images_plus
-    for name in object_names:
-
+    for img_idx, img in enumerate(images_plus):
         save_dict = defaultdict(list)
-
-        img_idx = [i for i, img in enumerate(images_plus) if img in name][0]
-        name = Path(name).stem
-
-        img = images[img_idx]
+        name = Path(img).stem
         img = Image.open(img)
 
         tsfm = predictor.transforms
@@ -252,16 +238,14 @@ def run():
 
         img_vis = np.clip(img_vis, 0, 1)
 
-        # Get the saliency map
         saliency = explainer(img).cpu().numpy()
         saliency = saliency.squeeze()
-
-        # Only keep the top 32 dimensions
         latent_dims = np.argsort(-sparse_codes[img_idx])[:32]
         saliency = saliency[latent_dims]
 
         save_dict["img"] = img_vis
         save_dict["saliencies"] = saliency
+        save_dict["dim"] = latent_dims  
 
         save_path = os.path.join(base_path, "analyses", "rise", f"{name}_rise.pkl")
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
