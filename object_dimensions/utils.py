@@ -384,3 +384,7 @@ def log_normal_pdf(X, loc, scale):
     pdf = const * torch.exp(numerator / denominator)
 
     return pdf
+
+
+
+# ------- Helper Functions for RSA  ------- #

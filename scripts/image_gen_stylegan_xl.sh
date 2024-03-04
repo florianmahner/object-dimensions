@@ -18,7 +18,7 @@ dim=(1)
 alpha=1.0
 beta=1.0
 
-python experiments/image_generation/optimize_and_sample_stylegan.py \
+python experiments/optimize_and_sample_stylegan.py \
         --embedding_path $embedding_path \
         --model_name $model_name \
         --module_name $module_name \

@@ -9,7 +9,7 @@ import pickle
 import random
 import scipy.io as io
 import os
-from experiments.human_dnn.reconstruction_accuracy import rsm_pred_torch
+from experiments.human_dnn.reconstruct_rsm import rsm_pred_torch
 from experiments.human_dnn.compare_modalities import correlate_modalities
 from object_dimensions.utils import (
     correlate_rsms,
@@ -26,7 +26,7 @@ import seaborn as sns
 from scipy.stats import rankdata
 
 sns.set(font_scale=1.5)
-sns.set_style("white")
+sns.set_style("ticks")
 
 from numba import njit, prange
 
@@ -218,7 +218,7 @@ def compute_histogram_of_fits(
     # Plot the histogram of correlations
     fig, ax = plt.subplots(1, figsize=(6, 4))
     sns.histplot(corrs, ax=ax, bins=50)
-    sns.despine()
+    sns.despine(offset=10)
     ax.set_xlabel("Pearson r between RSMs")
     ax.set_ylabel("Count")
 
@@ -353,9 +353,10 @@ def plot_rsa_across_dims(
         "hue": "Type",
         "style": "Type",
     }
+    
+    # Replace tick label 0 with 1
     xticks = [10, 20, 30, 40, 50, 60]
     xticklabels = [str(x) for x in xticks]
-
     # Make all figures at once
     fnames = [
         "rsa_across_dims_dnn",
@@ -373,7 +374,7 @@ def plot_rsa_across_dims(
         ax.set_xticks(xticks)
         ax.set_xticklabels(xticklabels)
         ax.set_ylabel("Pearson r to RSM")
-        sns.despine()
+        sns.despine(offset=10)
         for ext in ["png", "pdf"]:
             fig.savefig(
                 os.path.join(
@@ -404,7 +405,7 @@ def plot_rsa_across_dims(
         color=color,
         lw=1,
     )
-    sns.despine()
+    sns.despine(offset=10)
     # ax.set_xlabel("Cumulative Human Dimension")
     # ax.set_ylabel("Pearson's r to DNN RSM")
     ax.set_xlabel("Cumulative DNN Dimension")
@@ -426,7 +427,7 @@ def plot_rsa_across_dims(
     ax.axvline(pearson_95_idx, ls="--", color="black", lw=1, label=r"95% $R^2$")
 
     print("Number of dimensions need to explain 95% var", pearson_95_idx)
-    ax.legend(loc="best", frameon=True)
+    ax.legend(loc="best", frameon=False)
 
     # fig.legend()
 
@@ -723,8 +724,6 @@ if __name__ == "__main__":
         return indices
 
     indices_48 = filter_concepts_cls_names(concepts, cls_names)
-
-    breakpoint()
     rsm_pred_human_filter = rsm_pred_numba(human_embedding, np.array(indices_48))
     rsm_pred_human_filter = rsm_pred_human_filter[np.ix_(indices_48, indices_48)]
 

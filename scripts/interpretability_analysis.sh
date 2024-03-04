@@ -39,6 +39,6 @@ done
 $vis && execute_script "visualization.py" "visualization"
 $sparse_codes && execute_script "sparse_codes.py" "sparse_codes"
 $gpt3 && execute_script "extract_feature_norms.py" "gpt3"
-$grad_cam && execute_script "rise.py"
+$grad_cam && execute_script "grad_cam.py"
 $causal && execute_script "causal_comparison.py"
 $style && execute_script "optimize_and_sample_stylegan.py" "act_max"

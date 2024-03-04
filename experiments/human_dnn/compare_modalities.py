@@ -14,7 +14,7 @@ from tomlparse import argparse
 import skimage.io as io
 
 
-from experiments.human_dnn.reconstruction_accuracy import rsm_pred_torch
+from experiments.human_dnn.reconstruct_rsm import rsm_pred_torch
 
 from object_dimensions.utils import (
     correlate_rsms,
@@ -29,8 +29,10 @@ import matplotlib
 matplotlib.rcParams["font.sans-serif"] = "Arial"
 matplotlib.rcParams["font.family"] = "sans-serif"
 
+
 sns.set(font_scale=1.5)
-sns.set_style("white")
+sns.set_style("ticks")
+
 
 
 def parse_args():
@@ -463,9 +465,6 @@ def plot_mind_machine_corrs(
         var_name="Pairing",
         value_name="Highest Pearson's r with DNN",
     )
-
-    # Set the plot context and style
-
     # Create the figure
     fig, ax = plt.subplots(figsize=(6, 4))
 
@@ -485,8 +484,9 @@ def plot_mind_machine_corrs(
         ax=ax,
     )
 
-    sns.despine()
+    sns.despine(offset=10)
 
+    # Replace tick label 0 with 1
     xticks = [10, 20, 30, 40, 50, 60]
     xticklabels = [str(x) for x in xticks]
     ax.set_xticks(xticks)
@@ -615,10 +615,10 @@ def visualize_dims_across_modalities(
         data.loc[top_k_common, "colors"] = 5
 
     # Make an alphas array where all grey colors are 0.2 and all others are 1
-    alphas = np.where(data["colors"] == 0, 0.2, 1)
+    alphas = np.where(data["colors"] == 0, 0.2, 0.8)
     data["alphas"] = alphas
 
-    fig = plt.figure(figsize=(6, 4))
+    fig, ax = plt.subplots(1,figsize=(6, 4))
     palette = sns.color_palette()
 
     blue, orange, green, red = palette[:4]
@@ -636,16 +636,25 @@ def visualize_dims_across_modalities(
     corrs = pearsonr(w_mod1, w_mod2)[0]
     corr_str = r"$r$" + " = " + str(corrs.round(2))
 
-    ax = sns.scatterplot(
-        data=data,
-        x="Human",
-        y="DNN",
-        hue="colors",
-        alpha=alphas,
-        palette=palette,
-        s=100,
+    # ax = sns.scatterplot(
+    #     data=data,
+    #     x="Human",
+    #     y="DNN",
+    #     hue="colors",
+    #     palette=palette,
+    #     s=100,
+    # )
+    scatter = ax.scatter(
+        data['Human'], data['DNN'], 
+        c=data['colors'].map(palette),  # Map your colors to the specified palette
+        alpha=data['alphas'],  # Use the alphas column for individual alpha values
+        s=100
     )
-    sns.despine(offset=10)
+
+
+
+
+    sns.despine(offset=10, ax=ax)
 
     ax.set_xlabel("Human Behavior")
     ax.set_ylabel("DNN")
@@ -655,6 +664,13 @@ def visualize_dims_across_modalities(
     ax.annotate(corr_str, (loc_x, loc_y))
     ax.legend([], [], frameon=False)
 
+    # Make minot ticks
+    # from matplotlib.ticker import AutoMinorLocator
+    # ax.xaxis.set_minor_locator(AutoMinorLocator())
+    # ax.yaxis.set_minor_locator(AutoMinorLocator(2))
+    # ax.tick_params(which='minor', length=4, color='b')  # Adjust length and color as needed
+
+
     fig.savefig(
         os.path.join(
             path,
@@ -663,6 +679,7 @@ def visualize_dims_across_modalities(
         bbox_inches="tight",
         pad_inches=0.05,
     )
+
 
     plt.close(fig)
 
@@ -836,8 +853,6 @@ def run_embedding_analysis(
     difference="absolute",
 ):
     """Compare human and DNN performance on the same task."""
-
-    """Compare the human and DNN embeddings"""
     dnn_embedding, dnn_var = load_sparse_codes(dnn_path, with_var=True, relu=True)
     human_embedding = load_sparse_codes(human_path, with_var=False, relu=True)
 
@@ -880,6 +895,8 @@ def run_embedding_analysis(
             r=pearson,
             difference=difference,
         )
+
+    
 
     dnn_embedding, dnn_var = load_sparse_codes(dnn_path, with_var=True, relu=True)
     human_embedding = load_sparse_codes(human_path, with_var=False, relu=True)

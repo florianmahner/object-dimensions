@@ -3,6 +3,7 @@
 
 import random
 import torch
+from tqdm import tqdm
 import os
 import pickle
 import cv2
@@ -27,10 +28,11 @@ from object_dimensions.latent_predictor import LatentPredictor
 QUERIES = [
     # ("wine_01b", [2, 56, 22, 35, 15, 51]),
     # ("flashlight_01b", [25, 24, 44, 35, 51]),
-    # ("basketball_plus", [37, 28, 39]),
+    ("baton1_plus", [2, 50, 1, 47, 14]),
+    ("basketball_plus", [37, 28, 39]),
     (list(range(71)), [None]),
 ]
-
+ 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Searchlight analysis for one image.")
@@ -106,36 +108,19 @@ def search_image_spaces_name(
     image_name,
     latent_dims=[1, 2, 3],
 ):
-    # out_path = os.path.join(base_path, "analyses", "grad_cam", "{}".format(image_name))
     out_path = os.path.join(base_path, "analyses", "grad_cam")
-
     if not os.path.exists(out_path):
         print("\n...Creating directories.\n")
         os.makedirs(out_path)
 
     img = Image.open(dataset[img_idx])
-
     reshape = T.Compose([T.Resize(800), T.CenterCrop(700)])
     img_vis = reshape(img)
     img_vis = np.array(img_vis)
 
-    # fig, ax = plt.subplots(frameon=False, dpi=300)
-    # ax.imshow(img_vis)
-    # ax.axis("off")
-    # path = os.path.join(out_path, "img.pdf")
-    # fig.savefig(
-    #     path,
-    #     bbox_inches="tight",
-    #     pad_inches=0,
-    # )
-
     save_dict = {"img": img_vis, "dim": latent_dims, "heatmaps": [], "superimposed": []}
 
-    for i, dim in enumerate(latent_dims):
-        print(
-            f"\n...Currently performing grad-cam analysis for latent dimension {dim}."
-        )
-
+    for dim in latent_dims:
         heatmap_grads = find_gradient_heatmap_(img, regression_predictor, dim)
         save_dict["heatmaps"].append(heatmap_grads)
         heatmap = heatmap_grads
@@ -147,33 +132,8 @@ def search_image_spaces_name(
         cmap = cv2.COLORMAP_JET
         heatmap_img = cv2.applyColorMap(heatmap, cmap)
         super_imposed_img = cv2.addWeighted(heatmap_img, 0.5, img_vis, 0.5, 0)
-
-        # fig, ax = plt.subplots(frameon=False, dpi=300)
-        # ax.imshow(heatmap, cmap="jet")
-        # ax.axis("off")
-        # path = os.path.join(out_path, "./{}_heatmap{}")
-        # fig.savefig(path.format(dim, ".pdf"), bbox_inches="tight", pad_inches=0)
-        # plt.close(fig)
-
         save_dict["heatmaps"].append(heatmap)
         save_dict["superimposed"].append(super_imposed_img)
-
-        # fig, ax = plt.subplots(frameon=False, dpi=300)
-        # ax.imshow(super_imposed_img)
-        # ax.axis("off")
-        # path = os.path.join(out_path, "./top_{}_dim_{}_cam_superimposed{}")
-        # for ext in [".pdf"]:
-        #     plt.savefig(path.format(i, dim, ext), bbox_inches="tight", pad_inches=0)
-
-        # plt.close(fig)
-
-        # images_plus = images[indices_plus]
-        # sparse_codes_plus = sparse_codes[indices_plus]
-        # fig_img = plot_dim_3x3(images_plus, sparse_codes_plus, dim, top_k=10)
-        # for ext in ["pdf"]:
-        #     fname = os.path.join(out_path, f"top_{i}_dim_{dim}_topk_plus.{ext}")
-        #     fig_img.savefig(fname, bbox_inches="tight", pad_inches=0, dpi=300)
-        # plt.close(fig_img)
 
     # store save dict as pickle file in directory
     with open(os.path.join(out_path, f"{image_name}.pkl"), "wb") as f:
@@ -200,10 +160,6 @@ def search_image_spaces_dim(
         img = Image.open(dataset[img_idx])
         path = Path(dataset[img_idx])
         img_name = path.stem
-        # img_name = os.path.basename(dataset[img_idx])
-
-        # img_name = os.path.splitext(img_name)[0].split("_")[0]
-
         reshape = T.Compose([T.Resize(800), T.CenterCrop(700)])
         img_vis = reshape(img)
         img_vis = np.array(img_vis)
@@ -295,7 +251,9 @@ if __name__ == "__main__":
     images_plus, indices_plus = load_image_data(args.img_root, filter_plus=True)
     images, indices = load_image_data(args.img_root, filter_plus=False)
     sparse_codes = load_sparse_codes(args.embedding_path)
+    sparse_codes_plus = sparse_codes[indices_plus]
     sparse_codes = sparse_codes[indices]
+
 
     for query, latent_dims in QUERIES:
         if isinstance(query, str):
@@ -314,12 +272,12 @@ if __name__ == "__main__":
 
         elif isinstance(query, list):
             object_names = images_plus
-            for name in object_names:
+            for name in tqdm(object_names):
+                
 
                 img_idx = [i for i, img in enumerate(images_plus) if img in name][0]
                 name = os.path.basename(name)
-
-                latent_dims = np.argsort(-sparse_codes[img_idx])[:32]
+                latent_dims = np.argsort(-sparse_codes_plus[img_idx])[:32]
 
                 search_image_spaces_name(
                     base_path,
@@ -329,16 +287,3 @@ if __name__ == "__main__":
                     name,
                     latent_dims,
                 )
-
-            # for latent_dim in query:
-            #     # Get top images for latent dim
-            #     img_indices = np.argsort(-sparse_codes[:, latent_dim])[:16]
-
-            #     search_image_spaces_dim(
-            #         base_path,
-            #         predictor,
-            #         images,
-            #         img_indices,
-            #         query,
-            #         latent_dim,
-            #     )

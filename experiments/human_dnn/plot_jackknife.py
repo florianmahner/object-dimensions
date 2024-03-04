@@ -4,16 +4,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-import json
 import seaborn as sns
 import matplotlib.gridspec as gridspec
-from PIL import Image
 
 from scipy.io import loadmat
 from matplotlib.colors import ListedColormap
 import matplotlib as mpl
 
-import plotly.express as px
 import pandas as pd
 import skimage.io as io
 
