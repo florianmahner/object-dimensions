@@ -38,7 +38,7 @@ def parse_args():
 CAUSAL_DIMS = dict()
 CAUSAL_DIMS["toilet.jpg"] = {
     "increase": 25,
-    "decrease": 10,
+    "decrease": 10, 
     "relevant_control": 13,
     "irrelevant_control": 8,
 }
@@ -156,13 +156,14 @@ def run_causal_comparison(embedding_path, img_root):
             ax.patches[dim].set_edgecolor(custom_colors[i])
 
 
+        sns.despine(offset=10)
         ax.set_xlabel("Dimension Number")        
         ax.set_ylabel("Predicted Difference")
         xticks = [10, 20, 30, 40, 50, 60]
         xticklabels = [str(x) for x in xticks]
         ax.set_xticks(xticks)
         ax.set_xticklabels(xticklabels)
-        ax.set_xlim(-3,72)
+        # ax.set_xlim(-3,72)
 
         fig.savefig(
             os.path.join(out_path, img_name.split(".")[0] + "_histogram.pdf"),

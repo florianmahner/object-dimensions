@@ -170,8 +170,7 @@ def plot_behavior(images, codes, dim, top_k=6):
         end_idx = min(n, middle_idx + ws // 2)  # for the highest 20 percentile
         end_idx = max(end_idx, ws)
         indices = list(range(start_idx, end_idx))
-        # random.seed(0)
-        # random.shuffle(indices)
+
         indices = indices[:12]
         weight_percentile = weight_indices[indices]
         for j, sample in enumerate(weight_percentile):

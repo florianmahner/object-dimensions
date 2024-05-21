@@ -10,6 +10,7 @@ import random
 import scipy.io as io
 import os
 from experiments.human_dnn.reconstruct_rsm import rsm_pred_torch
+from experiments.rsm_reconstruction_analysis import rsm_pred_numba
 from experiments.human_dnn.compare_modalities import correlate_modalities
 from object_dimensions.utils import (
     correlate_rsms,
@@ -23,7 +24,10 @@ from object_dimensions.utils import (
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+from scipy.stats import pearsonr
 from scipy.stats import rankdata
+from scipy.stats import spearmanr
+
 
 sns.set(font_scale=1.5)
 sns.set_style("ticks")
@@ -90,6 +94,67 @@ def plot_rsm(rsm: np.ndarray, fname: str) -> None:
     ax.axis("off")
     ax.imshow(rsm, cmap="viridis", interpolation="nearest")
     fig.savefig(fname, pad_inches=0, bbox_inches="tight", dpi=450)
+    plt.close(fig)
+
+
+def plot_rsm_corrs(rsm_corrs, rsm_corrs_w_duplicates, out_path, **kwargs):
+    # Create a DataFrame and reshape it to long format
+    df = pd.DataFrame(
+        {
+            "Human Embedding RSM": range(len(rsm_corrs)),
+            "Unique": rsm_corrs,
+            "With Replacement": rsm_corrs_w_duplicates,
+        }
+    ).melt(
+        "Human Embedding RSM",
+        var_name="Pairing",
+        value_name="Highest Pearson's r with DNN RSM",
+    )
+    # Create the figure
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    colors = sns.color_palette()
+
+    colors = [colors[2], colors[3]]
+
+    # Create a lineplot
+    sns.lineplot(
+        data=df,
+        x="Human Embedding RSM",
+        y="Highest Pearson's r with DNN RSM",
+        hue="Pairing",
+        palette=colors,
+        errorbar=("sd", 95),
+        n_boot=1000,
+        ax=ax,
+    )
+
+    sns.despine(offset=10)
+
+    # Replace tick label 0 with 1
+    xticks = [10, 20, 30, 40, 50, 60]
+    xticklabels = [str(x) for x in xticks]
+    ax.set_xticks(xticks)
+    ax.set_xticklabels(xticklabels)
+
+    # Set the x- and y-labels
+    ax.set_xlabel("Human Dimension RSM")
+    ax.set_ylabel("Pearson's r with DNN\nDimension RSM")
+
+    plt.legend(frameon=False)
+
+    fig.tight_layout()
+
+    # Save the figure
+    for ext in [".png", ".pdf"]:
+        fig.savefig(
+            os.path.join(out_path, "human_dnn_individual_rsa{}".format(ext)),
+            bbox_inches="tight",
+            pad_inches=0.05,
+            dpi=300,
+            transparent=False,
+        )
+
     plt.close(fig)
 
 
@@ -261,16 +326,6 @@ def compute_bootstrap_corrs(
     n_objects = human_rsm_gt.shape[0]
     tril_inds = np.triu_indices(n_objects, k=1)
     human_rdv = human_rsm_gt[tril_inds]
-
-    # cumulative_human = rsms["human"]
-    # dnn_rsm_gt = rsms["individual_dnn"][0]
-    # ndims = len(cumulative_human)
-    # n_objects = dnn_rsm_gt.shape[0]
-    # tril_inds = np.triu_indices(n_objects, k=1)
-    # dnn_rdv = dnn_rsm_gt[tril_inds]
-
-    # Create random 1d bootstrap samples w/ replacement
-    # n = len(dnn_rdv)
     n = len(human_rdv)
     random.seed(0)
     inds = np.random.randint(0, n, size=(nboot, n))
@@ -294,26 +349,9 @@ def compute_bootstrap_corrs(
         human_std = human_rdv_boot.std(axis=1)
 
         # Compute Pearson correlation coefficients
-        # boot_corrs[i, :] = ((dnn_rdv_boot - dnn_mean) * (human_rdv_boot - human_mean)).sum(axis=1) / (n * dnn_std * human_std)
         boot_corrs[i, :] = (
             (human_rdv_boot - human_mean) * (dnn_rdv_boot - dnn_mean)
         ).sum(axis=1) / (n * human_std * dnn_std)
-
-        # human = cumulative_human[i]
-        # human_rdv = human[tril_inds]
-
-        # dnn_rdv_boot = dnn_rdv[inds]
-        # human_rdv_boot = human_rdv[inds]
-
-        # dnn_mean = np.mean(dnn_rdv_boot, axis=1, keepdims=True)
-        # human_mean = np.mean(human_rdv_boot, axis=1, keepdims=True)
-        # dnn_std = human_rdv_boot.std(axis=1)
-        # human_std = human_rdv_boot.std(axis=1)
-
-        # # Compute Pearson correlation coefficients
-        # boot_corrs[i, :] = (
-        #     (dnn_rdv_boot - dnn_mean) * (human_rdv_boot - human_mean)
-        # ).sum(axis=1) / (n * dnn_std * human_std)
 
     boot_mean = boot_corrs.mean(axis=1)
     boot_std = boot_corrs.std(axis=1)
@@ -353,7 +391,7 @@ def plot_rsa_across_dims(
         "hue": "Type",
         "style": "Type",
     }
-    
+
     # Replace tick label 0 with 1
     xticks = [10, 20, 30, 40, 50, 60]
     xticklabels = [str(x) for x in xticks]
@@ -629,10 +667,103 @@ def rsm_pred_numba(W: np.ndarray, indices: np.ndarray) -> np.ndarray:
                 if k != i and k != j:
                     rsm[i, j] += S_e[i, j] / (S_e[i, j] + S_e[i, k] + S_e[j, k])
 
+    # TODO I have hardcoded the 48 in here why??
     rsm /= 48
     rsm += rsm.T  # make similarity matrix symmetric
     np.fill_diagonal(rsm, 1)
     return rsm
+
+
+def split_rsm(rsm):
+    # Split the RSM into two halves based on the objects
+    m = rsm.shape[0]
+    indices = np.arange(m)
+    np.random.shuffle(indices)
+    half_size = m // 2
+    first_half_indices = indices[:half_size]
+    second_half_indices = indices[half_size:]
+
+    rsm_1 = np.corrcoef(rsm[first_half_indices, :][:, first_half_indices])
+    rsm_2 = np.corrcoef(rsm[second_half_indices, :][:, second_half_indices])
+
+    return rsm_1, rsm_2
+
+
+def flatten_upper_triangle(matrix):
+    # Get the upper triangle indices, excluding the diagonal
+    upper_triangle_indices = np.triu_indices_from(matrix, k=1)
+    return matrix[upper_triangle_indices]
+
+
+def split_half_reliability(rsm: np.ndarray):
+    rsm_1, rsm_2 = split_rsm(rsm)
+
+    # Flatten the upper triangular parts of the correlation matrices
+    rsm_1_flattened = flatten_upper_triangle(rsm_1)
+    rsm_2_flattened = flatten_upper_triangle(rsm_2)
+
+    # Compute the Pearson correlation
+    split_half_corr, _ = pearsonr(rsm_1_flattened, rsm_2_flattened)
+
+    # Spearman-Brown formula for reliability (i.e., noise ceiling)
+    reliability = (2 * split_half_corr) / (1 + split_half_corr)
+    return reliability
+
+
+def run_rsa_on_individual_dimensions(weights_human, weights_dnn, sort_by_corrs=True):
+    def compute_rsm(weights):
+        num_dimensions = weights.shape[1]
+        rsms = []
+        for i in range(num_dimensions):
+            print(f"Computing RSM for dimension {i}", end="\r")
+            w = weights[:, i].reshape(-1, 1)
+            rsm = rsm_pred_torch(w, return_type="numpy")
+            rsms.append(rsm)
+        return rsms
+
+    weights = {"human": weights_human, "dnn": weights_dnn}
+    weights_base = weights["human"]
+    weights_comp = weights["dnn"]
+
+    rsms_base = compute_rsm(weights_base)
+    rsms_comp = compute_rsm(weights_comp)
+
+    matching_corrs_with_duplicates = []
+    matching_corrs_without_duplicates = []
+    used_dims = set()
+
+    for i, rsm_1 in enumerate(rsms_base):
+        print(f"Comparing human dimension {i}", end="\r")
+
+        rsm_corrs = np.array([correlate_rsms(rsm_1, rsm_2) for rsm_2 in rsms_comp])
+        sorted_dim_corrs = np.argsort(-rsm_corrs)
+
+        matching_corrs_with_duplicates.append(rsm_corrs[sorted_dim_corrs[0]])
+
+        # Without duplicates
+        for dim in sorted_dim_corrs:
+            if dim not in used_dims:
+                used_dims.add(dim)
+                matching_corrs_without_duplicates.append(rsm_corrs[dim])
+                break
+
+        print(f"Best matching DNN dimension: {sorted_dim_corrs[0]}")
+
+    if sort_by_corrs:
+        matching_corrs_with_duplicates = np.array(matching_corrs_with_duplicates)
+        matching_corrs_without_duplicates = np.array(matching_corrs_without_duplicates)
+
+        sorted_indices_with = np.argsort(-matching_corrs_with_duplicates)
+        sorted_indices_without = np.argsort(-matching_corrs_without_duplicates)
+
+        matching_corrs_with_duplicates = matching_corrs_with_duplicates[
+            sorted_indices_with
+        ]
+        matching_corrs_without_duplicates = matching_corrs_without_duplicates[
+            sorted_indices_without
+        ]
+
+    return matching_corrs_with_duplicates, matching_corrs_without_duplicates
 
 
 if __name__ == "__main__":
@@ -646,15 +777,34 @@ if __name__ == "__main__":
     plot_dir = create_path_from_params(args.dnn_path, "analyses", "human_dnn", "rsa")
     print("Save all human dnn comparisons to {}".format(plot_dir))
     image_filenames, indices = load_image_data(args.img_root, filter_behavior=True)
+
     dnn_embedding = dnn_embedding[indices]
+
+    # Do the rsa on individual dimensions
+    rsa_corrs_individual_duplicates, rsa_corrs_individual = (
+        run_rsa_on_individual_dimensions(
+            human_embedding,
+            dnn_embedding,
+            sort_by_corrs=True,
+        )
+    )
+
+    plot_rsm_corrs(rsa_corrs_individual, rsa_corrs_individual_duplicates, plot_dir)
+
     features = load_deepnet_activations(args.feature_path, center=True, relu=True)
     features = features[indices]
 
-    # rsm_truth_dnn = features @ features.T
     rsm_truth_dnn = correlation_matrix(features)
 
     # rsm_truth_dnn = correlation_matrix(features)
+    # from experiments.rsm_reconstruction_analysis import rsm_pred_numba
+
+    # test = rsm_pred_numba(features)
+
+    # rsm_recon_dnn = rsm_pred_numba(dnn_embedding)
+
     rsm_recon_dnn = rsm_pred_torch(dnn_embedding, return_type="numpy")
+
     rsm_human = rsm_pred_torch(human_embedding, return_type="numpy")
 
     corr_recon = correlate_rsms(rsm_recon_dnn, rsm_human, args.corr_type)
@@ -727,9 +877,29 @@ if __name__ == "__main__":
     rsm_pred_human_filter = rsm_pred_numba(human_embedding, np.array(indices_48))
     rsm_pred_human_filter = rsm_pred_human_filter[np.ix_(indices_48, indices_48)]
 
+    reliability = split_half_reliability(rsm_human_gt)
+    print(f"Reliability of human RSM: {reliability}")
+
+    true_rsm = rsm_human_gt.flatten()
+    pred_rsm = rsm_pred_human_filter.flatten()
+
+    from scipy.stats import spearmanr
+
+    # NOTE this is where i calculate the explained variance but it does not work...
+    true_pred_corr, _ = spearmanr(true_rsm, pred_rsm)
+
     corr_human_human_gt, pval = correlate_rsms(
         rsm_pred_human_filter, rsm_human_gt, args.corr_type, return_pval=True
     )
+
+    # this below corrrelates the DNN filtered by the 48
+    features48 = features[indices_48]
+    rsm_truth_dnn = correlation_matrix(features48)
+    dnn_embedding_48 = dnn_embedding[indices_48]
+    recon_dnn_48 = rsm_pred_torch(dnn_embedding_48, return_type="numpy")
+
+    # This below is the code to get the image to image similarity. This number has to be spearman
+    # brown corrected
 
     print(
         f"Pearson r between human and human ground truth: {corr_human_human_gt}, pval {pval:.20f}"

@@ -40,6 +40,7 @@ def parse_args():
     )
     parser.add_argument("--run_jackknife", action="store_true", default=False)
     parser.add_argument("--plot", action="store_true", default=False)
+    parser.add_argument("--plot_relevance", action="store_true", default=False)
     return parser.parse_args()
 
 
@@ -229,7 +230,7 @@ def compute_jackknife(
     combinations = list(itertools.product(numbers, repeat=2))
 
     # Map each of the combs to a string 0=k, 1=i, 2=j for a list of combinations of pairs of 2
-    # When the softmax at position 0=i is the highest, then the model identifies object k as the odd one out
+    # When the softmax at position 0=i is the highest, the model identifies object k as the odd one out
     identifiers = []
     lookup_table = ["k", "j", "i"]
     for comb in combinations:
@@ -289,7 +290,14 @@ def compute_jackknife(
 
 
 def main(
-    human_path, dnn_path, img_root, triplet_path, topk=12, run_jackknife=True, plot=True
+    human_path,
+    dnn_path,
+    img_root,
+    triplet_path,
+    topk=12,
+    run_jackknife=True,
+    plot=True,
+    plot_relevance=True,
 ):
     """Compare the human and DNN embeddings"""
     # If all data on GPU, num workers need to be 0 and pin memory false
@@ -414,6 +422,10 @@ def main(
 
         jackknife_dict = pickle.load(open(jackknife_path, "rb"))
         jackknife_dict["dnn_weights_plus"] = dnn_weights_plus
+
+        if plot_relevance:
+            pass
+
         for key in [
             "human_i_dnn_j",
             "human_k_dnn_j",
@@ -421,6 +433,7 @@ def main(
             "human_k_dnn_k",
             "human_j_dnn_i",
         ]:
+
             print("Plotting {}".format(key))
 
             # Here we replace for visualization purposes the behavior with plus images
@@ -442,7 +455,8 @@ if __name__ == "__main__":
         args.dnn_path,
         args.img_root,
         args.triplet_path,
-        2000,
+        2000,  # TODO I have replace this with a fixed number over all triplets
         args.run_jackknife,
         args.plot,
+        args.plot_relevance,
     )

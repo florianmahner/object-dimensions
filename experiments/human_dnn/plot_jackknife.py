@@ -188,7 +188,6 @@ def plot_grid(
     # No idea why, check code again based on what triplet I filter and what triplets I visualize later!
     # Also need to check if the dimensions of the DNN plus images actually match?? It seems like I use the
     # DNN behavior images for the comparison, but then try to visualize it for the plus...
-
     non_sparse_dnn = get_dominant_row_indices(diff_dnn, top=3, threshold=0.25)
     non_sparse_human = get_dominant_row_indices(diff_human, top=3, threshold=0.25)
     intersection_dominant_indices = list(non_sparse_dnn.intersection(non_sparse_human))

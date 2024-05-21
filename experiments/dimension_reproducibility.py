@@ -25,7 +25,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--modality", type=str, default="behavior", choices=("behavior", "dnn")
+        "--modality", type=str, default="behavior", choices=("behavior", "dnn", "voices")
     )
 
     parser.add_argument("--run_analysis", action="store_true")
@@ -201,7 +201,7 @@ def plot_reliability_across_seeds(
     ndim = len(mean_reliabilities)
     # labels = [str(i) for i in range(1, ndim + 1)]
     xticks = [0, 4, 9, 14, 19, 24, 29]
-    labels = [str(i + 1) for i in xticks]
+    labels = [str(i) for i in xticks]
     ax.set_xticks(xticks)
     ax.set_xticklabels(labels)
     # Despine

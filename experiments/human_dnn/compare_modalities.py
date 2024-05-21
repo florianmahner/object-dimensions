@@ -34,7 +34,6 @@ sns.set(font_scale=1.5)
 sns.set_style("ticks")
 
 
-
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Compare human and DNN performance on the same task."
@@ -465,6 +464,7 @@ def plot_mind_machine_corrs(
         var_name="Pairing",
         value_name="Highest Pearson's r with DNN",
     )
+
     # Create the figure
     fig, ax = plt.subplots(figsize=(6, 4))
 
@@ -618,7 +618,7 @@ def visualize_dims_across_modalities(
     alphas = np.where(data["colors"] == 0, 0.2, 0.8)
     data["alphas"] = alphas
 
-    fig, ax = plt.subplots(1,figsize=(6, 4))
+    fig, ax = plt.subplots(1, figsize=(6, 4))
     palette = sns.color_palette()
 
     blue, orange, green, red = palette[:4]
@@ -645,14 +645,12 @@ def visualize_dims_across_modalities(
     #     s=100,
     # )
     scatter = ax.scatter(
-        data['Human'], data['DNN'], 
-        c=data['colors'].map(palette),  # Map your colors to the specified palette
-        alpha=data['alphas'],  # Use the alphas column for individual alpha values
-        s=100
+        data["Human"],
+        data["DNN"],
+        c=data["colors"].map(palette),  # Map your colors to the specified palette
+        alpha=data["alphas"],  # Use the alphas column for individual alpha values
+        s=100,
     )
-
-
-
 
     sns.despine(offset=10, ax=ax)
 
@@ -670,7 +668,6 @@ def visualize_dims_across_modalities(
     # ax.yaxis.set_minor_locator(AutoMinorLocator(2))
     # ax.tick_params(which='minor', length=4, color='b')  # Adjust length and color as needed
 
-
     fig.savefig(
         os.path.join(
             path,
@@ -679,7 +676,6 @@ def visualize_dims_across_modalities(
         bbox_inches="tight",
         pad_inches=0.05,
     )
-
 
     plt.close(fig)
 
@@ -775,7 +771,12 @@ def corr_rsm_across_dims(human, dnn, index, corr="pearson", cumulative=False):
 
 
 def correlate_modalities(
-    weights_human, weights_dnn, base="human", duplicates=False, sort_by_corrs=True
+    weights_human,
+    weights_dnn,
+    base="human",
+    duplicates=False,
+    sort_by_corrs=True,
+    return_dims: bool = False,
 ):
     """Correlate the weights of two modalities and return the weights of both modalities in eiter the same or different orders
     Parameters:
@@ -842,7 +843,7 @@ def correlate_modalities(
     weights_base = weights_base[:, base_dims]
     weights_comp = weights_comp[:, comp_dims]
 
-    return weights_base, weights_comp, matching_corrs
+    return weights_base, weights_comp, matching_corrs, matching_dims
 
 
 def run_embedding_analysis(
@@ -863,13 +864,27 @@ def run_embedding_analysis(
     dnn_embedding = dnn_embedding[indices]
     dnn_var = dnn_var[indices]
 
-    human_embedding_sorted, dnn_embedding_sorted, corrs = correlate_modalities(
-        human_embedding, dnn_embedding, duplicates=False, sort_by_corrs=True
+    human_embedding_sorted, dnn_embedding_sorted, corrs, matching_dims = (
+        correlate_modalities(
+            human_embedding, dnn_embedding, duplicates=False, sort_by_corrs=True
+        )
     )
 
-    corrs_w_duplicates = correlate_modalities(
+    corrs_w_duplicates, match_duplicates = correlate_modalities(
         human_embedding, dnn_embedding, duplicates=True, sort_by_corrs=True
-    )[2]
+    )[2:4]
+
+    df = pd.DataFrame(
+        {
+            "Human Dimension": list(range(len(corrs))),
+            "match_unique": matching_dims,
+            "match_duplicates": match_duplicates,
+        }
+    )
+
+    with open(os.path.join(plot_dir, "matching_dims.csv"), "w") as f:
+        df.to_csv(f, index=False)
+
     plot_mind_machine_corrs(
         corrs,
         corrs_w_duplicates,
@@ -895,8 +910,6 @@ def run_embedding_analysis(
             r=pearson,
             difference=difference,
         )
-
-    
 
     dnn_embedding, dnn_var = load_sparse_codes(dnn_path, with_var=True, relu=True)
     human_embedding = load_sparse_codes(human_path, with_var=False, relu=True)
