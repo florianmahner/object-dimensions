@@ -9,6 +9,7 @@ feature_path = "./data/triplets/Imagenet1k/vgg16_bn/classifier.3/"
 [jackknife]
 run_jackknife = false
 plot = true
+plot_relevance = true
 comparison = "dnn"
 
 [comparison]
@@ -21,4 +22,4 @@ run_search = true
 [rsa]
 corr_type = "pearson"
 concept_path = "./data/misc/category_mat_manual.tsv"
-run_analysis = true
+run_analysis = false

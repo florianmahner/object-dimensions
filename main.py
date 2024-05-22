@@ -177,9 +177,7 @@ def load_args(args: Namespace, log_path: str, fresh: bool) -> Namespace:
     return args
 
 
-def _build_model(
-    args: Namespace, n_objects: int
-) -> Union[
+def _build_model(args: Namespace, n_objects: int) -> Union[
     Tuple[VariationalEmbedding, Union[SpikeSlabPrior, LogGaussianPrior]],
     Tuple[DeterministicEmbedding, None],
 ]:

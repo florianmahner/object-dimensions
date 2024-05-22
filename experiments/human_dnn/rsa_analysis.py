@@ -789,6 +789,8 @@ if __name__ == "__main__":
         )
     )
 
+    breakpoint()
+
     plot_rsm_corrs(rsa_corrs_individual, rsa_corrs_individual_duplicates, plot_dir)
 
     features = load_deepnet_activations(args.feature_path, center=True, relu=True)

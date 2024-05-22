@@ -198,7 +198,6 @@ class EmbeddingTrainer(object):
         log_p = self.prior(embedding)
         kl_div = log_q.sum() - log_p.sum()
         kl_div = kl_div / n_train
-
         return kl_div
 
     def calculate_spose_complexity(self, embedding: torch.Tensor) -> torch.Tensor:
@@ -400,9 +399,9 @@ class EmbeddingTrainer(object):
                     print(
                         f"Stopped training after {self.epoch} epochs. Model has converged or max number of epochs have been reached!"
                     )
-                    log_params[
-                        "final"
-                    ] = True  # we also log all things that dont have an update interval
+                    log_params["final"] = (
+                        True  # we also log all things that dont have an update interval
+                    )
                     self.logger.log(**log_params)
                     self.store_final_embeddings()
                     break

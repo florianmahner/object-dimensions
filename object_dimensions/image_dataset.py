@@ -5,6 +5,7 @@ import glob
 import os
 from PIL import Image
 import torchvision.transforms as T
+from pathlib import Path
 
 from typing import List, Optional
 
@@ -27,7 +28,8 @@ class ImageDataset:
         """Find all images ending with .jpg in image_root recursively"""
         path = os.path.join(self.img_root, "**", "*.jpg")
         self.samples = glob.glob(path, recursive=True)
-        self.samples = sorted(self.samples)
+        # Sort samples by parent directory and then by filename within each directory
+        self.samples = sorted(self.samples, key=lambda x: (Path(x).parent, Path(x).name))
 
     def __getitem__(self, idx: int) -> Image.Image:
         img_path = self.samples[idx]
