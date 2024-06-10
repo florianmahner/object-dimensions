@@ -1,5 +1,4 @@
 embedding_path = "./results/dnn/variational/vgg16_bn/classifier.3/20.mio/sslab/150/256/1.0/14/params/parameters.npz"
-
 dnn_path = "./data/triplets/vgg16_bn/classifier.3"
 img_root = "./data/image_data/images12_plus"
 seed = 42
@@ -7,8 +6,8 @@ device = "cuda:0"
 
 [visualization]
 per_dim = true
-filter_behavior = true
-filter_plus = false
+filter_behavior = false
+filter_plus = true
 behav_experiment = false # if to viz for the behavioral study (large images)
 
 # Sparse Code parameters

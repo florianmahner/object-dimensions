@@ -1,4 +1,5 @@
 # TOML file to extract triplets from DNN representations
+
 seed = 0 
 k = 3
 
@@ -7,6 +8,5 @@ similarity = "dot"
 train_fraction = 0.9
 n_samples = 100_000
 
-# out_path = "./data/Imagenet1k/densenet/global_pool/"
 out_path = "./data/test_triplets"
 feature_path = "./data/triplets/Imagenet1k/densenet/global_pool/features.npy"

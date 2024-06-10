@@ -4,17 +4,15 @@
 
 jackknife=false
 comparison=false
-residual=false
 accuracy=false
-similarity=false
+rsa=false
 
 while getopts "jcras" opt; do
   case $opt in
     c) comparison=true ;;
     j) jackknife=true ;;
-    r) residual=true ;;
+    r) rsa=true ;;
     a) accuracy=true ;;
-    s) similarity=true ;;
     \?) echo "Invalid option -$OPTARG" >&2 ;;
   esac
 done
@@ -29,17 +27,12 @@ if $comparison; then
     python experiments/human_dnn/compare_modalities.py --config "./configs/human_dnn_comparison.toml"  --table "comparison"
 fi
 
-if $residual; then
-  echo "Run Residual Analysis"
-  python experiments/human_dnn/residual_analysis.py --config "./configs/human_dnn_comparison.toml" --table "residual"
-fi
-
 if $accuracy; then
   echo "Run Reconstruction Accuracy RSMs"
   python experiments/human_dnn/reconstruction_accuracy.py --config "./configs/human_dnn_comparison.toml"
 fi
 
-if $similarity; then
+if $rsa; then
   echo "Run RSA analysis"
-  python experiments/human_dnn/rsa_analysis.py --config "./configs/human_dnn_comparison.toml" --table "rsa"
+  python experiments/rsa/run_rsa_analysis.py --config "./configs/human_dnn_comparison.toml" --table "rsa"
 fi
