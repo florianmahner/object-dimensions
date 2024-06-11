@@ -20,6 +20,51 @@ import matplotlib.pyplot as plt
 from tomlparse import argparse
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Compare human and DNN performance on the same task."
+    )
+    parser.add_argument(
+        "--human_path", type=str, help="Path to human embedding matrix."
+    )
+    parser.add_argument("--dnn_path", type=str, help="Path to DNN embedding matrix.")
+    parser.add_argument(
+        "--img_root", type=str, help="Path to VGG feature matrix and filenames"
+    )
+    parser.add_argument(
+        "--concept_path",
+        type=str,
+        default="./data/misc/category_mat_manual.tsv",
+        help="Path to concept matrix",
+    )
+    parser.add_argument(
+        "--corr_type",
+        type=str,
+        choices=["pearson", "spearman"],
+        help="Type of correlation to use",
+    )
+    parser.add_argument("--run_analysis", action="store_true", help="Run analysis")
+    parser.add_argument(
+        "--feature_path",
+        type=str,
+        default="./features",
+        help="Path to DNN features directory",
+    )
+    parser.add_argument(
+        "--words48_path",
+        type=str,
+        default="./data/misc/words48.csv",
+        help="Path to words48 file containing object categories used to fully sample things similarity matrix for noise ceilings",
+    )
+    parser.add_argument(
+        "--human_rd_gt",
+        type=str,
+        help="Path to human RDM ground truth",
+        default="./data/misc/rdm48_human.mat",
+    )
+    return parser.parse_args()
+
+
 def load_filtered_data(
     image_root,
     feature_path,
@@ -60,7 +105,7 @@ def run_cumulative(
     plot_dir,
 ):
     """Run cumulative RSA between human and DNN embeddings."""
-    cumulative_corrs = run_cumulative_rsa(human_embedding, dnn_embedding)
+    cumulative_corrs = run_cumulative_rsa(human_embedding, dnn_embedding, nboot=100)
     fig = plot_cumulative_rsa(cumulative_corrs)
     fig.savefig(
         os.path.join(plot_dir, "cumulative_rsa.pdf"),
@@ -95,7 +140,10 @@ def run(
 ):
     concepts = load_concepts(concept_path)
 
-    plot_dir = create_path_from_params(dnn_embedding_path, "rsa")
+    plot_dir = create_path_from_params(
+        dnn_embedding_path, "analyses", "human_dnn", "rsa"
+    )
+
     human_embedding, dnn_embedding, features = load_filtered_data(
         img_root,
         feature_path,
@@ -105,60 +153,13 @@ def run(
 
     global_corr = run_global(human_embedding, dnn_embedding, concepts, plot_dir)
     print(f"Global Pearson's r RSMs: Human-DNN: {global_corr}")
-    print("Running Pairwise RSA...")
+    # print("Running Pairwise RSA...")
     # run_pairwise(human_embedding, dnn_embedding, plot_dir)
     print("Running Cumulative RSA...")
     run_cumulative(human_embedding, dnn_embedding, plot_dir)
 
 
 if __name__ == "__main__":
-
-    def parse_args():
-        parser = argparse.ArgumentParser(
-            description="Compare human and DNN performance on the same task."
-        )
-        parser.add_argument(
-            "--human_path", type=str, help="Path to human embedding matrix."
-        )
-        parser.add_argument(
-            "--dnn_path", type=str, help="Path to DNN embedding matrix."
-        )
-        parser.add_argument(
-            "--img_root", type=str, help="Path to VGG feature matrix and filenames"
-        )
-        parser.add_argument(
-            "--concept_path",
-            type=str,
-            default="./data/misc/category_mat_manual.tsv",
-            help="Path to concept matrix",
-        )
-        parser.add_argument(
-            "--corr_type",
-            type=str,
-            choices=["pearson", "spearman"],
-            help="Type of correlation to use",
-        )
-        parser.add_argument("--run_analysis", action="store_true", help="Run analysis")
-        parser.add_argument(
-            "--feature_path",
-            type=str,
-            default="./features",
-            help="Path to DNN features directory",
-        )
-        parser.add_argument(
-            "--words48_path",
-            type=str,
-            default="./data/misc/words48.csv",
-            help="Path to words48 file containing object categories used to fully sample things similarity matrix for noise ceilings",
-        )
-        parser.add_argument(
-            "--human_rd_gt",
-            type=str,
-            help="Path to human RDM ground truth",
-            default="./data/misc/rdm48_human.mat",
-        )
-        return parser.parse_args()
-
     args = parse_args()
     run(
         args.img_root,
