@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from object_dimensions.utils import (
+from objdim.utils import (
     correlate_rsms,
     rsm_pred_torch,
 )

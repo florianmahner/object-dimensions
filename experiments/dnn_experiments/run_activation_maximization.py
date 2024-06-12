@@ -24,10 +24,11 @@ from stylegan_xl.dnnlib import util
 from stylegan_xl.torch_utils import gen_utils
 from stylegan_xl.gen_images import make_transform
 
-from object_dimensions.utils import DimensionPredictor, img_to_uint8, plot_dim_3x2
+from objdim.utils import DimensionPredictor, img_to_uint8, create_results_path
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from tomlparse import argparse
+from pathlib import Path
 from PIL import Image
 
 
@@ -54,20 +55,8 @@ def parse_args():
     parser.add_argument(
         "--embedding_path",
         type=str,
-        default="./weights/params/pruned_q_mu_epoch_300.txt",
-        help="Path to weights directory",
-    )
-    parser.add_argument(
-        "--model_name",
-        type=str,
-        default="vgg16_bn",
-        help="Model to load from THINGSvision",
-    )
-    parser.add_argument(
-        "--module_name",
-        type=str,
-        default="classifier.3",
-        help="Layer of the model to load from THINGSvision",
+        default="./data/embedding/vgg16bn/classifier.3/parameters.npz",
+        help="Path to embedding matrix",
     )
     parser.add_argument(
         "--n_samples",
@@ -154,9 +143,10 @@ def find_topk_latents(
     device,
 ):
     device = torch.device(device)
-    base_path = os.path.dirname(os.path.dirname(embedding_path))
-    regression_path = os.path.join(base_path, "analyses", "sparse_codes")
-    out_path = os.path.join(base_path, "analyses", "per_dim")
+
+    base_path = create_results_path(embedding_path)
+    regression_path = os.path.join(base_path, "linear_model")
+    out_path = os.path.join(base_path, "per_dim")
 
     if not os.path.exists(regression_path):
         raise FileNotFoundError(
@@ -192,12 +182,12 @@ def optimize_latents(
     window_size,
     device,
 ):
-    base_path = os.path.dirname(os.path.dirname(embedding_path))
-    regression_path = os.path.join(base_path, "analyses", "sparse_codes")
-    latent_path = os.path.join(base_path, "analyses", "per_dim")
+    base_path = create_results_path(embedding_path)
+    regression_path = os.path.join(base_path, "linear_model")
+    latent_path = os.path.join(base_path, "per_dim")
 
     device = torch.device(device)
-    predictor = LatentPredictor(model_name, module_name, device, regression_path)
+    predictor = DimensionPredictor(model_name, module_name, device, regression_path)
 
     generator = load_style_gan()
 
@@ -714,6 +704,9 @@ if __name__ == "__main__":
     random.seed(args.seed)
     torch.manual_seed(args.seed)
 
+    path = Path(args.embedding_path)
+    model_name, module_name = path.parts[-3], path.parts[-2]
+
     if args.sample_dataset:
         print("Sampling latents...\n")
         generator = StyleGanGenerator(
@@ -728,8 +721,8 @@ if __name__ == "__main__":
     # We can either sample latents again or optimize previously stored ones
     if args.find_topk:
         find_topk_latents(
-            args.model_name,
-            args.module_name,
+            model_name,
+            module_name,
             args.embedding_path,
             args.n_samples,
             args.batch_size,
@@ -742,8 +735,8 @@ if __name__ == "__main__":
         for dim in args.dim:
             print("Optimizing dimension: {}".format(dim))
             optimize_latents(
-                args.model_name,
-                args.module_name,
+                model_name,
+                module_name,
                 args.embedding_path,
                 dim,
                 args.lr,

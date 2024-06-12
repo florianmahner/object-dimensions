@@ -25,5 +25,4 @@ batch_size = 64
 model_name = "vit_b_32"
 module_name = "encoder.ln"
 weights = "Imagenet1k"
-
-out_path = "./data/triplets/vit_b_32/encoder.ln"
+out_path = "./data/features/"

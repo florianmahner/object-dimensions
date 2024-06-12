@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import rankdata
 
-from object_dimensions.utils import correlate_rsms, rsm_pred_torch
+from objdim.utils import correlate_rsms, rsm_pred_torch
 
 
 def filter_rsm_by_concepts(

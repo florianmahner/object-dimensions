@@ -10,7 +10,7 @@ from typing import Tuple, Optional
 from torch.utils.data import Dataset
 
 
-def build_triplet_dataset(
+def get_triplet_dataset(
     triplet_path: str,
     n_train: Optional[int] = None,
     n_val: Optional[int] = None,

@@ -12,7 +12,7 @@ import skimage.io as io
 import numpy as np
 
 from tomlparse import argparse
-from object_dimensions.utils import load_sparse_codes, load_image_data
+from objdim.utils import load_sparse_codes, load_image_data, create_results_path
 
 
 def parse_args():
@@ -215,14 +215,8 @@ def plot_dim(images, codes, dim, top_k=10, filter_plus=False, filter_behavior=Fa
 
 
 def plot_per_dim(args):
-    base_path = os.path.dirname(os.path.dirname(args.embedding_path))
-    results_path = os.path.join(base_path, "analyses", "per_dim")
-    if not os.path.exists(results_path):
-        os.makedirs(results_path)
-
+    results_path = create_results_path(args.embedding_path, "per_dim")
     W = load_sparse_codes(args.embedding_path)
-
-    breakpoint()
     images, indices = load_image_data(
         args.img_root,
         filter_behavior=args.filter_behavior,
@@ -241,9 +235,7 @@ def plot_per_dim(args):
 
     for dim in range(n_dims):
         if args.behav_experiment:
-            behav_path = os.path.join(
-                base_path, "analyses", "behavior_experiment", "images"
-            )
+            behav_path = create_results_path(args.embedding_path, "behavior_experiment")
             if not os.path.exists(behav_path):
                 os.makedirs(behav_path)
             fig_large = plot_behavior(images, W, dim, top_k=16)
@@ -257,9 +249,7 @@ def plot_per_dim(args):
         fig_5x2 = plot_dim(images, W, dim, 10)
         fig_3x3 = plot_dim_3x3(images, W, dim, 9)
         fig_1x8 = plot_dim_1x8(images, W, dim, 8)
-        # fig_5x10 = plot_top_50(images, W, dim, 50)
-
-        # fig.suptitle("Dimension: {}".format(dim))
+        fig_5x10 = plot_top_50(images, W, dim, 50)
         out_path = os.path.join(results_path, f"{dim:02d}")
         if not os.path.exists(out_path):
             os.makedirs(out_path)
@@ -271,13 +261,13 @@ def plot_per_dim(args):
             fig_3x3.savefig(fname, dpi=300, bbox_inches="tight", pad_inches=0)
             fname = os.path.join(out_path, f"{dim}_topk{append}_1x8.{ext}")
             fig_1x8.savefig(fname, dpi=300, bbox_inches="tight", pad_inches=0)
-            # fname = os.path.join(out_path, f"{dim}_topk{append}_5x10.{ext}")
-            # fig_5x10.savefig(fname, dpi=150, bbox_inches="tight", pad_inches=0)
+            fname = os.path.join(out_path, f"{dim}_topk{append}_5x10.{ext}")
+            fig_5x10.savefig(fname, dpi=150, bbox_inches="tight", pad_inches=0)
 
         plt.close(fig_5x2)
         plt.close(fig_3x3)
         plt.close(fig_1x8)
-        # plt.close(fig_5x10) j
+        plt.close(fig_5x10)
         print(f"Done plotting for dim {dim}")
 
 
@@ -294,12 +284,9 @@ def plot_dimensions(args):
     print("Shape of weight Matrix", W.shape)
     W = W.T
 
-    base_path = os.path.dirname(os.path.dirname(args.embedding_path))
+    out_path = create_results_path(args.embedding_path, "dimensions")
     filename = os.path.basename(args.embedding_path)
     epoch = filename.split("_")[-1].split(".")[0]
-    out_path = os.path.join(base_path, "analyses")
-    if not os.path.exists(out_path):
-        os.makedirs(out_path)
 
     # Plot W as a matrix with dots in black and white
     fig, ax = plt.subplots(figsize=(10, 10))

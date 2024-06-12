@@ -1,8 +1,8 @@
-embedding_path = "./results/dnn/variational/vgg16_bn/classifier.3/20.mio/sslab/150/256/1.0/14/params/parameters.npz"
-dnn_path = "./data/triplets/vgg16_bn/classifier.3"
-img_root = "./data/image_data/images12_plus"
-seed = 42
+embedding_path = "./data/embeddings/vgg16_bn/classifier.3/"
+feature_path = "./data/features/vgg16_bn/classifier.3/"
+img_root = "./data/images/things"
 device = "cuda:0"
+seed = 42
 
 [visualization]
 per_dim = true
@@ -11,7 +11,7 @@ filter_plus = true
 behav_experiment = false # if to viz for the behavioral study (large images)
 
 # Sparse Code parameters
-[sparse_codes]
+[linear_model]
 k_folds = 3
 
 # activation maximization parameters
@@ -31,9 +31,3 @@ max_iter = 100
 alpha = 0.1
 beta = 1.0
 lr = 0.002
-
-
-# GPT3 parameters
-[gpt3]
-feature_norm_path = "./data/feature_norms/feature_object_matrix.csv"
-run = false 

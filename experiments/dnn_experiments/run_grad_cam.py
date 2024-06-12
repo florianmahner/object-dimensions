@@ -21,12 +21,14 @@ from tomlparse import argparse
 
 from thingsvision import get_extractor
 from collections import defaultdict, Counter
+from pathlib import Path
 
-from object_dimensions.utils import (
+from objdim.utils import (
     load_sparse_codes,
     load_image_data,
     img_to_uint8,
     DimensionPredictor,
+    create_results_path,
 )
 
 
@@ -55,15 +57,6 @@ def parse_args():
         type=str,
         default="regression",
         help="Type of analysis to perform.",
-    )
-    parser.add_argument(
-        "--model_name", type=str, default="vgg16_bn", help="Name of the model to use."
-    )
-    parser.add_argument(
-        "--module_name",
-        type=str,
-        default="classifier.3",
-        help="Name of the module to use.",
     )
     parser.add_argument(
         "--seed", type=int, default=42, help="Random seed to use for the searchlight."
@@ -106,17 +99,13 @@ def find_gradient_heatmap_(img, regression_predictor, latent_dim=1):
 
 
 def search_image_spaces_name(
-    base_path,
+    out_path,
     regression_predictor,
     dataset,
     img_idx,
     image_name,
     latent_dims=[1, 2, 3],
 ):
-    out_path = os.path.join(base_path, "analyses", "grad_cam")
-    if not os.path.exists(out_path):
-        print("\n...Creating directories.\n")
-        os.makedirs(out_path)
 
     img = Image.open(dataset[img_idx])
     reshape = T.Compose([T.Resize(800), T.CenterCrop(700)])
@@ -150,7 +139,6 @@ def search_image_spaces_dim(
     regression_predictor,
     dataset,
     img_indices,
-    image_name,
     latent_dim=1,
 ):
     out_path = os.path.join(base_path, "analyses", "grad_cam", f"{latent_dim:02d}")
@@ -240,17 +228,17 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
+    model_name, module_name = Path(args.embedding_path).parts[-2:]
+
     extractor = get_extractor(
-        model_name=args.model_name, pretrained=True, device=device, source="torchvision"
+        model_name=model_name, pretrained=True, device=device, source="torchvision"
     )
     images, indices = load_image_data(args.img_root)
 
-    base_path = os.path.dirname(os.path.dirname(args.embedding_path))
-    regression_path = os.path.join(base_path, "analyses", "sparse_codes")
-
-    predictor = DimensionPredictor(
-        args.model_name, args.module_name, device, regression_path
-    )
+    base_path = create_results_path(args.embedding_path)
+    linear_weights_path = os.path.join(base_path, "linear_model")
+    out_path = os.path.join(base_path, "grad_cam")
+    predictor = DimensionPredictor(model_name, module_name, device, linear_weights_path)
     predictor.to(device)
 
     images_plus, indices_plus = load_image_data(args.img_root, filter_plus=True)
@@ -264,7 +252,7 @@ if __name__ == "__main__":
             img_idx = [i for i, img in enumerate(images) if query in img][0]
 
             search_image_spaces_name(
-                base_path,
+                out_path,
                 predictor,
                 images,
                 indices_plus,
@@ -283,7 +271,7 @@ if __name__ == "__main__":
                 latent_dims = np.argsort(-sparse_codes_plus[img_idx])[:32]
 
                 search_image_spaces_name(
-                    base_path,
+                    out_path,
                     predictor,
                     images_plus,
                     img_idx,

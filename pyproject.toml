@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "object_dimensions"
+name = "objdim"
 version = "0.1.0"
 description = ""
 authors = ["florianmahner <florian.mahner@icloud.com>"]

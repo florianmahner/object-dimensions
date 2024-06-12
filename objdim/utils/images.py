@@ -1,16 +1,22 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
 import glob
-from typing import Optional, List
-from pathlib import Path
-from PIL import Image
-import numpy as np
 import torch
 import torchvision
 
+from PIL import Image
+from pathlib import Path
+from typing import Optional, List
+from objdim.utils import load_deepnet_activations, load_sparse_codes
+
 import torchvision.transforms as T
 import matplotlib.pyplot as plt
+import numpy as np
 
-class ImageDataset:
+
+class ImageDataset(object):
     """Loads all images in a given directory and stores its filenames and paths"""
 
     def __init__(
@@ -29,7 +35,9 @@ class ImageDataset:
         path = os.path.join(self.img_root, "**", "*.jpg")
         self.samples = glob.glob(path, recursive=True)
         # Sort samples by parent directory and then by filename within each directory
-        self.samples = sorted(self.samples, key=lambda x: (Path(x).parent, Path(x).name))
+        self.samples = sorted(
+            self.samples, key=lambda x: (Path(x).parent, Path(x).name)
+        )
 
     def __getitem__(self, idx: int) -> Image.Image:
         img_path = self.samples[idx]
@@ -47,7 +55,6 @@ class ImageDataset:
     @property
     def images(self) -> List:
         return self.samples
-
 
 
 def img_to_uint8(img):

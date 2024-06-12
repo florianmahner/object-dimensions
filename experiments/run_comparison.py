@@ -3,34 +3,30 @@
 
 import os
 import tqdm
+import matplotlib
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
+import skimage.io as io
+import matplotlib.pyplot as plt
 
 from skimage.transform import resize
 from tomlparse import argparse
-import skimage.io as io
+from scipy.stats import rankdata, pearsonr, spearmanr
 
-
-from object_dimensions.utils import (
+from objdim.utils import (
     load_sparse_codes,
     load_image_data,
     correlate_rsms,
-    create_path_from_params,
+    create_results_path,
     rsm_pred_torch,
-    pairiwise_correlate_dimensions
+    pairiwise_correlate_dimensions,
 )
 
-from scipy.stats import rankdata, pearsonr, spearmanr
-
-import matplotlib
 
 matplotlib.rcParams["font.sans-serif"] = "Arial"
 matplotlib.rcParams["font.family"] = "sans-serif"
-
-sns.set_style("ticks")
 
 
 def parse_args():
@@ -631,14 +627,6 @@ def visualize_dims_across_modalities(
     corrs = pearsonr(w_mod1, w_mod2)[0]
     corr_str = r"$r$" + " = " + str(corrs.round(2))
 
-    # ax = sns.scatterplot(
-    #     data=data,
-    #     x="Human",
-    #     y="DNN",
-    #     hue="colors",
-    #     palette=palette,
-    #     s=100,
-    # )
     scatter = ax.scatter(
         data["Human"],
         data["DNN"],
@@ -656,12 +644,6 @@ def visualize_dims_across_modalities(
     loc_y = np.max(w_mod2)
     ax.annotate(corr_str, (loc_x, loc_y))
     ax.legend([], [], frameon=False)
-
-    # Make minot ticks
-    # from matplotlib.ticker import AutoMinorLocator
-    # ax.xaxis.set_minor_locator(AutoMinorLocator())
-    # ax.yaxis.set_minor_locator(AutoMinorLocator(2))
-    # ax.tick_params(which='minor', length=4, color='b')  # Adjust length and color as needed
 
     fig.savefig(
         os.path.join(
@@ -776,9 +758,9 @@ def run_embedding_analysis(
     dnn_embedding, dnn_var = load_sparse_codes(dnn_path, with_var=True, relu=True)
     human_embedding = load_sparse_codes(human_path, with_var=False, relu=True)
 
-    # # Load the image data
-    plot_dir = create_path_from_params(dnn_path, "analyses", "human_dnn")
-    print("Save all human dnn comparisons to {}".format(plot_dir))
+    out_path = create_results_path(dnn_path, "human_dnn_comparison")
+
+    print("Save all human dnn comparisons to {}".format(out_path))
     image_filenames, indices = load_image_data(img_root, filter_behavior=True)
     dnn_embedding = dnn_embedding[indices]
     dnn_var = dnn_var[indices]
@@ -801,13 +783,13 @@ def run_embedding_analysis(
         }
     )
 
-    with open(os.path.join(plot_dir, "matching_dims.csv"), "w") as f:
+    with open(os.path.join(out_path, "matching_dims.csv"), "w") as f:
         df.to_csv(f, index=False)
 
     plot_mind_machine_corrs(
         corrs,
         corrs_w_duplicates,
-        plot_dir,
+        out_path,
         color="black",
         linewidth=2,
     )
@@ -821,7 +803,7 @@ def run_embedding_analysis(
         w_b /= np.max(w_b)
         w_dnn /= np.max(w_dnn)
         visualize_dims_across_modalities(
-            plot_dir,
+            out_path,
             image_filenames,
             w_b,
             w_dnn,
@@ -839,7 +821,7 @@ def run_embedding_analysis(
     print("Plot density scatters for each object category")
 
     plot_density_scatters(
-        plots_dir=plot_dir,
+        plots_dir=out_path,
         behavior_images=image_filenames,
         rsm_1=rsm_human,
         rsm_2=rsm_dnn,
@@ -851,7 +833,7 @@ def run_embedding_analysis(
 
     print("Plot most dissimilar object pairs")
     plot_most_dissim_pairs(
-        plots_dir=plot_dir,
+        plots_dir=out_path,
         rsm_1=rsm_human,
         rsm_2=rsm_dnn,
         mod_1="Human Behavior",
@@ -859,7 +841,7 @@ def run_embedding_analysis(
         top_k=20,
     )
     find_rank_transformed_dissimilarities(
-        human_embedding_sorted, dnn_embedding_sorted, image_filenames, plot_dir, topk=4
+        human_embedding_sorted, dnn_embedding_sorted, image_filenames, out_path, topk=4
     )
 
 

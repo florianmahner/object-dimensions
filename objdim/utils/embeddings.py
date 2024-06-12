@@ -2,6 +2,7 @@ import os
 import glob
 import numpy as np
 import torch
+from pathlib import Path
 from scipy.stats import pearsonr
 
 
@@ -9,10 +10,10 @@ def load_deepnet_activations(
     activation_path, center=False, zscore=False, to_torch=False, relu=True
 ):
     """Load activations from a .npy file"""
-    # Check that not both center and zscore are true
     if center and zscore:
         raise ValueError("Cannot center and zscore activations at the same time")
     activation_path = glob.glob(os.path.join(activation_path, "*.npy"), recursive=True)
+
     if len(activation_path) > 1:
         raise ValueError("More than one .npy file found in the activation path")
     activation_path = activation_path[0]
@@ -58,16 +59,20 @@ def relu_embedding(W):
     return np.maximum(0, W)
 
 
-def create_path_from_params(path, *args):
-    """Create a path if it does not exist"""
+def create_results_path(embedding_path, *args, base_path="./results"):
+    """Create a path if it does not exist. Each argument is a subdirectory in the path."""
     import os
 
-    base_path = os.path.dirname(os.path.dirname(path))
-    out_path = os.path.join(base_path, *args)
+    try:
+        model_name = Path(embedding_path).parts[-2]
+    except IndexError:
+        raise ValueError("Invalid embedding path: unable to extract model name")
+    out_path = os.path.join(base_path, "experiments", model_name, *args)
+
     try:
         os.makedirs(out_path, exist_ok=True)
     except OSError as os:
-        raise OSError("Error creating path {}: {}".format(path, os))
+        raise OSError("Error creating path {}: {}".format(out_path, os))
 
     return out_path
 
@@ -103,6 +108,16 @@ def load_sparse_codes(
         assert isinstance(weights, np.ndarray) and isinstance(
             vars, np.ndarray
         ), "Weights and var must be numpy arrays"
+
+    file = glob.glob(os.path.join(path, "parameters.npz"))
+    if len(file) > 0:
+        params = np.load(os.path.join(path, "parameters.npz"))
+        if params["method"] == "variational":
+            weights = params["pruned_q_mu"]
+            vars = params["pruned_q_var"]
+        else:
+            weights = params["pruned_weights"]
+            vars = np.zeros_like(weights)
     elif isinstance(path, str):
         if path.endswith(".txt"):
             # Check if q_mu or q_var in path

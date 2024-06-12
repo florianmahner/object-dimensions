@@ -6,7 +6,7 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-from object_dimensions.utils import (
+from objdim.utils import (
     pairiwise_correlate_dimensions,
     rsm_pred_torch,
     correlate_rsms,

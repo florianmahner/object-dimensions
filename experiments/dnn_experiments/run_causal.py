@@ -7,12 +7,13 @@ import matplotlib.pyplot as plt
 
 from PIL import Image
 from tomlparse import argparse
-from object_dimensions.utils import (
+from objdim.utils import (
     DimensionPredictor,
     load_sparse_codes,
     load_image_data,
     plot_dim_3x2,
 )
+from pathlib import Path
 
 
 # Each entry of dims is sorted by increase, decrease, relevant control, irrelevant control
@@ -77,7 +78,6 @@ def parse_args():
 
 
 def load_img_and_predict_codes(path, predictor):
-    # Load the image path using PIL and convert to torch tensor
     img = Image.open(path).convert("RGB")
     codes = predictor(img)[1]
     codes = codes.detach().numpy()
@@ -85,11 +85,14 @@ def load_img_and_predict_codes(path, predictor):
 
 
 def run_causal_comparison(embedding_path, img_root):
-    base_path = os.path.dirname(os.path.dirname(embedding_path))
-    regression_path = os.path.join(base_path, "analyses", "sparse_codes")
-    predictor = DimensionPredictor(regression_path=regression_path, device="cpu")
-    causal_root = os.path.join("./data", "causal_images")
-    out_path = os.path.join(base_path, "analyses", "causal_comparison")
+    model_name, module_name = Path(embedding_path).parts[-3:-1]
+
+    save_path = os.path.join("./results", "experiments", model_name)
+    linear_weights_path = os.path.join(save_path, "linear_weights")
+
+    predictor = DimensionPredictor(model_name, module_name, "cpu", linear_weights_path)
+    causal_root = os.path.join("./data", "image_data", "causal")
+    out_path = os.path.join(save_path, "causal_comparison")
     if not os.path.exists(out_path):
         os.makedirs(out_path)
 
@@ -156,7 +159,6 @@ def run_causal_comparison(embedding_path, img_root):
         xticklabels = [str(x) for x in xticks]
         ax.set_xticks(xticks)
         ax.set_xticklabels(xticklabels)
-        # ax.set_xlim(-3,72)
 
         fig.savefig(
             os.path.join(out_path, img_name.split(".")[0] + "_histogram.pdf"),

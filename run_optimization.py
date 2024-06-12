@@ -11,15 +11,16 @@ from tomlparse import argparse
 from argparse import Namespace
 from typing import Union, Tuple
 
-from object_dimensions import (
+import torch.utils
+
+from objdim.core import (
     ExperimentLogger,
     EmbeddingTrainer,
     VariationalEmbedding,
     DeterministicEmbedding,
     SpikeSlabPrior,
     LogGaussianPrior,
-    TripletDataset,
-    build_triplet_dataset,
+    get_triplet_dataset,
 )
 
 
@@ -150,7 +151,7 @@ def _build_prior(
 
 
 def _convert_samples_to_string(
-    train_dataset: TripletDataset, val_dataset: TripletDataset
+    train_dataset: torch.utils.data.Dataset, val_dataset: torch.utils.data.Dataset
 ) -> str:
     """Finds the combined number of training and validation triplets
     and converts them to a printable representation in number of millions"""
@@ -212,7 +213,7 @@ def train(args: Namespace) -> None:
     g = torch.Generator()
     g.manual_seed(args.seed)
 
-    train_dataset, val_dataset = build_triplet_dataset(args.triplet_path, device=device)
+    train_dataset, val_dataset = get_triplet_dataset(args.triplet_path, device=device)
     n_objects = val_dataset.n_objects
 
     num_workers = torch.cuda.device_count() * 2  # make dependent on gpu count

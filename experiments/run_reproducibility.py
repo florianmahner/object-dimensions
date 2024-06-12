@@ -12,7 +12,7 @@ from tqdm import tqdm
 from typing import Dict, List, Tuple
 import seaborn as sns
 
-from object_dimensions.utils import vectorized_pearsonr
+from objdim.utils import vectorized_pearsonr
 
 sns.set_style("white")
 sns.set_context("paper")

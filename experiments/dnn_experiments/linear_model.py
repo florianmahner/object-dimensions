@@ -9,14 +9,17 @@ import random
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
-from object_dimensions.utils import (
+from objdim.utils import (
     load_deepnet_activations,
     load_sparse_codes,
+    create_results_path,
 )
 
+from pathlib import Path
 from sklearn.linear_model import Ridge
 from sklearn.model_selection import KFold, GridSearchCV
 from sklearn.metrics import r2_score
+
 
 from tomlparse import argparse
 
@@ -29,15 +32,15 @@ def parse_args():
         description="Run ridge regression on DNN features and embedding matrix."
     )
     parser.add_argument(
-        "--dnn_path",
+        "--feature_path",
         type=str,
-        default="./data/vgg_bn_features_12",
+        default="./data/features/vgg16bn/classifier.3/features.npy",
         help="Path to DNN features.",
     )
     parser.add_argument(
         "--embedding_path",
         type=str,
-        default="./embedding/weights/params/pruned_params_epoch_1000.txt",
+        default="./data/embedding/vgg16bn/classifier.3/parameters.npz",
         help="Path to embedding matrix.",
     )
     parser.add_argument(
@@ -49,36 +52,28 @@ def parse_args():
     return parser.parse_args()
 
 
-def plot_predictions(r2_scores, results_path):
+def plot_predictions(r2_scores, out_path):
     fig, ax = plt.subplots(1, 1, figsize=(6, 4))
-
     sns.set_style("white")
     sns.set_context("paper", font_scale=1.5)
     sns.lineplot(x=range(len(r2_scores)), y=r2_scores, ax=ax, color="black")
     ax.set_xlabel("Dimension")
     ax.set_ylabel(r"$R^2$ score")
-    # ax.set_title("DNN regression on embedding matrix.")
     fig.tight_layout()
 
     out_path = os.path.join(
-        results_path, "r2_scores.pdf", dpi=300, bbox_inches="tight", pad_inches=0
+        out_path, "r2_scores.pdf", dpi=300, bbox_inches="tight", pad_inches=0
     )
     plt.savefig(out_path, dpi=300)
+    plt.close(fig)
 
 
-def run_ridge_regression(dnn_path, embedding_path, k_folds):
+def run_ridge_regression(feature_path, embedding_path, k_folds):
     global num_workers
     num_workers = multiprocessing.cpu_count() - 1
     print(f"Initialized {num_workers} workers to run task in parallel.\n")
+    results_path = create_results_path(embedding_path, "linear_model")
 
-    base_path = os.path.dirname(os.path.dirname(embedding_path))
-    results_path = os.path.join(base_path, "analyses", "sparse_codes")
-
-    if not os.path.exists(results_path):
-        print("\n...Creating directories.\n")
-        os.makedirs(results_path)
-
-    # Check if we want to delete and wait for input
     if os.listdir(results_path):
         print(
             f"\n\n...Directory {results_path} is not empty. Do you want to delete all previous results? [y/n]"
@@ -93,7 +88,7 @@ def run_ridge_regression(dnn_path, embedding_path, k_folds):
                 if file.endswith(".joblib"):
                     os.remove(os.path.join(results_path, file))
 
-    X = load_deepnet_activations(dnn_path, center=True, zscore=False, relu=True)
+    X = load_deepnet_activations(feature_path, center=True, zscore=False, relu=True)
     Y = load_sparse_codes(embedding_path)
 
     print(f"\nShape of embedding matrix: {Y.shape}")
@@ -156,5 +151,7 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
     random.seed(args.seed)
     run_ridge_regression(
-        dnn_path=args.dnn_path, embedding_path=args.embedding_path, k_folds=args.k_folds
+        feature_path=args.feature_path,
+        embedding_path=args.embedding_path,
+        k_folds=args.k_folds,
     )

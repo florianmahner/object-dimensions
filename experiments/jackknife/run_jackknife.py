@@ -17,13 +17,13 @@ import itertools
 import pickle
 import matplotlib.pyplot as plt
 from tomlparse import argparse
-from object_dimensions import build_triplet_dataset
-from object_dimensions import VariationalEmbedding as model
+from objdim import get_triplet_dataset
+from objdim import VariationalEmbedding as model
 
-from object_dimensions.utils import (
+from objdim.utils import (
     load_image_data,
     load_sparse_codes,
-    create_path_from_params,
+    create_results_path,
 )
 
 from experiments.jackknife.plotting import plot_grid
@@ -169,7 +169,7 @@ def jackknife(q_mu, q_var, triplet_indices, device, ooo_index=0):
 
 def build_dataloader(triplet_path):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    _, val_dataset = build_triplet_dataset(triplet_path, device=device)
+    _, val_dataset = get_triplet_dataset(triplet_path, device=device)
     val_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=256, shuffle=False, num_workers=8
     )
@@ -214,7 +214,7 @@ def compute_jackknife(
     human_var,
     dnn_weights,
     dnn_var,
-    plot_dir,
+    out_path,
     device,
     topk=12,
 ):
@@ -287,7 +287,7 @@ def compute_jackknife(
     save_dict["dnn_weights"] = dnn_weights
 
     # Save the dict into the plot directory
-    with open(os.path.join(plot_dir, "jackknife.pkl"), "wb") as f:
+    with open(os.path.join(out_path, "jackknife.pkl"), "wb") as f:
         pickle.dump(save_dict, f)
 
 
@@ -315,8 +315,8 @@ def main(
 
     val_loader = build_dataloader(triplet_path)
 
-    plot_dir = create_path_from_params(dnn_path, "analyses", "jackknife")
-    print("Save to '{}'".format(plot_dir))
+    out_path = create_results_path(dnn_path, "jackknife")
+    print("Save to '{}'".format(out_path))
 
     _, indices_plus = load_image_data(
         img_root,
@@ -355,7 +355,7 @@ def main(
 
         fig.tight_layout()
         plt.savefig(
-            os.path.join(plot_dir, "softmax_histogram_dnn_all.png"),
+            os.path.join(out_path, "softmax_histogram_dnn_all.png"),
             bbox_inches="tight",
             dpi=300,
             pad_inches=0.1,
@@ -368,7 +368,8 @@ def main(
         softmax_dnn_non_filtered, _ = compute_softmax_decisions(
             dnn_smaller_weights, dnn_smaller_var, val_loader, device
         )
-        sns.set(style="whitegrid", context="paper", font_scale=1.2)
+        sns.set_theme("whitegrid")
+        sns.set_context("paper")
         column_labels = {0: "k", 1: "j", 2: "i"}
         colors = {0: "blue", 1: "green", 2: "red"}
 
@@ -389,7 +390,7 @@ def main(
 
         fig.tight_layout()
         plt.savefig(
-            os.path.join(plot_dir, "softmax_histogram_dnn.png"),
+            os.path.join(out_path, "softmax_histogram_dnn.pdf"),
             bbox_inches="tight",
             dpi=300,
             pad_inches=0.1,
@@ -406,13 +407,13 @@ def main(
             human_var,
             dnn_weights_behavior,
             dnn_var_behavior,
-            plot_dir,
+            out_path,
             device,
             topk=topk,
         )
 
     if plot:
-        jackknife_path = os.path.join(plot_dir, "jackknife.pkl")
+        jackknife_path = os.path.join(out_path, "jackknife.pkl")
 
         # Raise file not found error if the jackknife file does not exist
         if not os.path.exists(jackknife_path):
@@ -441,7 +442,7 @@ def main(
             # Here we replace for visualization purposes the behavior with plus images
             image_filenames = [i.replace("01b", "plus") for i in image_filenames]
             plot_grid(
-                plot_dir,
+                out_path,
                 image_filenames,
                 jackknife_dict,
                 key,

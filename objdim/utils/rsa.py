@@ -1,7 +1,10 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import pandas as pd
 import torch
 from torch import Tensor
-from typing import Tuple
+from typing import Tuple, Union
 from tqdm import tqdm
 
 # from numba import njit, prange
@@ -157,10 +160,10 @@ def correlate_rsms_torch(rsm_a, rsm_b, correlation="pearson"):
 
 
 def rsm_pred_torch(
-    embedding: Tensor,
-    return_type="numpy",
-    verbose=False,
-    return_accuracy=False,
+    embedding: Union[np.ndarray, torch.Tensor],
+    verbose: bool = False,
+    return_type: str = "numpy",
+    return_acc: bool = False,
 ) -> Tuple[Tensor, float]:
     """
     Compute the reconstruction similarity matrix (RSM) for a given embedding
@@ -181,10 +184,15 @@ def rsm_pred_torch(
         >>> print(odd_one_out_accuracy)
         0.123456789
     """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if not isinstance(embedding, torch.Tensor):
-        embedding = torch.tensor(embedding, dtype=torch.double, device=device)
+    assert isinstance(
+        embedding, (np.ndarray, torch.Tensor)
+    ), "embedding must be a numpy array or torch tensor"
+    if isinstance(embedding, np.ndarray):
+        embedding = torch.tensor(embedding, dtype=torch.double)
+    if embedding.dtype != torch.double:
+        embedding = embedding.double()
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     sim_matrix = torch.matmul(embedding, embedding.T)
     sim_matrix = sim_matrix.to(dtype=torch.double, device=device)
     sim_matrix.exp_()
@@ -197,7 +205,9 @@ def rsm_pred_torch(
 
     rsm = torch.zeros_like(sim_matrix).double()
     ooo_accuracy = 0.0
-    pbar = tqdm(total=n_batches) if verbose else None
+
+    if verbose:
+        pbar = tqdm(total=n_batches)
 
     for batch_idx in range(n_batches):
         start_idx = batch_idx * batch_size
@@ -229,20 +239,19 @@ def rsm_pred_torch(
             pbar.set_description(f"Batch {batch_idx+1}/{n_batches}")
             pbar.update(1)
 
-    pbar.close() if verbose else None
-    rsm = rsm.cpu().numpy()
-    rsm += rsm.T  # make similarity matrix symmetric
+    if verbose:
+        pbar.close()
 
-    np.fill_diagonal(rsm, 1)
+    rsm = rsm + rsm.T  # make similarity matrix symmetric
+    rsm.fill_diagonal_(1)
     ooo_accuracy = ooo_accuracy.item() / n_batches
 
-    if return_type == "tensor":
-        if return_accuracy:
-            return torch.tensor(rsm, dtype=torch.float32), ooo_accuracy
-        return torch.tensor(rsm, dtype=torch.float32)
+    if return_type == "numpy":
+        rsm = rsm.cpu().numpy()
+
+    if return_acc:
+        return rsm, ooo_accuracy
     else:
-        if return_accuracy:
-            return rsm, ooo_accuracy
         return rsm
 
 

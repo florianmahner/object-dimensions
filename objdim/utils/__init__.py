@@ -1,7 +1,7 @@
 from .embeddings import (
     load_deepnet_activations,
     load_sparse_codes,
-    create_path_from_params,
+    create_results_path,
     center_activations,
     zscore_activations,
     relu_embedding,
@@ -18,7 +18,7 @@ from .images import (
     load_image_data,
 )
 
-from .dimension_predictor import DimensionPredictor
+from .predictor import DimensionPredictor
 from .stats import vectorized_pearsonr
 
 from .rsa import (

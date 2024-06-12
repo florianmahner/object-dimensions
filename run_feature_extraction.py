@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import os
 import torch
 from tomlparse import argparse
 
@@ -54,6 +55,7 @@ def extract_features(
     from thingsvision.core.extraction import center_features
 
     extractor = load_model(model_name)
+    out_path = os.path.join(out_path, model_name, module_name)
 
     dataset = ImageDataset(
         root=img_root,

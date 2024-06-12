@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from scipy.io import loadmat
 
-from object_dimensions.utils import (
+from objdim.utils import (
     split_half_reliability,
     correlation_matrix,
     rsm_pred_torch,

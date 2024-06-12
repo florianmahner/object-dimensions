@@ -4,12 +4,12 @@
 """ This script computes all RSA analyses between human and DNN representations."""
 
 import os
-from object_dimensions.utils import (
+from objdim.utils import (
     load_sparse_codes,
     load_image_data,
     load_deepnet_activations,
     load_concepts,
-    create_path_from_params,
+    create_results_path,
 )
 
 from experiments.rsa.pairwise import pairwise_rsm_comparison, plot_pairwise_rsm_corrs
@@ -45,12 +45,6 @@ def parse_args():
     )
     parser.add_argument("--run_analysis", action="store_true", help="Run analysis")
     parser.add_argument(
-        "--feature_path",
-        type=str,
-        default="./features",
-        help="Path to DNN features directory",
-    )
-    parser.add_argument(
         "--words48_path",
         type=str,
         default="./data/misc/words48.csv",
@@ -67,7 +61,6 @@ def parse_args():
 
 def load_filtered_data(
     image_root,
-    feature_path,
     human_path,
     dnn_path,
 ):
@@ -75,10 +68,8 @@ def load_filtered_data(
     dnn_embedding = load_sparse_codes(dnn_path, relu=True)
     human_embedding = load_sparse_codes(human_path, relu=True)
     _, indices = load_image_data(image_root, filter_behavior=True)
-    features = load_deepnet_activations(feature_path, center=False, relu=True)
-    features = features[indices]
     dnn_embedding = dnn_embedding[indices]
-    return human_embedding, dnn_embedding, features
+    return human_embedding, dnn_embedding
 
 
 def run_pairwise(
@@ -92,7 +83,7 @@ def run_pairwise(
     )
     fig = plot_pairwise_rsm_corrs(unique_rsa, duplicates_rsa)
     fig.savefig(
-        os.path.join(plot_dir, "human_dnn_pairwise_rsa.pdf"),
+        os.path.join(plot_dir, "pairwise_rsa.pdf"),
         bbox_inches="tight",
         dpi=300,
     )
@@ -102,13 +93,13 @@ def run_pairwise(
 def run_cumulative(
     human_embedding,
     dnn_embedding,
-    plot_dir,
+    out_path,
 ):
     """Run cumulative RSA between human and DNN embeddings."""
     cumulative_corrs = run_cumulative_rsa(human_embedding, dnn_embedding, nboot=100)
     fig = plot_cumulative_rsa(cumulative_corrs)
     fig.savefig(
-        os.path.join(plot_dir, "cumulative_rsa.pdf"),
+        os.path.join(out_path, "cumulative_rsa.pdf"),
         bbox_inches="tight",
         dpi=300,
     )
@@ -135,28 +126,24 @@ def run(
     img_root,
     human_embedding_path,
     dnn_embedding_path,
-    feature_path,
     concept_path,
 ):
     concepts = load_concepts(concept_path)
 
-    plot_dir = create_path_from_params(
-        dnn_embedding_path, "analyses", "human_dnn", "rsa"
-    )
+    out_path = create_results_path(dnn_embedding_path, "rsa")
 
-    human_embedding, dnn_embedding, features = load_filtered_data(
+    human_embedding, dnn_embedding = load_filtered_data(
         img_root,
-        feature_path,
         human_embedding_path,
         dnn_embedding_path,
     )
 
-    global_corr = run_global(human_embedding, dnn_embedding, concepts, plot_dir)
+    global_corr = run_global(human_embedding, dnn_embedding, concepts, out_path)
     print(f"Global Pearson's r RSMs: Human-DNN: {global_corr}")
-    # print("Running Pairwise RSA...")
-    # run_pairwise(human_embedding, dnn_embedding, plot_dir)
+    print("Running Pairwise RSA...")
+    run_pairwise(human_embedding, dnn_embedding, out_path)
     print("Running Cumulative RSA...")
-    run_cumulative(human_embedding, dnn_embedding, plot_dir)
+    run_cumulative(human_embedding, dnn_embedding, out_path)
 
 
 if __name__ == "__main__":
@@ -165,6 +152,5 @@ if __name__ == "__main__":
         args.img_root,
         args.human_path,
         args.dnn_path,
-        args.feature_path,
         args.concept_path,
     )
