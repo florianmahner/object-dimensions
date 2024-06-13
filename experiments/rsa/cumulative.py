@@ -1,15 +1,11 @@
 """ This script finds how many DNN dimensions are required to explain 95% of the variance in the human RSM."""
 
-import random
-
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 
 from objdim.utils import (
-    pairiwise_correlate_dimensions,
     rsm_pred_torch,
-    correlate_rsms,
 )
 from tqdm import tqdm
 from typing import Dict

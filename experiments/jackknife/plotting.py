@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
 import toml
 import matplotlib.pyplot as plt
@@ -13,6 +16,7 @@ import matplotlib as mpl
 
 import pandas as pd
 import skimage.io as io
+import plotly.express as px
 
 
 def plot_figure(
@@ -247,7 +251,6 @@ def plot_grid(
             pad_inches=0,
             transparent=True,
             dpi=dpi,
-            compression="tiff_lzw",
         )
 
         plt.close(fig)
@@ -303,54 +306,10 @@ def plot_bar_1d(human, dnn, ctr, out_path):
 def plot_rose(softmax, out_path):
     dimcol_cmap = get_66dim_cmap()
     dimcol_cmap_hex = [mpl.colors.to_hex(row) for row in dimcol_cmap.colors]
-
     n = softmax.shape[0]
     dims = np.arange(n)
-
-    # Save the colors with the softmax values sorted by the softmax values to json in outpath
     sort_index = np.argsort(-softmax)
-    softmax_sorted = softmax[sort_index]
-    dims_sorted = dims[sort_index]
-    # with open(out_path.replace(".pdf", ".json"), "w") as f:
-    #     json.dump(
-    #         {
-    #             "softmax_sorted": softmax_sorted.tolist(),
-    #             "dims_sorted": dims_sorted.tolist(),
-    #         },
-    #         f,
-    #     )
-
     df = pd.DataFrame({"softmax": softmax, "dims": dims})
-
-    # max_softmax = np.max(df["softmax"])
-    # hex_gray = "#cdcdcd"
-    # dimcol_cmap_hex.append(hex_gray)  # Add gray color to the end of your color map
-    # gray_color_index = (
-    #     len(dimcol_cmap_hex) - 1
-    # )  # Index of gray color in the extended cmap
-
-    # # Update 'dims' in your DataFrame for gray color mapping
-    # df.loc[df["softmax"] <= max_softmax / 10, "dims"] = gray_color_index
-    # df.loc[df["softmax"] <= max_softmax / 10, "softmax"] = max_softmax / 10
-
-    # # Plot with the updated 'dims'
-    # fig = px.bar_polar(
-    #     df,
-    #     r="softmax",
-    #     color="dims",
-    #     color_discrete_sequence=dimcol_cmap_hex,  # Use your color map
-    #     template="simple_white",
-    # )
-
-    # # # # Add shade of gray
-
-    # max_softmax = np.max(softmax)
-    # hex_gray = "#cdcdcd"
-    # dimcol_cmap_hex.append(hex_gray)
-    # ncolors = len(dimcol_cmap_hex)
-
-    # df.loc[df["softmax"] <= max_softmax / 10, "dims"] = ncolors - 1
-    # df.loc[df["softmax"] <= max_softmax / 10, "softmax"] = max_softmax / 10
 
     fig = px.bar_polar(
         df,

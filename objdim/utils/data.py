@@ -276,6 +276,9 @@ def load_sparse_codes(
             "Weights or Vars must be a .txt file path or as numpy array or .npz file"
         )
 
+    if weights is None:
+        raise FileNotFoundError("No embedding found in the path {}".format(path))
+
     weights, vars, sorted_dims = transform_params(weights, vars, relu=relu)
     if with_dim:
         if with_var:

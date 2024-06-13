@@ -7,36 +7,41 @@ We then look at the dimension that has the largest impact on the softmax decisio
 and evaluate the impact of the dimension on the softmax decision. """
 
 
-import torch
 import os
-import torch.nn.functional as F
+import torch
+import pickle
+import itertools
+
 import numpy as np
 import seaborn as sns
-from scipy.stats import rankdata
-import itertools
-import pickle
+
 import matplotlib.pyplot as plt
-from tomlparse import argparse
+import torch.nn.functional as F
+
+from scipy.stats import rankdata
 from objdim import get_triplet_dataset
 from objdim import VariationalEmbedding as model
-
 from objdim.utils import (
     load_image_data,
     load_sparse_codes,
     create_results_path,
 )
-
 from experiments.jackknife.plotting import plot_grid
+from tomlparse import argparse
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Jackknife analysis for the deep embeddings",
     )
-    parser.add_argument("--human_path", type=str, default="data/human_data.pkl")
-    parser.add_argument("--dnn_path", type=str, default="data/dnn_data.pkl")
-    parser.add_argument("--triplet_path", type=str, default="data/triplets.pkl")
-    parser.add_argument("--img_root", type=str, default="data/images")
+    parser.add_argument(
+        "--human_embedding_path", type=str, default="./data/human_embedding.npy"
+    )
+    parser.add_argument(
+        "--dnn_embedding_path", type=str, default="./data/dnn_embedding.npy"
+    )
+    parser.add_argument("--triplet_path", type=str, default="./data/triplets.pkl")
+    parser.add_argument("--img_root", type=str, default="./data/images")
     parser.add_argument(
         "--comparison", type=str, default="dnn", choices=["dnn", "human"]
     )
@@ -46,7 +51,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def compute_softmax_per_batch(q_mu, q_var, indices, device):
+def compute_softmax_per_batch(q_mu, q_var, indices):
     """This function extracts the embedding vectors at the indices of the most diverging triplets and computes the
     softmax decision for each of them"""
 
@@ -101,7 +106,7 @@ def compute_softmax_decisions(q_mu, q_var, val_loader, device):
 
     for k, indices in enumerate(val_loader):
         print("Batch {}/{}".format(k, n_batch), end="\r")
-        softmax = compute_softmax_per_batch(q_mu, q_var, indices, device)
+        softmax = compute_softmax_per_batch(q_mu, q_var, indices)
         # Add the softmax at the correct index
         softmax_decisions[k * bs : (k + 1) * bs] = softmax.detach()
         ooo_indices[k * bs : (k + 1) * bs] = indices.detach()
@@ -143,7 +148,7 @@ def jackknife(q_mu, q_var, triplet_indices, device, ooo_index=0):
     softmax_diff = np.ones((len(triplet_indices), n_dims)) * float("inf")
 
     # Without jackknifing for that triplet
-    softmax_default = compute_softmax_per_batch(q_mu, q_var, triplet_indices, device)
+    softmax_default = compute_softmax_per_batch(q_mu, q_var, triplet_indices)
     softmax_default = softmax_default[:, ooo_index]
     softmax_default = softmax_default.detach().cpu().numpy()
 
@@ -153,9 +158,7 @@ def jackknife(q_mu, q_var, triplet_indices, device, ooo_index=0):
         q_var_i = torch.cat([q_var[:, 0:i], q_var[:, i + 1 :]], dim=1)
 
         # Compute the softmax decisions
-        softmax_per_batch = compute_softmax_per_batch(
-            q_mu_i, q_var_i, triplet_indices, device
-        )
+        softmax_per_batch = compute_softmax_per_batch(q_mu_i, q_var_i, triplet_indices)
 
         # This is the odd one out probability (at the index of the odd one out)
         softmax_per_batch = softmax_per_batch[:, ooo_index]
@@ -454,8 +457,8 @@ def main(
 if __name__ == "__main__":
     args = parse_args()
     main(
-        args.human_path,
-        args.dnn_path,
+        args.human_embedding_path,
+        args.dnn_embedding_path,
         args.img_root,
         args.triplet_path,
         2000,  # TODO I have replace this with a fixed number over all triplets

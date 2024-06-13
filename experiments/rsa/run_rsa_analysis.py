@@ -7,7 +7,6 @@ import os
 from objdim.utils import (
     load_sparse_codes,
     load_image_data,
-    load_deepnet_activations,
     load_concepts,
     create_results_path,
 )
@@ -25,9 +24,11 @@ def parse_args():
         description="Compare human and DNN performance on the same task."
     )
     parser.add_argument(
-        "--human_path", type=str, help="Path to human embedding matrix."
+        "--human_embedding_path", type=str, help="Path to human embedding matrix."
     )
-    parser.add_argument("--dnn_path", type=str, help="Path to DNN embedding matrix.")
+    parser.add_argument(
+        "--dnn_embedding_path", type=str, help="Path to DNN embedding matrix."
+    )
     parser.add_argument(
         "--img_root", type=str, help="Path to VGG feature matrix and filenames"
     )
@@ -150,7 +151,7 @@ if __name__ == "__main__":
     args = parse_args()
     run(
         args.img_root,
-        args.human_path,
-        args.dnn_path,
+        args.human_embedding_path,
+        args.dnn_embedding_path,
         args.concept_path,
     )
