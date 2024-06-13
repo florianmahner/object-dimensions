@@ -11,12 +11,13 @@ import torch.nn.functional as F
 
 from typing import List, Dict, Union, Any, Tuple
 
-from objdim.core.embedding import (
+from .embedding import (
     VariationalEmbedding,
     DeterministicEmbedding,
 )
-from objdim.core.priors import SpikeSlabPrior, LogGaussianPrior
-from objdim.core.logging import ExperimentLogger
+from .priors import SpikeSlabPrior, LogGaussianPrior
+from .logging import ExperimentLogger
+
 
 from torch.utils.data import DataLoader
 

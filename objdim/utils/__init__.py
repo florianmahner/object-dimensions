@@ -1,4 +1,4 @@
-from .embeddings import (
+from .data import (
     load_deepnet_activations,
     load_sparse_codes,
     create_results_path,
@@ -7,19 +7,15 @@ from .embeddings import (
     relu_embedding,
     remove_zeros,
     transform_params,
-    pairiwise_correlate_dimensions,
-)
-
-
-from .images import (
     ImageDataset,
     img_to_uint8,
     get_image_transforms,
     load_image_data,
 )
 
+
 from .predictor import DimensionPredictor
-from .stats import vectorized_pearsonr
+from .stats import vectorized_pearsonr, pairwise_correlate_dimensions
 
 from .rsa import (
     # rsm_pred_numba,

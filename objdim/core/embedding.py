@@ -5,11 +5,11 @@ import torch
 import re
 import torch.nn as nn
 
-from objdim.core.pruning import (
+from .pruning import (
     NormalDimensionPruning,
     LogNormalDimensionPruning,
 )
-from objdim.core.priors import SpikeSlabPrior, LogGaussianPrior
+from .priors import SpikeSlabPrior, LogGaussianPrior
 
 
 class QLogVar(nn.Module):

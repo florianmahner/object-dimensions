@@ -37,7 +37,7 @@ def load_regression_weights(
 
 
 class DimensionPredictor(nn.Module):
-    """Predicts Sparse Codes  (i.e. embedding dimensions) from a collection of sampled images."""
+    """Predicts embedding dimensions from a collection of sampled images."""
 
     def __init__(
         self,

@@ -85,13 +85,13 @@ def load_img_and_predict_codes(path, predictor):
 
 
 def run_causal_comparison(embedding_path, img_root):
-    model_name, module_name = Path(embedding_path).parts[-3:-1]
+    model_name, module_name = Path(embedding_path).parts[-2:]
 
     save_path = os.path.join("./results", "experiments", model_name)
-    linear_weights_path = os.path.join(save_path, "linear_weights")
+    linear_weights_path = os.path.join(save_path, "linear_model")
 
     predictor = DimensionPredictor(model_name, module_name, "cpu", linear_weights_path)
-    causal_root = os.path.join("./data", "image_data", "causal")
+    causal_root = os.path.join("./data", "images", "causal")
     out_path = os.path.join(save_path, "causal_comparison")
     if not os.path.exists(out_path):
         os.makedirs(out_path)

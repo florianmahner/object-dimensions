@@ -5,8 +5,6 @@ __all__ = ["optimize_latents"]
 
 import torchvision
 import sys
-
-
 import random
 import torch
 import os
@@ -42,6 +40,8 @@ transforms = torchvision.transforms.Compose(
         ),
     ]
 )
+
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 
 
 def parse_args():
@@ -705,7 +705,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
 
     path = Path(args.embedding_path)
-    model_name, module_name = path.parts[-3], path.parts[-2]
+    model_name, module_name = path.parts[-2], path.parts[-1]
 
     if args.sample_dataset:
         print("Sampling latents...\n")

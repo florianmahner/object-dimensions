@@ -26,7 +26,7 @@ parser.add_argument(
     "--similarity",
     type=str,
     choices=["cosine", "dot", "euclidean"],
-    help="Similarity function for pairiwse sampling",
+    help="Similarity function for pairwise sampling",
 )
 parser.add_argument("--seed", type=int, default=42, help="Random seed")
 parser.add_argument(
@@ -196,9 +196,9 @@ class Sampler(object):
         for i, triplet in enumerate(unique_triplets):
             print(f"Process {i}/{self.n_samples} triplets", end="\r")
             choice = self.get_choice(S, triplet)
-            triplets[
-                i
-            ] = choice  # probably returns a list of indices of shape k where for that image the odd one out is
+            triplets[i] = (
+                choice  # probably returns a list of indices of shape k where for that image the odd one out is
+            )
         return triplets
 
     def _get_similarity_matrx(self, X):
@@ -243,9 +243,9 @@ class Sampler(object):
         for i, triplet in enumerate(unique_triplets):
             print(f"Process {i}/{n_samples} triplets", end="\r")
             choice = self.get_choice(S, triplet)
-            triplets[
-                i
-            ] = choice  # probably returns a list of indices of shape k where for that image the odd one out is
+            triplets[i] = (
+                choice  # probably returns a list of indices of shape k where for that image the odd one out is
+            )
         return triplets
 
     def create_train_test_split(self, similarity_judgements):
