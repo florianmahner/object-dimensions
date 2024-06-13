@@ -3,8 +3,7 @@ results
 stylegan_xl
 .vscode
 trash
-experiments/flask_experiment/static
-experiments/flask_experiment/session
+experiments/dimension_rating_experiment/static/images
 scripts/slurm
 
 # Byte-compiled / optimized / DLL files
