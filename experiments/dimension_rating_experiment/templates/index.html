@@ -1,0 +1,195 @@
+<!doctype html>
+<html>
+
+<head>
+    <title>Image Rating Experiment</title>
+    <style>
+        h1 {
+            text-align: center;
+            font-size: 40px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .all {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+
+
+        .image-container {
+            display: flex;
+            margin: 50px auto;
+            padding: 0px;
+        }
+
+        .shaded-bar {
+            background: linear-gradient(to bottom, #7e7c7c, #f2f2f2);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 30;
+            margin-right: 20px;
+        }
+
+        .shaded-bar-text {
+            font-weight: bold;
+            font-size: 30px;
+            color: #333;
+        }
+
+        .image-wrapper {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            padding: -10px;
+        }
+
+        .image-wrapper img {
+            padding: 0px;
+        }
+
+        form {
+            margin-left: 150px;
+            margin-top: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        submit-button {
+            display: block;
+            flex-direction: row;
+        }
+
+        input[type=text] {
+            width: 300%;
+            max-width: 800px;
+            margin-top: -50px;
+            margin-left: -10px;
+            box-sizing: border-box;
+            padding: 10px;
+            font-size: 20px;
+        }
+
+        input[type=number] {
+            width: 300%;
+            max-width: 800px;
+            margin-top: -30px;
+            margin-left: -10px;
+            margin-bottom: -20px;
+
+            box-sizing: border-box;
+            padding: 10px;
+            font-size: 20px;
+        }
+
+        input[type=submit] {
+            margin-top: 5px;
+            width: 100%;
+            max-width: 200px;
+            box-sizing: border-box;
+            padding: 10px;
+            font-size: 18px;
+        }
+        .sample-counter {
+            position: fixed;
+            bottom: 10px;
+            right: 20px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+    </style>
+
+</head>
+
+<body style="font-family:verdana ;width: 1000px; margin: 0 auto; text-align: center; font-size: 20px;">
+
+    <div class="all">
+            
+        <div class="image-container">
+            <div class="shaded-bar">
+                <span class="shaded-bar-text">High</span>
+                <span class="shaded-bar-text">Low</span>
+            </div>
+            <div class="image-wrapper">
+                <img src="{{ image_filepath }}" alt="Image" width="1000">
+            </div>
+        </div>
+        <form action="/" method="POST">
+            <br>
+            <input type="text" name="descriptions" placeholder="Enter up to 5 descriptions (separated by commas)"
+       pattern="^([a-zA-Z-\s]+\s*,\s*){0,4}[a-zA-Z-\s]+$" required>
+
+            <br>
+
+            <br>
+
+            <!-- # Make a field that says rate the interpretability from     1-10 -->
+            <input type="number" name="interpretability"
+                placeholder="Rate collection from 1 (not interpretable) - 7 (very interpretable)" min="1" max="7"
+                required>
+            <br>
+            <br>
+
+            <div class="button">
+                <input type="hidden" name="index" value="{{ index }}">
+                <input type="submit" name="submit_button" value="Next">
+            </div>
+        </form>
+
+        <div class="sample-counter">
+            <!-- Place this in the lower right -->
+            {{ index + 1}}/69
+         </div>
+
+        
+    </div>
+
+    <!-- Add a key listenser that silences enter -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function (event) {
+            var descriptionInput = document.getElementsByName("descriptions")[0];
+            var interpretationInput = document.getElementsByName("interpretability")[0];
+            descriptionInput.addEventListener("keydown", function (event) {
+                if (event.keyCode === 13) {
+                    event.preventDefault();
+                    return false;
+                }
+            });
+            interpretationInput.addEventListener("keydown", function (event) {
+                if (event.keyCode === 13) {
+                    event.preventDefault();
+                    return false;
+                }
+            });
+        });
+        (function () {
+            var links = document.getElementsByTagName('a');
+            for (var i = 0; i < links.length; i++) {
+                var link = links[i];
+                var href = link.getAttribute('href');
+                var random = Math.random();
+                if (href.indexOf('?') > -1) {
+                    href += '&random=' + random;
+                } else {
+                    href += '?random=' + random;
+                }
+                link.setAttribute('href', href);
+            }
+        })();
+
+        window.addEventListener('load', function () {
+        if (performance.navigation.type === performance.navigation.TYPE_RELOAD) {
+            location.href = "/start_new_session";
+        }
+    });
+
+    </script>
+</body>
+
+</html>

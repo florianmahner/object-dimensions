@@ -9,7 +9,6 @@ import torchvision
 from PIL import Image
 from pathlib import Path
 from typing import Optional, List
-from scipy.stats import pearsonr
 
 import numpy as np
 import torchvision.transforms as T
