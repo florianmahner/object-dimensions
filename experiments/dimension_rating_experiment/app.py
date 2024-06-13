@@ -8,7 +8,6 @@ from flask import (
     redirect,
     url_for,
     session,
-    make_response,
 )
 from pathlib import Path
 import uuid
