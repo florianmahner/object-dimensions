@@ -21,7 +21,7 @@ from objdim.utils import (
     correlate_rsms,
     create_results_path,
     rsm_pred_torch,
-    pairiwise_correlate_dimensions,
+    pairwise_correlate_dimensions,
 )
 
 
@@ -766,12 +766,12 @@ def run_embedding_analysis(
     dnn_var = dnn_var[indices]
 
     human_embedding_sorted, dnn_embedding_sorted, corrs, matching_dims = (
-        pairiwise_correlate_dimensions(
+        pairwise_correlate_dimensions(
             human_embedding, dnn_embedding, duplicates=False, sort_by_corrs=True
         )
     )
 
-    corrs_w_duplicates, match_duplicates = pairiwise_correlate_dimensions(
+    corrs_w_duplicates, match_duplicates = pairwise_correlate_dimensions(
         human_embedding, dnn_embedding, duplicates=True, sort_by_corrs=True
     )[2:4]
 

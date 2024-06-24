@@ -1,5 +1,5 @@
 import numpy as np
-from objdim.utils.embeddings import load_sparse_codes
+from objdim.utils.data import load_sparse_codes
 from scipy.stats import pearsonr
 import pandas as pd
 

@@ -8,7 +8,6 @@ from typing import Union
 from scipy.stats import pearsonr
 from torch.nn import functional as F
 
-
 def vectorized_pearsonr(base: np.ndarray, comp: np.ndarray) -> Union[float, np.ndarray]:
     """Alterntive to scipy.stats.pearsonr that is vectorized over the first dimension for
     fast pairwise correlation calculation."""

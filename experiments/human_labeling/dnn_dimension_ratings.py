@@ -53,7 +53,9 @@ def parse_args():
 def plot_quality(df):
     df = df[df["Quality"] != "unclear"]
 
-    quality_counts = df.groupby(["Model", "Quality"]).size().unstack(fill_value=0)
+    quality_counts = (
+        df.groupby(["Model", "Quality"], observed=False).size().unstack(fill_value=0)
+    )
     quality_percent = quality_counts.div(
         quality_counts.sum(axis=1), axis=0
     ).reset_index()
@@ -107,7 +109,9 @@ def plot_quality(df):
 
 def plot_concept(df):
     # Counting occurrences of each concept per model and convert to percentage
-    concept_counts = df.groupby(["Model", "Concept"]).size().unstack(fill_value=0)
+    concept_counts = (
+        df.groupby(["Model", "Concept"], observed=False).size().unstack(fill_value=0)
+    )
     concept_percent = concept_counts.div(
         concept_counts.sum(axis=1), axis=0
     ).reset_index()
@@ -161,7 +165,9 @@ def plot_concept(df):
 
 def plot_concept_bar(df):
     # Counting occurrences of each concept per model and convert to percentage
-    concept_counts = df.groupby(["Model", "Concept"]).size().unstack(fill_value=0)
+    concept_counts = (
+        df.groupby(["Model", "Concept"], observed=False).size().unstack(fill_value=0)
+    )
     concept_percent = concept_counts.div(
         concept_counts.sum(axis=1), axis=0
     ).reset_index()
@@ -209,6 +215,7 @@ def load_dimension_mapping(path: str):
         new_mapping[new_key] = val
 
     dimension_mapping = new_mapping
+    return dimension_mapping
 
 
 def reorder_df(df, ordering):
@@ -245,6 +252,7 @@ def process_dimension_ratings(ratings, dimension_mapping):
 
     for model in models:
         model_df = df[df["Model"] == model]
+
         reordered_model_df = reorder_df(model_df, dimension_mapping[model])
         reordered_dfs.append(reordered_model_df)
 
@@ -256,19 +264,26 @@ def process_dimension_ratings(ratings, dimension_mapping):
     )
 
     df = reordered_df
-    df["Dimension"] = df.groupby("Model").cumcount()
+    df["Dimension"] = df.groupby("Model", observed=False).cumcount()
     return df
 
 
-def print_percentage_unclear(df):
-    human = df[df["Model"] == "Human"]
-    unclear = human[human["Quality"] == "unclear"]
-    percentage_human_unclear = len(unclear) / len(human) * 100
-    vgg16 = df[df["Model"] == "VGG-16"]
-    unclear = vgg16[vgg16["Quality"] == "unclear"]
-    percentage_vgg16_unclear = len(unclear) / len(vgg16) * 100
-    print(f"Percentage of unclear ratings in VGG-16: {percentage_vgg16_unclear:.2f}%")
-    print(f"Percentage of unclear ratings in Human: {percentage_human_unclear:.2f}%")
+def print_percentage_concept(df):
+    for model in df["Model"].unique():
+        for concept in df["Concept"].unique():
+            model_df = df[df["Model"] == model]
+            concept_df = model_df[model_df["Concept"] == concept]
+            percentage = len(concept_df) / len(model_df) * 100
+            print(f"Percentage of {concept} ratings in {model}: {percentage:.2f}%")
+
+
+def print_percentage_quality(df):
+    for model in df["Model"].unique():
+        for quality in df["Quality"].unique():
+            model_df = df[df["Model"] == model]
+            quality_df = model_df[model_df["Quality"] == quality]
+            percentage = len(quality_df) / len(model_df) * 100
+            print(f"Percentage of {quality} ratings in {model}: {percentage:.2f}%")
 
 
 def plot_semantic_visual(df):
@@ -398,7 +413,8 @@ def main(dimension_mapping_path, dimension_rating_path):
     df = process_dimension_ratings(ratings, dimension_mapping)
     df.to_csv("./data/misc/dimension_ratings_processed.csv", index=False)
 
-    print_percentage_unclear(df)
+    print_percentage_concept(df)
+    print_percentage_quality(df)
     plot_quality(df)
     plot_concept(df)
     plot_concept_bar(df)
@@ -407,8 +423,8 @@ def main(dimension_mapping_path, dimension_rating_path):
     plot_semantic_visual(df)
 
     embedding_paths = [
-        ("Human", "./data/embeddings/human/parameters.npz"),
-        ("VGG-16", "./data/embeddings/vgg16/classifier.3/parameters.npz"),
+        ("Human", "./data/embeddings/human_behavior/parameters.npz"),
+        ("VGG-16", "./data/embeddings/vgg16_bn/classifier.3/parameters.npz"),
         ("CLIP", "./data/embeddings/OpenCLIP/visual/parameters.npz"),
         ("Densenet", "./data/embeddings/densenet/global_pool/parameters.npz"),
         ("Resnet50", "./data/embeddings/resnet50/avgpool/parameters.npz"),

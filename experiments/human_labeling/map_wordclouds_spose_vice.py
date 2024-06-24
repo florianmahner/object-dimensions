@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import os
 
 
-def pairiwise_correlate_dimensions(
+def pairwise_correlate_dimensions(
     vice_embedding,
     spose_embedding,
     duplicates=True,
@@ -140,7 +140,7 @@ def main():
     embedding_vice = load_sparse_codes(path_vice)
     embedding_spose = load_sparse_codes(path_spose)
 
-    corrs, mod2_dims = pairiwise_correlate_dimensions(
+    corrs, mod2_dims = pairwise_correlate_dimensions(
         embedding_vice, embedding_spose, duplicates=True
     )
 
