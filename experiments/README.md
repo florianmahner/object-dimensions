@@ -1,10 +1,23 @@
-## Overview of Experiments
+## Experimental Analyses
 
-This is the main directory to reproduce all experiments in the paper. We have following experiments:
+We provide the main experiments of the paper in the `./experiments` folder. The experiments are divided into the following categories:
 
-1. [Human DNN Comparison](human_dnn) -> All files that compare humans and the DNN embedding
-2. [causal_comparison.p]([causal_comparison.p) -> Do causal image manipulations affect the DNN embedding?
+- **Dimension Rating Experiment**: Flask experiment to get human observers rate the intepretability of each dimension in the DNN embedding and to give human annotated labels of these dimensions
 
-TBC
+--**DNN Experiments**: Interpretability analysis of the DNN embeddings (ie activation maximization, causal testing, grad cam)
+
+--**Jackknife**: Jackknife resampling to relate the dimensions of the human and DNN embedding back to behavioral decisions in the triplet task
+
+--**Human Labeling**: Human labeling of the dimensions of the DNN embeddings, categorizing them into visual, mxied visual semantic and semantic
+
+--**RSA**: All Representational Similarity Analyses done for the paper
+
+
+
+
+
+
+
+
 
 
