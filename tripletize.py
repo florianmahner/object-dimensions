@@ -83,7 +83,7 @@ def cosine_matrix(X: Array, a_min: float = -1.0, a_max: float = 1.0):
     """Compute cosine-similarity matrix."""
     num = X @ X.T
     l2_norms = np.linalg.norm(X, axis=1)
-    denom = np.outer(l2_norms, l2_norms)
+    denom = np.outer(l2_norms, l2_norms) + eps
     S = (num / denom).clip(min=a_min, max=a_max)
     return S
 
