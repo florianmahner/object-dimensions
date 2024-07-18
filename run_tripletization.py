@@ -79,7 +79,9 @@ def parse_args():
     return parser.parse_args()
 
 
-def cosine_matrix(X: Array, a_min: float = -1.0, a_max: float = 1.0):
+def cosine_matrix(
+    X: Array, a_min: float = -1.0, a_max: float = 1.0, eps: float = 1e-8
+) -> Array:
     """Compute cosine-similarity matrix."""
     num = X @ X.T
     l2_norms = np.linalg.norm(X, axis=1)
