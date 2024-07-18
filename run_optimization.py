@@ -43,13 +43,6 @@ def parse_args():
         help="Path to store all training outputs and model checkpoints",
     )
     parser.add_argument(
-        "--modality",
-        type=str,
-        default="dnn",
-        choices=("dnn", "behavior"),
-        help="Modality to train on",
-    )
-    parser.add_argument(
         "--fresh",
         default=False,
         action="store_true",
@@ -245,7 +238,6 @@ def train(args: Namespace) -> None:
     log_path = os.path.join(
         args.log_path,
         args.identifier,
-        args.modality,
         args.method,
         n_samples,
         args.prior,
