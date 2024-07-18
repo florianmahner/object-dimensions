@@ -242,35 +242,18 @@ def train(args: Namespace) -> None:
         args.prior = "uniform"
 
     # Build the logpath
-    if args.modality == "behavior":
-        log_path = os.path.join(
-            args.log_path,
-            args.identifier,
-            args.modality,
-            args.method,
-            n_samples,
-            args.prior,
-            str(args.init_dim),
-            str(args.batch_size),
-            str(args.beta),
-            str(args.seed),
-        )
-    else:
-        model_name, module_name = args.triplet_path.split("/")[-3:-1]
-        log_path = os.path.join(
-            args.log_path,
-            args.identifier,
-            args.modality,
-            args.method,
-            model_name,
-            module_name,
-            n_samples,
-            args.prior,
-            str(args.init_dim),
-            str(args.batch_size),
-            str(args.beta),
-            str(args.seed),
-        )
+    log_path = os.path.join(
+        args.log_path,
+        args.identifier,
+        args.modality,
+        args.method,
+        n_samples,
+        args.prior,
+        str(args.init_dim),
+        str(args.batch_size),
+        str(args.beta),
+        str(args.seed),
+    )
 
     # Save all configuration parameters in the directory
     if not os.path.exists(log_path):
