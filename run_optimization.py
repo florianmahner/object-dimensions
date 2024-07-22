@@ -149,11 +149,9 @@ def _convert_samples_to_string(
     """Finds the combined number of training and validation triplets
     and converts them to a printable representation in number of millions"""
     n_samples = len(train_dataset) + len(val_dataset)
-    n_samples = round(n_samples / 1e6, 2)
-    n_samples = str(n_samples)
-    n_samples = n_samples.rstrip("0")
-    n_samples = n_samples + "mio"
-    return n_samples
+    n_samples = f"{n_samples / 1e6:.2f}".rstrip("0").rstrip(".")
+
+    return f"{n_samples}mio"
 
 
 def load_args(args: Namespace, log_path: str, fresh: bool) -> Namespace:
