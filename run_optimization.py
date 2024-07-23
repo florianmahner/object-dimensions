@@ -23,6 +23,8 @@ from objdim.core import (
     get_triplet_dataset,
 )
 
+torch.backends.cuda.matmul.allow_tf32 = True
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -123,6 +125,14 @@ def parse_args():
     parser.add_argument(
         "--identifier", type=str, default="", help="Identifier for the experiment"
     )
+    parser.add_argument(
+        "--pi",
+        type=float,
+        default=0.5,
+        help="Initial pi value of the mixing distribution of the spike and slab",
+    )
+    parser.add_argument("--spike", type=float, default=0.25, help="Initial spike value")
+    parser.add_argument("--slab", type=float, default=2.0, help="Initial slab value")
     return parser.parse_args()
 
 
@@ -133,14 +143,17 @@ def _set_global_seed(seed: int) -> None:
 
 
 def _build_prior(
-    prior: str, n_objects: int, init_dim: int, scale: float
+    args,
+    n_objects: int,
 ) -> Union[SpikeSlabPrior, LogGaussianPrior]:
-    if prior == "sslab":
-        return SpikeSlabPrior(n_objects, init_dim)
-    elif prior == "gauss":
-        return LogGaussianPrior(n_objects, init_dim, loc=0.0, scale=scale)
+    if args.prior == "sslab":
+        return SpikeSlabPrior(
+            n_objects, args.init_dim, pi=args.pi, spike=args.spike, slab=args.slab
+        )
+    elif args.prior == "gauss":
+        return LogGaussianPrior(n_objects, args.init_dim, loc=0.0, scale=args.scale)
     else:
-        raise ValueError("Unknown prior: {}".format(prior))
+        raise ValueError("Unknown prior: {}".format(args.prior))
 
 
 def _convert_samples_to_string(
@@ -179,7 +192,7 @@ def _build_model(args: Namespace, n_objects: int) -> Union[
 ]:
     # Function implementation
     if args.method == "variational":
-        model_prior = _build_prior(args.prior, n_objects, args.init_dim, args.scale)
+        model_prior = _build_prior(args, n_objects)
         model = VariationalEmbedding(
             model_prior, n_objects, args.init_dim, args.non_zero_weights
         )
@@ -207,7 +220,8 @@ def train(args: Namespace) -> None:
     train_dataset, val_dataset = get_triplet_dataset(args.triplet_path, device=device)
     n_objects = val_dataset.n_objects
 
-    num_workers = torch.cuda.device_count() * 2  # make dependent on gpu count
+    # num_workers = torch.cuda.device_count() * 2  # make dependent on gpu count
+    num_workers = 0
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
         batch_size=args.batch_size,
