@@ -5,6 +5,8 @@ import os
 import re
 import random
 import itertools
+import joblib
+import h5py
 
 import numpy as np
 
@@ -23,10 +25,16 @@ def parse_args():
         description="Extract features and tripletize from a dataset using a pretrained model and module"
     )
     parser.add_argument(
-        "--feature_path",
+        "--file_path",
         type=str,
         default="./data/image_data/things",
-        help="Path to features to use for tripletization",
+        help="Path to the representation used to extract triplets",
+    )
+    parser.add_argument(
+        "--key",
+        type=str,
+        help="""If the file path is a .pkl file, specify the key to load the data 
+            (use dot-separated keys for nested dictionaries)""",
     )
     parser.add_argument(
         "--out_path",
@@ -122,21 +130,40 @@ def get_similarity(X: Array, similarity: Union[str, Callable] = "dot") -> Array:
     return S
 
 
-def load_domain(path: str) -> Array:
-    """Load features from a file can either be a .npy or .txt file."""
-    search = re.search(r"(npy|txt)$", path)
+def get_nested_data(X: dict, nested_key: str) -> Array:
+    keys = nested_key.split(".")
+    for key in keys:
+        X = X[key]
+    return X
+
+
+def load_domain(path: str, key: Optional[str] = None) -> Array:
+    """Load features from a file can either be a .npy or .txt file or a dict"""
+    search = re.search(r"(npy|txt|pkl|h5)$", path)
     if not os.path.exists(path):
         raise FileNotFoundError(f"File {path} does not exist")
     if not search:
         raise ValueError("Input file must be a .npy or .txt file")
-    func = np.load if re.search(r"(npy)$", path) else np.loadtxt
-    domain = func(path)
-    return domain
+    if re.search(r"(npy)$", path):
+        return np.load(path)
+    elif re.search(r"(txt)$", path):
+        return np.loadtxt(path)
+    elif re.search(r"(pkl)$", path):
+        data = joblib.load(path)
+        return get_nested_data(data, key)
+
+    elif re.search(r"(h5)$", path):
+        with h5py.File(path, "r") as handler:
+            if key:
+                data = get_nested_data(handler, key)
+            else:
+                data = handler
+            return data[:]
 
 
 @dataclass(init=True, repr=True)
 class Sampler(object):
-    feature_path: str
+    file_path: str
     out_path: str
     n_samples: int
     k: int = 3
@@ -146,6 +173,7 @@ class Sampler(object):
     similarity: Union[str, Callable] = "dot"
     transforms: Optional[Callable] = None
     triplet_path: Optional[str] = None
+    key: Optional[str] = None
 
     def __post_init__(self):
         if self.k not in [2, 3]:
@@ -159,7 +187,7 @@ class Sampler(object):
         if not os.path.exists(self.out_path):
             os.makedirs(self.out_path)
 
-        self.X = load_domain(self.feature_path)
+        self.X = load_domain(self.file_path, self.key)
         if self.transforms:
             self.X = self.transforms(self.X)
         else:
@@ -333,7 +361,7 @@ if __name__ == "__main__":
     args = parse_args()
 
     sampler = Sampler(
-        args.feature_path,
+        args.file_path,
         args.out_path,
         n_samples=args.n_samples,
         k=args.k,
@@ -341,6 +369,7 @@ if __name__ == "__main__":
         seed=args.seed,
         similarity=args.similarity,
         triplet_path=args.triplet_path,
+        key=args.key,
     )
 
     sampler.run()
