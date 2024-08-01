@@ -2,7 +2,9 @@
 
 ## Overview
 
-This repository provides tools to learn interpretable representational embeddings from behavioral responses to natural images using a triplet odd-one-out task. The choices can be obtained by:
+This repository provides the code to reproduce the main parts of the paper [Dimensions underlying the representational alignment of deep neural networks with humans](arxiv.org/pdf/2406.19087). In addition, it provides the code to learn interpretable representational embeddings from behavioral responses to natural images using a triplet odd-one-out task.
+
+The choices can be obtained by:
 
 1. Running behavioral experiments with humans.
 2. Simulating triplet choices from any representation space (e.g., DNN activations, neural recordings).
@@ -13,7 +15,8 @@ The repository supports both the simulation of behavioral choices and the use of
 
 ### Step 1: Install Poetry
 
-First, install [Poetry](https://python-poetry.org/) for dependency management:
+This project uses Python 3.9.12 and Poetry for dependency management.
+First, install [Poetry](https://python-poetry.org/):
 
 ```bash
 curl -sSL https://install.python-poetry.org | python3 -
@@ -45,6 +48,10 @@ We use the THINGS dataset, which consists of 1,854 images of everyday objects. T
 ```bash
 make data
 ```
+
+## Main Experiments of the Paper
+
+The main experiments are detailed in the `./experiments` folder. Refer to the README in that directory for an overview.
 
 ## Extracting Triplets
 
@@ -104,9 +111,6 @@ path
 
 The final model parameters are stored in `parameters.npz`, along with all training configurations. For SPoSE, only the mean of the embedding is modeled, while for VICE, both the mean and variance of the Gaussian variational distribution are modeled.
 
-## Main Experiments of the Paper
-
-The main experiments are detailed in the `./experiments` folder. Refer to the README in that directory for an overview.
 
 ## Contact
 
