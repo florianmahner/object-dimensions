@@ -15,7 +15,6 @@ import seaborn as sns
 from objdim.utils import vectorized_pearsonr
 
 sns.set_style("white")
-sns.set_context("paper")
 
 
 def parse_args():

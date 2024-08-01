@@ -5,8 +5,6 @@ import torch
 import os
 import glob
 import argparse
-import logging
-
 
 import numpy as np
 import torch.nn.functional as F
@@ -22,7 +20,8 @@ from .logging import ExperimentLogger
 
 
 from torch.utils.data import DataLoader
-from tqdm import tqdm
+
+from torch.profiler import profile, record_function, ProfilerActivity
 
 
 class Params(object):
@@ -121,14 +120,14 @@ class EmbeddingTrainer(object):
         self.optim = torch.optim.Adam(self.model.parameters(), lr=self.params.lr)
 
     def init_model_from_checkpoint(self) -> None:
-        logging.info("Load model and optimizer from state dict to resume training")
+        print("Load model and optimizer from state dict to resume training")
 
         # Find file with .tar ending in directory
         checkpoint_path = os.path.join(self.log_path, "checkpoints/*.tar")
         checkpoints = glob.glob(checkpoint_path)
 
         if not checkpoints:
-            logging.info(
+            print(
                 "No checkpoint found in {}. Cannot resume training, start fresh instead".format(
                     self.log_path
                 )
@@ -174,7 +173,7 @@ class EmbeddingTrainer(object):
 
         # Compute accuracy for that batch
         triplet_choices = torch.argmax(log_softmax, 0)
-        triplet_accuracy = torch.sum(triplet_choices == 0) / len(triplet_choices)
+        triplet_accuracy = (triplet_choices == 0).float().mean()
 
         return nll, triplet_accuracy
 
@@ -269,7 +268,7 @@ class EmbeddingTrainer(object):
         nll_losses = torch.zeros(n_batches, device=self.device)
         triplet_accuracies = torch.zeros(n_batches, device=self.device)
 
-        for k, indices in tqdm(enumerate(dataloader), total=n_batches):
+        for k, indices in enumerate(dataloader):
             if self.model.training:
                 nll, complex_loss, accuracy = self.step_triplet_batch(indices)
                 complex_losses[k] = complex_loss.detach()
@@ -286,6 +285,11 @@ class EmbeddingTrainer(object):
                 loss.backward()
                 self.optim.step()
 
+                print(
+                    f"Train Batch {k}/{n_batches}",
+                    end="\r",
+                )
+
             # Do a variational evaluation if we are not training
             if self.model.training == False:
                 if self.method == "variational":
@@ -293,6 +297,12 @@ class EmbeddingTrainer(object):
                 else:
                     embedding = self.model()
                     nll, accuracy = self.calculate_likelihood(embedding, indices)
+
+                    print(
+                        f"Val Batch {k}/{n_batches}",
+                        end="\r",
+                    )
+
             nll_losses[k] = nll.detach()
             triplet_accuracies[k] = accuracy.detach()
 
@@ -314,8 +324,24 @@ class EmbeddingTrainer(object):
         return epoch_loss, epoch_accuracy
 
     def train_one_epoch(self) -> Tuple[torch.Tensor, torch.Tensor]:
+        start_event = torch.cuda.Event(enable_timing=True)
+        end_event = torch.cuda.Event(enable_timing=True)
+
+        start_event.record()
         self.model.train(True)
-        train_loss, train_acc = self.step_dataloader(self.train_loader)
+
+        with profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True
+        ) as prof:
+            with record_function("model_training"):
+                train_loss, train_acc = self.step_dataloader(self.train_loader)
+
+        end_event.record()
+        torch.cuda.synchronize()
+
+        elapsed_time_ms = start_event.elapsed_time(end_event)
+        print(f"Elapsed time: {elapsed_time_ms} ms")
+        print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
 
         return train_loss, train_acc
 
@@ -352,7 +378,7 @@ class EmbeddingTrainer(object):
         if self.prior:
             self.prior.to(self.device)
         self.batch_size = self.train_loader.batch_size
-        logging.info("Start training the model")
+        print("Start training the model")
 
         try:
             for self.epoch in range(self.params.start_epoch, self.params.n_epochs + 1):
@@ -393,7 +419,7 @@ class EmbeddingTrainer(object):
                 )
 
                 if convergence or (self.epoch == self.params.n_epochs):
-                    logging.info(
+                    print(
                         f"Stopped training after {self.epoch} epochs. Model has converged or max number of epochs have been reached!"
                     )
                     log_params["final"] = (
@@ -406,7 +432,7 @@ class EmbeddingTrainer(object):
                 self.logger.log(**log_params)
 
         except KeyboardInterrupt:
-            logging.info("Training interrupted by user. Saving model and exiting.")
+            print("Training interrupted by user. Saving model and exiting.")
             self.store_final_embeddings()
 
     def store_final_embeddings(self) -> None:
@@ -416,7 +442,7 @@ class EmbeddingTrainer(object):
         try:
             os.makedirs(os.path.dirname(f_path), exist_ok=True)
         except OSError as e:
-            logging.info(
+            print(
                 "Could not create directory for storing parameters, since {}".format(e)
             )
 

@@ -15,8 +15,8 @@ method = "variational"
 
 # Model parameters
 prior = "sslab"
-init_dim = 500
-n_epochs = 10000
+init_dim = 100
+n_epochs = 1
 stability_time = 500
 seed = 42
 batch_size = 256

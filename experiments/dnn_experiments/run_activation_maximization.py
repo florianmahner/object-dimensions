@@ -41,7 +41,7 @@ transforms = torchvision.transforms.Compose(
     ]
 )
 
-os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
 
 def parse_args():
