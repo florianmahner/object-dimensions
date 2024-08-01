@@ -2,16 +2,14 @@
 
 ## Overview
 
-This repository provides the code to reproduce the main parts of the paper [Dimensions underlying the representational alignment of deep neural networks with humans](arxiv.org/pdf/2406.19087). In addition, it provides the code to learn interpretable representational embeddings from behavioral responses to natural images using a triplet odd-one-out task.
+This repository provides the code to reproduce the main parts of the paper . In addition, it provides the code to learn interpretable representational embeddings from behavioral responses to natural images using a triplet odd-one-out task.
 
-The choices can be obtained by:
+This repository is split into two parts:
+1. Code and experiments to reproduce the main results of the paper [Dimensions underlying the representational alignment of deep neural networks with humans](arxiv.org/pdf/2406.19087). See [Main Experiments of the Paper](#main-experiments-of-the-paper) for more details.
+2. Code to learn interpretable representational embeddings from behavioral responses to natural images using a triplet odd-one-out task. See [Learning Representational Embeddings](#learning-representational-embeddings) for more details.
 
-1. Running behavioral experiments with humans.
-2. Simulating triplet choices from any representation space (e.g., DNN activations, neural recordings).
 
-The repository supports both the simulation of behavioral choices and the use of actual behavioral data to train an embedding model.
-
-## Installation and System Requirement
+## Installation and System Requirements
 
 ### Step 1: Install Poetry
 
@@ -43,27 +41,33 @@ poetry install
 poetry shell
 ```
 
-## Dataset
 
-We use the THINGS dataset, which consists of 1,854 images of everyday objects. To download the THINGS and THINGS+ data, run:
+## Main Experiments of the Paper 
+
+Prior to running the experiments, download the required data from [figshare](https://figshare.com/articles/dataset/VGG16_embedding/26424238?file=48071587) and place them in the `./data` folder. are required for the experiments. We use the THINGS dataset, which consists of 1,854 images of everyday objects. We provide a script download the THINGS and THINGS+ data. To download the data, run:
 
 ```bash
 make data
 ```
 
-## Main Experiments of the Paper
+The code for all experiments is detailed in the [experiments](../experiments/README.md)
+     folder. We provide config files for each experiment in the [configs](../configs) folder. 
 
-The main experiments are detailed in the `./experiments` folder. Refer to the README in that directory for an overview.
 
-## Extracting Triplets
+## Learning representational embeddings
 
-### Overview
+We learn interpretable representational embeddings from behavioral responses to natural images using a triplet odd-one-out task. The choices can be obtained by:
 
-To train the model, triplet data is required. Triplets can be simulated from any representation space or collected from actual behavioral responses.
+1. Running behavioral experiments with humans.
+2. Simulating triplet choices from any representation space (e.g., DNN activations, neural recordings).
+
+The repository supports both the simulation of behavioral choices and the use of actual behavioral data to train an embedding model.
+
+Triplets can be simulated from any representation space or collected from actual behavioral responses. If you have actual behavioral reponses, make sure that the data is of shape [n_samples, 3], where each row contains the indices of the triplets and the *last column* by definition denotes the odd one out.
 
 ### Simulating Triplets
 
-Use the `run_tripletization.py` script to simulate triplets. Example configurations are provided in the `./configs` folder.
+Use the `run_tripletization.py` script to simulate triplets. Example configurations are provided in the [configs](../configs)  folder.
 
 To extract triplets from DNN representations, run:
 

@@ -3,7 +3,7 @@ dnn_embedding_path = "./data/embeddings/vgg16_bn/classifier.3/"
 
 triplet_path = "./data/triplets/behavior"
 img_root = "./data/images/things"
-feature_path = "./data/triplets/Imagenet1k/vgg16_bn/classifier.3/"
+feature_path = "./data/features/vgg16_bn/classifier.3/"
 
 [jackknife]
 run_jackknife = true
