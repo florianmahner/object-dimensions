@@ -11,11 +11,13 @@ The choices can be obtained by:
 
 The repository supports both the simulation of behavioral choices and the use of actual behavioral data to train an embedding model.
 
-## Installation
+## Installation and System Requirement
 
 ### Step 1: Install Poetry
 
-This project uses Python 3.9.12 and Poetry for dependency management.
+This project uses Python 3.9.12 and Poetry for dependency management. Most experiments can be run using a normal desktop computer in a reasonable amount of time. However, most
+experiments require Pytorch and an NVIDIA GPU. 
+
 First, install [Poetry](https://python-poetry.org/):
 
 ```bash
