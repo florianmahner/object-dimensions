@@ -1,0 +1,13 @@
+
+vice_embedding_path = "./data/embeddings/human/parameters.npz"
+spose_embedding_path = "./data/embeddings/misc/spose_embedding_49d_sorted.txt"
+spose_labels_path = "./data/misc/spose_dimlabels_human_wordclouds.tsv"
+
+
+[dimension-labeling]
+behavior_ratings_path = "./data/behavior_ratings/"
+
+[dimension-ratings]
+dimension_mapping_path = "./data/misc/dimension_mapping.json"
+dimension_ratings_path = "./data/misc/dimension_ratings.mat"
+
