@@ -10,6 +10,7 @@ import numpy as np
 import torch.nn.functional as F
 
 from typing import List, Dict, Union, Any, Tuple
+from torch.utils.data import DataLoader
 
 from .embedding import (
     VariationalEmbedding,
@@ -17,11 +18,6 @@ from .embedding import (
 )
 from .priors import SpikeSlabPrior, LogGaussianPrior
 from .logging import ExperimentLogger
-
-
-from torch.utils.data import DataLoader
-
-from torch.profiler import profile, record_function, ProfilerActivity
 
 
 class Params(object):
@@ -324,25 +320,8 @@ class EmbeddingTrainer(object):
         return epoch_loss, epoch_accuracy
 
     def train_one_epoch(self) -> Tuple[torch.Tensor, torch.Tensor]:
-        start_event = torch.cuda.Event(enable_timing=True)
-        end_event = torch.cuda.Event(enable_timing=True)
-
-        start_event.record()
         self.model.train(True)
-
-        with profile(
-            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True
-        ) as prof:
-            with record_function("model_training"):
-                train_loss, train_acc = self.step_dataloader(self.train_loader)
-
-        end_event.record()
-        torch.cuda.synchronize()
-
-        elapsed_time_ms = start_event.elapsed_time(end_event)
-        print(f"Elapsed time: {elapsed_time_ms} ms")
-        print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
-
+        train_loss, train_acc = self.step_dataloader(self.train_loader)
         return train_loss, train_acc
 
     @torch.no_grad()
