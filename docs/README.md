@@ -62,7 +62,7 @@ We learn interpretable representational embeddings from behavioral responses to 
 1. Running behavioral experiments with humans.
 2. Simulating triplet choices from any representation space (e.g., DNN activations, neural recordings).
 
-The repository supports both the simulation of behavioral choices and the use of actual behavioral data to train an embedding model.
+The repository supports both the simulation of behavioral choices and the use of actual behavioral data to train an embedding model. A small example demo can be found in [scripts/demo.ipynb](../scripts/demo.ipynb).
 
 Triplets can be simulated from any representation space or collected from actual behavioral responses. If you have actual behavioral responses, make sure that the data is of shape [n_samples, 3], where each row contains the indices of the triplets and the *last column* by definition denotes the odd one out.
 
