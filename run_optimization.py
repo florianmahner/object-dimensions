@@ -218,7 +218,7 @@ def train(args: Namespace) -> None:
     g.manual_seed(args.seed)
 
     train_dataset, val_dataset = get_triplet_dataset(args.triplet_path, device=device)
-    n_objects = val_dataset.n_objects
+    n_objects = max(val_dataset.n_objects, train_dataset.n_objects)
 
     # num_workers = torch.cuda.device_count() * 2  # make dependent on gpu count
     num_workers = 0

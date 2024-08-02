@@ -184,14 +184,14 @@ def parse_csv_into_df(filepaths: str) -> pd.DataFrame:
 
 
 def main(behavior_ratings_path: str) -> None:
-    filepaths = glob.glob(
-        os.path.join(behavior_ratings_path, "**", ".csv"), recursive=True
-    )
+    filepaths = glob.glob(os.path.join(behavior_ratings_path, "*.csv"), recursive=True)
     assert (
         len(filepaths) > 0
     ), f"No csv files found in the specified path {behavior_ratings_path}"
 
     ratings = parse_csv_into_df(filepaths)
+
+    breakpoint()
     ratings = compute_statistics(*ratings)
 
     # Make a dataframe out of most common words and average interpretability

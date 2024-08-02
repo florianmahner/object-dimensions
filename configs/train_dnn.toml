@@ -1,6 +1,6 @@
 # Path parameters
 log_path = "./results"
-identifier = "test"
+identifier = "dnn"
 
 # General parameters
 load_model = true
@@ -8,7 +8,6 @@ fresh = false
 tensorboard = true
 
 triplet_path = "./data/triplets/Imagenet1k/vgg16_bn/classifier.3/triplets_20mio"
-modality = "dnn" 
 params_interval = 500
 checkpoint_interval = 50 
 device_id = 0

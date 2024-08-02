@@ -1,10 +1,9 @@
 # Path parameters
 log_path = "./results"
-identifier = "test"
+identifier = "behavior"
  
 # General parameters
 triplet_path = "./data/triplets/behavior"
-modality = "behavior" 
 load_model = false
 fresh = false
 tensorboard = true
