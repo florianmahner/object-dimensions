@@ -60,25 +60,28 @@ def pairwise_rsm_comparison(weights_human, weights_dnn, sort_by_corrs=True):
                 break
 
     if sort_by_corrs:
-        duplicate_corrs = sort_by_corrs(duplicate_corrs)
-        unique_corrs = sort_by_corrs(unique_corrs)
+        duplicate_corrs = sort_corrs(duplicate_corrs)
+        unique_corrs = sort_corrs(unique_corrs)
 
     return duplicate_corrs, unique_corrs
 
 
 def plot_pairwise_rsm_corrs(unique_corrs, duplicate_corrs):
     # Create a DataFrame and reshape it to long format
-    df = pd.DataFrame(
-        {
-            "Human Embedding RSM": range(len(unique_corrs)),
-            "Unique": unique_corrs,
-            "With Replacement": duplicate_corrs,
-        }
-    ).melt(
+    data = {
+        "Human Embedding RSM": range(len(unique_corrs)),
+        "Unique": unique_corrs,
+    }
+
+    if len(unique_corrs) >= len(duplicate_corrs):
+        data["With Replacement"] = duplicate_corrs
+
+    df = pd.DataFrame(data).melt(
         "Human Embedding RSM",
         var_name="Pairing",
         value_name="Highest Pearson's r with DNN RSM",
     )
+
     fig, ax = plt.subplots(figsize=(6, 4))
     colors = sns.color_palette()
 
@@ -88,20 +91,23 @@ def plot_pairwise_rsm_corrs(unique_corrs, duplicate_corrs):
         x="Human Embedding RSM",
         y="Highest Pearson's r with DNN RSM",
         hue="Pairing",
-        palette=colors,
+        palette=colors[: len(data) - 1],  # Use only necessary colors
         errorbar=("sd", 95),
         n_boot=1000,
         ax=ax,
     )
 
     sns.despine(offset=10)
-    xticks = [10, 20, 30, 40, 50, 60]
-    ax.set(
-        xlabel="Human Dimension RSM",
-        ylabel="Pearson's r with DNN Dimension RSM",
-        xticks=xticks,
-        xticklabels=[str(x) for x in xticks],
-    )
+
+    if len(unique_corrs) <= len(duplicate_corrs):
+        xticks = [10, 20, 30, 40, 50, 60]
+        ax.set(
+            xlabel="Human Dimension RSM",
+            ylabel="Pearson's r with DNN Dimension RSM",
+            xticks=xticks,
+            xticklabels=[str(x) for x in xticks],
+        )
+
     ax.legend(frameon=False)
     fig.tight_layout()
     return fig

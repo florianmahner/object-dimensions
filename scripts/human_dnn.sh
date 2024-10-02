@@ -18,16 +18,16 @@ done
 
 if $jackknife; then
     echo "Run jackknife analysis"
-    python experiments/jackknife/run_jackknife.py --config "./configs/human_dnn_comparison.toml" --table "jackknife"
+    python experiments/jackknife/run_jackknife.py --config "./configs_local/human_dnn_comparison.toml" --table "jackknife"
 fi
 
 if $comparison; then
     echo "Run comparison analysis"
-    python experiments/run_comparison.py --config "./configs/human_dnn_comparison.toml"  --table "comparison"
+    python experiments/run_comparison.py --config "./configs_local/human_dnn_comparison.toml"  --table "comparison"
 fi
 
 
 if $rsa; then
   echo "Run RSA analysis"
-  python experiments/rsa/run_rsa_analysis.py --config "./configs/human_dnn_comparison.toml" --table "rsa"
+  python experiments/rsa/run_rsa_analysis.py --config "./configs_local/human_dnn_comparison.toml" --table "rsa"
 fi

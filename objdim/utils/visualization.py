@@ -215,7 +215,9 @@ def plot_dim(images, codes, dim, top_k=10, filter_plus=False, filter_behavior=Fa
 
 
 def plot_per_dim(args):
-    results_path = create_results_path(args.embedding_path, "per_dim")
+    results_path = os.path.dirname(args.embedding_path)
+    results_path = os.path.join(results_path, "per_dim")
+
     W = load_sparse_codes(args.embedding_path)
     images, indices = load_image_data(
         args.img_root,
@@ -271,21 +273,26 @@ def plot_per_dim(args):
         print(f"Done plotting for dim {dim}")
 
 
-def plot_dimensions(args):
-    W = load_sparse_codes(args.embedding_path)
+def plot_dimensions(
+    image_root, embedding_path, filter_behavior=False, filter_plus=False, out_path=None
+):
+
+    W = load_sparse_codes(embedding_path)
 
     images, indices = load_image_data(
-        args.img_root,
-        filter_behavior=args.filter_behavior,
-        filter_plus=args.filter_plus,
+        image_root,
+        filter_behavior=filter_behavior,
+        filter_plus=filter_plus,
     )
     W = W[indices]
 
     print("Shape of weight Matrix", W.shape)
     W = W.T
 
-    out_path = create_results_path(args.embedding_path, "dimensions")
-    filename = os.path.basename(args.embedding_path)
+    if out_path is None:
+        out_path = create_results_path(embedding_path, "dimensions")
+
+    filename = os.path.basename(embedding_path)
     epoch = filename.split("_")[-1].split(".")[0]
 
     # Plot W as a matrix with dots in black and white
@@ -322,9 +329,9 @@ def plot_dimensions(args):
 
     fname = os.path.join(out_path, "all_dimensions{}_epoch_{}.png")
 
-    if args.filter_behavior:
+    if filter_behavior:
         fname = fname.format("_filtered_behavior", epoch)
-    if args.filter_plus:
+    if filter_plus:
         fname = fname.format("_filtered_plus", epoch)
     else:
         fname = fname.format("", epoch)
@@ -336,4 +343,6 @@ if __name__ == "__main__":
     if args.per_dim:
         plot_per_dim(args)
     else:
-        plot_dimensions(args)
+        plot_dimensions(
+            args.img_root, args.embedding_path, args.filter_behavior, args.filter_plus
+        )

@@ -162,7 +162,9 @@ def plot_reliability(
     plt.tight_layout()
     plt.savefig(
         os.path.join(
-            "./results", "plots", f"reproducibility_across_dimensions_{modality}.pdf"
+            "./results",
+            "plots",
+            f"reproducibility_across_dimensions_{modality}_classifier1.pdf",
         ),
         dpi=300,
         bbox_inches="tight",
@@ -195,7 +197,9 @@ def plot_reliability_across_seeds(
     sns.despine(left=True, bottom=True)
     plt.savefig(
         os.path.join(
-            "./results", "plots", f"reproducibility_across_seeds_{modality}.pdf"
+            "./results",
+            "plots",
+            f"reproducibility_across_seeds_{modality}_classifier1.pdf",
         ),
         dpi=300,
         bbox_inches="tight",

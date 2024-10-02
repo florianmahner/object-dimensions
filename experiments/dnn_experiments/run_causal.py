@@ -96,7 +96,11 @@ def run_causal_comparison(embedding_path, img_root):
     if not os.path.exists(out_path):
         os.makedirs(out_path)
 
+    breakpoint()
+
     images, indices = load_image_data(img_root, filter_plus=True)
+
+    
     Y = load_sparse_codes(embedding_path)
     Y = Y[indices]
 

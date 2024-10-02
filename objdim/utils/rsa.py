@@ -200,7 +200,7 @@ def rsm_pred_torch(
     indices = torch.triu_indices(n_objects, n_objects, offset=1)
 
     n_indices = indices.shape[1]
-    batch_size = min(n_indices, 10_000)
+    batch_size = min(n_indices, 1000)
     n_batches = (n_indices + batch_size - 1) // batch_size
 
     rsm = torch.zeros_like(sim_matrix).double()

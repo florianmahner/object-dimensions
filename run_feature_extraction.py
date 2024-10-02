@@ -70,7 +70,7 @@ def extract_features(
     )
 
     features = extractor.extract_features(
-        batches=batches, module_name=module_name, flatten_acts=True
+        batches=batches, module_name=module_name, flatten_acts=False
     )
 
     if model_name in ["clip", "OpenCLIP"]:
@@ -89,6 +89,7 @@ def load_model(model_name: str):
             pretrained=True,
             device=device,
             source="custom",
+            # I think what we used is the resnet50.visual version for the paper.
             model_parameters={"variant": "ViT-B-32", "dataset": "laion2b_s32b_b79k"},
         )
     elif model_name == "barlowtwins-rn50":
@@ -121,7 +122,10 @@ def load_model(model_name: str):
         )
     else:
         model = get_extractor(
-            model_name, pretrained=True, device=device, source="torchvision"
+            model_name,
+            pretrained=True,
+            device=device,
+            source="torchvision",
         )
 
     return model

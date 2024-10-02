@@ -20,26 +20,26 @@ done
 
 if $visualization; then
     echo "Run embedding visualization"
-    python objdim/utils/visualization.py --config "./configs/interpretability_analyses.toml" --table "visualization"
+    python objdim/utils/visualization.py --config "./configs_local/interpretability_analyses.toml" --table "visualization"
 fi
 
 if $linear_model; then
     echo "Run linear model analyses"
-    python experiments/dnn_experiments/linear_model.py --config "./configs/interpretability_analyses.toml" --table "linear_model"
+    python experiments/dnn_experiments/linear_model.py --config "./configs_local/interpretability_analyses.toml" --table "linear_model"
 fi
 
 if $grad_cam; then
     echo "Run Grad-CAM analyses"
-    python experiments/dnn_experiments/run_grad_cam.py --config "./configs/interpretability_analyses.toml" 
+    python experiments/dnn_experiments/run_grad_cam.py --config "./configs_local/interpretability_analyses.toml" 
 fi
 
 if $causal; then
     echo "Run Causal analyses"
-    python experiments/dnn_experiments/run_causal.py --config "./configs/interpretability_analyses.toml"
+    python experiments/dnn_experiments/run_causal.py --config "./configs_local/interpretability_analyses.toml"
 fi
 
 
 if $act_max; then
     echo "Run Activation Maximization analyses"
-    python experiments/dnn_experiments/run_activation_maximization.py --config "./configs/interpretability_analyses.toml" --table "act_max"
+    python experiments/dnn_experiments/run_activation_maximization.py --config "./configs_local/interpretability_analyses.toml" --table "act_max"
 fi

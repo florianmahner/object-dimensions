@@ -190,8 +190,6 @@ def main(behavior_ratings_path: str) -> None:
     ), f"No csv files found in the specified path {behavior_ratings_path}"
 
     ratings = parse_csv_into_df(filepaths)
-
-    breakpoint()
     ratings = compute_statistics(*ratings)
 
     # Make a dataframe out of most common words and average interpretability

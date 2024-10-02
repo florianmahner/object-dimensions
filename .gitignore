@@ -5,6 +5,7 @@ stylegan_xl
 trash
 experiments/dimension_rating_experiment/static/images
 scripts/slurm
+data_osf
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -51,12 +51,6 @@ def parse_args():
         default="./data/misc/words48.csv",
         help="Path to words48 file containing object categories used to fully sample things similarity matrix for noise ceilings",
     )
-    parser.add_argument(
-        "--human_rd_gt",
-        type=str,
-        help="Path to human RDM ground truth",
-        default="./data/misc/rdm48_human.mat",
-    )
     return parser.parse_args()
 
 

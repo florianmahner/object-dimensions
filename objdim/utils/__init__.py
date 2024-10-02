@@ -20,6 +20,7 @@ from .stats import vectorized_pearsonr, pairwise_correlate_dimensions
 from .rsa import (
     # rsm_pred_numba,
     rsm_pred_torch,
+    rsm_pred_numpy,
     correlate_rsms,
     correlate_rsms_torch,
     correlation_matrix,
