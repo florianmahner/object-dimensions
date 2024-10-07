@@ -295,18 +295,6 @@ def plot_dimensions(
     filename = os.path.basename(embedding_path)
     epoch = filename.split("_")[-1].split(".")[0]
 
-    # Plot W as a matrix with dots in black and white
-    fig, ax = plt.subplots(figsize=(10, 10))
-    ax.imshow(W, cmap="gray", interpolation="nearest")
-    ax.axis("off")
-    fig.savefig(
-        os.path.join(out_path, "weight_matrix.pdf"),
-        dpi=300,
-        bbox_inches="tight",
-        pad_inches=0,
-    )
-    plt.close(fig)
-
     top_k = 20
     n_rows = W.shape[0]
     n_cols = top_k

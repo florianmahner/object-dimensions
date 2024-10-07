@@ -164,7 +164,7 @@ def plot_reliability(
         os.path.join(
             "./results",
             "plots",
-            f"reproducibility_across_dimensions_{modality}_classifier1.pdf",
+            f"reproducibility_across_dimensions_{modality}_features42.pdf",
         ),
         dpi=300,
         bbox_inches="tight",
@@ -199,7 +199,7 @@ def plot_reliability_across_seeds(
         os.path.join(
             "./results",
             "plots",
-            f"reproducibility_across_seeds_{modality}_classifier1.pdf",
+            f"reproducibility_across_seeds_{modality}_features42.pdf",
         ),
         dpi=300,
         bbox_inches="tight",
