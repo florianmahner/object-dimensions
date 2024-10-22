@@ -1,6 +1,7 @@
 # %%
 import numpy as np
 import pandas as pd
+import copy
 import matplotlib.pyplot as plt
 from scipy.io import loadmat
 from sklearn.metrics import confusion_matrix
@@ -39,7 +40,7 @@ def remove_sparsity(r2: np.ndarray) -> np.ndarray:
     """Remove sparsity from R2 values by fitting a linear model and removing the trend.
     This effectively removes the effect of the linear relationship between the model and human ratings,
     ie that early dimensions are more predictive of the human ratings and later dimensions are less
-    predictive.
+    predictive. After this subtraction, the values above the linear line are the important ones.
     """
     n = len(r2)
     mean_r2 = np.mean(r2)
@@ -186,35 +187,59 @@ def plot_results(results_df: pd.DataFrame) -> Tuple[plt.Figure, plt.Figure]:
     return fig1, fig2
 
 
-def main():
-    mat_data, dimension_ratings = load_data()
-    models = create_models_dict(mat_data)
-
-    results_df = pd.concat(
+def plot_r2_scores(model_r2_data: Dict[str, np.ndarray], threshold: float = 0.3):
+    r2_df = pd.DataFrame(
         [
-            process_model(model_data, dimension_ratings, model_name)
-            for model_name, model_data in models.items()
+            (model_name, model_data["r2"])
+            for model_name, model_data in model_r2_data.items()
         ],
-        ignore_index=True,
+        columns=["model", "r2"],
     )
-
-    fig = plot_results(results_df)
-
-    base_path = Path("/LOCAL/fmahner/object-dimensions")
-    fig[0].savefig(
-        base_path
-        / "results"
-        / "semantic_validation"
-        / "accuracy_semantic_validation.pdf",
-        bbox_inches="tight",
-        dpi=300,
-    )
-    fig[1].savefig(
-        base_path / "results" / "semantic_validation" / "roc_semantic_validation.pdf",
-        bbox_inches="tight",
-        dpi=300,
-    )
+    r2_df = r2_df.explode("r2").reset_index(drop=True)
+    r2_df = r2_df[r2_df["r2"] > threshold]
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.set(xlabel="Model", ylabel="Mean $R^2$ score")
+    sns.barplot(x="model", y="r2", data=r2_df, ax=ax)
+    sns.despine(fig)
+    return fig
 
 
-if __name__ == "__main__":
-    main()
+# def main():
+
+# %%
+base_path = Path("/LOCAL/fmahner/object-dimensions")
+mat_data, dimension_ratings = load_data()
+models = create_models_dict(mat_data)
+results_df = pd.concat(
+    [
+        process_model(model_data, dimension_ratings, model_name)
+        for model_name, model_data in copy.deepcopy(models).items()
+    ],
+    ignore_index=True,
+)
+
+# %%
+fig = plot_r2_scores(copy.deepcopy(models), threshold=-1)
+fig.savefig(
+    base_path / "results" / "semantic_validation" / "r2_scores.pdf",
+    bbox_inches="tight",
+    dpi=300,
+)
+# %%
+fig = plot_results(results_df)
+
+
+fig[0].savefig(
+    base_path / "results" / "semantic_validation" / "accuracy_semantic_validation.pdf",
+    bbox_inches="tight",
+    dpi=300,
+)
+fig[1].savefig(
+    base_path / "results" / "semantic_validation" / "roc_semantic_validation.pdf",
+    bbox_inches="tight",
+    dpi=300,
+)
+
+
+# if __name__ == "__main__":
+# main()
