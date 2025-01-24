@@ -70,6 +70,19 @@ def img_to_uint8(img):
     return img
 
 
+class IndexedDict(dict):
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            keys = list(self.keys())
+            if key < 0:
+                key += len(keys)
+            if key >= len(keys) or key < 0:
+                raise IndexError("Index out of range")
+            return self[keys[key]]
+        else:
+            return super().__getitem__(key)
+
+
 def load_data(human_path, feature_path, img_root):
     features = load_deepnet_activations(feature_path, relu=True, center=True)
     human_embedding = load_sparse_codes(human_path, relu=True)
@@ -131,10 +144,18 @@ def load_deepnet_activations(
     """Load activations from a .npy file"""
     if center and zscore:
         raise ValueError("Cannot center and zscore activations at the same time")
-    activation_path = glob.glob(os.path.join(activation_path, "*.npy"), recursive=True)
+
+    # check if path is a file
+    if os.path.isfile(activation_path):
+        activation_path = [activation_path]
+    else:
+        activation_path = glob.glob(
+            os.path.join(activation_path, "*.npy"), recursive=True
+        )
 
     if len(activation_path) > 1:
         raise ValueError("More than one .npy file found in the activation path")
+
     activation_path = activation_path[0]
     if activation_path.endswith("npy"):
         with open(activation_path, "rb") as f:
@@ -147,6 +168,59 @@ def load_deepnet_activations(
         act = torch.from_numpy(act)
 
     return act
+
+
+def extract_model_module_from_path(path: str) -> list[str, str]:
+    components = Path(path).parts
+    model, module = components[-3], components[-2]
+    return model, module
+
+
+def find_files(base_dir: str, file_pattern: str) -> list[str]:
+    file_path = os.path.join(base_dir, file_pattern)
+    files = glob.glob(file_path, recursive=True)
+    if not files:
+        raise FileNotFoundError(
+            f"No files found for pattern {file_pattern} in {base_dir}"
+        )
+    return files
+
+
+def load_data(
+    base_dir,
+    img_root=None,
+    data_type="embeddings",
+    remove_behavior=False,
+    pruned=True,
+    filter_behavior=False,
+    feature_transform={"relu": False, "center": False, "standardize": False},
+) -> dict:
+    if data_type == "embeddings":
+        file_pattern = "param*.npz"
+    elif data_type == "features":
+        file_pattern = "features*.npy"
+    else:
+        raise ValueError(f"Unrecognized data type {data_type}")
+
+    files = find_files(base_dir, f"**/{file_pattern}")
+    # remove human_behavior if str in file
+    if remove_behavior:
+        files = [f for f in files if "human_behavior" not in f]
+    models, modules = zip(*map(extract_model_module_from_path, files))
+
+    identifiers = [f"{model}.{module}" for model, module in zip(models, modules)]
+
+    if data_type == "embeddings":
+        data = [load_sparse_codes(f, pruned) for f in files]
+    elif data_type == "features":
+        data = [load_deepnet_activations(f, feature_transform) for f in files]
+    if filter_behavior:
+        _, indices = load_image_data(img_root, filter_behavior=True)
+        if len(indices) == 0:
+            raise ValueError("No indices found for filter_behavior")
+        data = [d[indices] for d in data]
+
+    return IndexedDict(zip(identifiers, data))
 
 
 def transform_activations(act, zscore=False, center=False, relu=False):

@@ -5,46 +5,24 @@ import pandas as pd
 import seaborn as sns
 
 import matplotlib.pyplot as plt
-from scipy.io import loadmat
 from objdim.utils import load_sparse_codes
 from tomlparse import argparse
 
 # Identifiers for the models in the ratings
-MODEL_TO_DIMENSIONS = {
-    1: "Human",
-    2: "Resnet50",
-    3: "CLIP",
-    4: "Densenet",
-    5: "Barlow-Twins",
-    6: "VGG-16",
-}
-
-ANSWER_TO_QUALITY = {
-    1: "visual",
-    2: "semantic",
-    3: "mix visual-semantic",
-    4: "unclear",
-}
-
-ANSWER_TO_CONCEPT = {
-    1: "single concept",
-    2: "multiple concepts",
-    3: "uninterpretable",
+LAYER_TO_STAGE = {
+    "features.5": "early",
+    "features.22": "middle",
+    "features.42": "late",
+    "classifier.4": "penultimate",
 }
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--dimension_mapping_path",
+        "--dimension_rating_csv",
         type=str,
-        default="./data/misc/dimension_mapping.json",
-        help="Path to the json file containing the mapping of the anonymized dimensions to the original dimensions",
-    )
-    parser.add_argument(
-        "--dimension_rating_path",
-        type=str,
-        default="./data/misc/dimension_ratings.mat",
+        default="./data/misc/early_middle_late_ratings/ratings_corrected_3.csv",
         help="Path to the mat file containing the human ratings",
     )
     return parser.parse_args()
@@ -54,7 +32,7 @@ def plot_quality(df):
     df = df[df["Quality"] != "unclear"]
 
     quality_counts = (
-        df.groupby(["Model", "Quality"], observed=False).size().unstack(fill_value=0)
+        df.groupby(["Layer", "Quality"], observed=False).size().unstack(fill_value=0)
     )
     quality_percent = quality_counts.div(
         quality_counts.sum(axis=1), axis=0
@@ -80,7 +58,7 @@ def plot_quality(df):
     # Plot each quality as a separate bar
     for quality in qualities_list:
         sns.barplot(
-            y="Model",
+            y="Layer",
             x=quality,
             data=quality_percent,
             ax=ax,
@@ -98,10 +76,10 @@ def plot_quality(df):
         bbox_to_anchor=(0.5, 1.15),
     )
 
-    ax.set(xlabel="Percentage of Ratings", ylabel="Model")
+    ax.set(xlabel="Percentage of Ratings", ylabel="Layer")
     sns.despine(left=True, bottom=True)
     fig.savefig(
-        "./results/plots/dimension_quality_ratings.pdf",
+        "./results/plots/early_middle_late_quality_ratings.pdf",
         dpi=300,
         bbox_inches="tight",
     )
@@ -110,7 +88,7 @@ def plot_quality(df):
 def plot_concept(df):
     # Counting occurrences of each concept per model and convert to percentage
     concept_counts = (
-        df.groupby(["Model", "Concept"], observed=False).size().unstack(fill_value=0)
+        df.groupby(["Layer", "Concept"], observed=False).size().unstack(fill_value=0)
     )
     concept_percent = concept_counts.div(
         concept_counts.sum(axis=1), axis=0
@@ -123,7 +101,7 @@ def plot_concept(df):
     left = pd.Series([0] * len(concept_percent), index=concept_percent.index)
 
     # List of concepts for consistent ordering
-    concepts_list = ["single concept", "multiple concepts", "uninterpretable"]
+    concepts_list = ["single concept", "multiple concepts"]
 
     # Default seaborn color palette for concepts
     palette_concepts = sns.color_palette("deep")
@@ -132,13 +110,12 @@ def plot_concept(df):
     concept_to_color = {
         "single concept": palette_concepts[0],  # blue
         "multiple concepts": palette_concepts[1],  # green
-        "uninterpretable": palette_concepts[2],  # red
     }
 
     # Plot each concept as a separate bar
     for concept in concepts_list:
         sns.barplot(
-            y="Model",
+            y="Layer",
             x=concept,
             data=concept_percent,
             ax=ax,
@@ -154,46 +131,10 @@ def plot_concept(df):
         frameon=False,
         bbox_to_anchor=(0.5, 1.15),
     )
-    ax.set(xlabel="Fraction of Ratings", ylabel="Model")
+    ax.set(xlabel="Fraction of Ratings", ylabel="Layer")
     sns.despine(left=True, bottom=True)
     fig.savefig(
-        "./results/plots/dimension_concept_ratings.pdf",
-        dpi=300,
-        bbox_inches="tight",
-    )
-
-
-def plot_concept_bar(df):
-    # Counting occurrences of each concept per model and convert to percentage
-    concept_counts = (
-        df.groupby(["Model", "Concept"], observed=False).size().unstack(fill_value=0)
-    )
-    concept_percent = concept_counts.div(
-        concept_counts.sum(axis=1), axis=0
-    ).reset_index()
-
-    # the order should be human, vgg16, clip, densenet, resnet50, barlow-twins
-    model_order = ["Human", "VGG-16", "CLIP", "Densenet", "Resnet50", "Barlow-Twins"]
-    concept_percent["Model"] = pd.Categorical(
-        concept_percent["Model"], categories=model_order, ordered=True
-    )
-
-    # only plot the uninterpretable concept
-    concept_percent = concept_percent[["Model", "uninterpretable"]]
-    fig, ax = plt.subplots(figsize=(6, 4))
-    sns.barplot(
-        x="Model",
-        y="uninterpretable",
-        data=concept_percent,
-        ax=ax,
-        edgecolor="black",
-        facecolor=".7",
-    )
-
-    ax.set(xlabel="Model", ylabel="Fraction of Uninterpretable Dimensions")
-    sns.despine(left=True, bottom=True)
-    fig.savefig(
-        "./results/plots/dimension_uninterpretable_ratings.pdf",
+        "./results/plots/early_middle_late_concept_ratings.pdf",
         dpi=300,
         bbox_inches="tight",
     )
@@ -239,101 +180,69 @@ def reorder_df(df, ordering):
     return df.iloc[new_order].reset_index(drop=True)
 
 
-def process_dimension_ratings(ratings, dimension_mapping):
-    models = ratings[:, 0]
-    qualities = ratings[:, 1]
-    concepts = ratings[:, 4]
-
-    df = pd.DataFrame({"Model": models, "Quality": qualities, "Concept": concepts})
-
-    # we map the model the integer ratings to the correct names
-    df["Model"] = df["Model"].map(MODEL_TO_DIMENSIONS)
-    df["Quality"] = df["Quality"].map(ANSWER_TO_QUALITY)
-    df["Concept"] = df["Concept"].map(ANSWER_TO_CONCEPT)
-
-    # Split the DataFrame by model
-    models = df["Model"].unique()
-    reordered_dfs = []
-
-    for model in models:
-        model_df = df[df["Model"] == model]
-
-        reordered_model_df = reorder_df(model_df, dimension_mapping[model])
-        reordered_dfs.append(reordered_model_df)
-
-    # Concatenate the reordered DataFrames back into a single DataFrame
-    reordered_df = pd.concat(reordered_dfs).reset_index(drop=True)
-    model_order = ["Human", "VGG-16", "Resnet50", "CLIP", "Densenet", "Barlow-Twins"]
-    reordered_df["Model"] = pd.Categorical(
-        reordered_df["Model"], categories=model_order, ordered=True
-    )
-
-    df = reordered_df
-    df["Dimension"] = df.groupby("Model", observed=False).cumcount()
-    return df
-
-
 def print_percentage_concept(df):
-    for model in df["Model"].unique():
+    for layer in df["Layer"].unique():
         for concept in df["Concept"].unique():
-            model_df = df[df["Model"] == model]
-            concept_df = model_df[model_df["Concept"] == concept]
-            percentage = len(concept_df) / len(model_df) * 100
-            print(f"Percentage of {concept} ratings in {model}: {percentage:.2f}%")
+            layer_df = df[df["Layer"] == layer]
+            concept_df = layer_df[layer_df["Concept"] == concept]
+            percentage = len(concept_df) / len(layer_df) * 100
+            print(f"Percentage of {concept} ratings in {layer}: {percentage:.2f}%")
 
 
 def print_percentage_quality(df):
-    for model in df["Model"].unique():
+    for layer in df["Layer"].unique():
         for quality in df["Quality"].unique():
-            model_df = df[df["Model"] == model]
-            quality_df = model_df[model_df["Quality"] == quality]
-            percentage = len(quality_df) / len(model_df) * 100
-            print(f"Percentage of {quality} ratings in {model}: {percentage:.2f}%")
+            layer_df = df[df["Layer"] == layer]
+            quality_df = layer_df[layer_df["Quality"] == quality]
+            percentage = len(quality_df) / len(layer_df) * 100
+            print(f"Percentage of {quality} ratings in {layer}: {percentage:.2f}%")
 
 
 def plot_semantic_visual(df):
+    # Filter for early, middle, and late stages
+    df_filtered = df[df["Layer"].isin(LAYER_TO_STAGE.keys())]
 
-    human = df[df["Model"] == "Human"]
-    vgg16 = df[df["Model"] == "VGG-16"]
+    # Map layer names to stages
+    df_filtered["Layer"] = df_filtered["Layer"].map(LAYER_TO_STAGE)
 
     # Remove 'unclear' quality ratings
-    human = human[human["Quality"] != "unclear"]
-    vgg16 = vgg16[vgg16["Quality"] != "unclear"]
+    df_filtered = df_filtered[df_filtered["Quality"] != "unclear"]
 
     # Count occurrences of each quality and convert to percentages
-    percentage_human = human["Quality"].value_counts(normalize=True).reset_index()
-    percentage_human.columns = ["Quality", "Percentage"]
-    percentage_human["Model"] = "Human"
-
-    percentage_vgg16 = vgg16["Quality"].value_counts(normalize=True).reset_index()
-    percentage_vgg16.columns = ["Quality", "Percentage"]
-    percentage_vgg16["Model"] = "VGG-16"
-
-    # Combine data into one DataFrame
-    percentage_df = pd.concat([percentage_human, percentage_vgg16])
+    percentage_df = (
+        df_filtered.groupby(["Layer", "Quality"]).size().unstack(fill_value=0)
+    )
+    percentage_df = percentage_df.div(percentage_df.sum(axis=1), axis=0).reset_index()
+    percentage_df = percentage_df.melt(
+        id_vars=["Layer"], var_name="Quality", value_name="Percentage"
+    )
 
     sns.set_context("paper")
 
+    palette_qualities = sns.color_palette("deep")
+
     # Plotting the stacked bar plot using seaborn and matplotlib
-    fig, ax = plt.subplots(figsize=(9, 3))
+    fig, ax = plt.subplots(figsize=(6, 4))
 
     # List of qualities for consistent ordering
     qualities_list = ["semantic", "mix visual-semantic", "visual"]
 
-    # Default seaborn color palette
-    palette = sns.color_palette("deep")
-
-    # Map specific colors to each quality using default palette
+    # Map specific colors to each quality
     quality_to_color = {
-        "visual": palette[2],  # dark blue
-        "mix visual-semantic": palette[1],  # light blue
-        "semantic": palette[0],  # orange
+        "semantic": palette_qualities[0],
+        "visual": palette_qualities[2],
+        "mix visual-semantic": palette_qualities[1],
     }
 
     # Create a pivot table for easier plotting
     percentage_pivot = percentage_df.pivot(
-        index="Model", columns="Quality", values="Percentage"
+        index="Layer", columns="Quality", values="Percentage"
     ).fillna(0)
+
+    # Sort the index to have Early at the top, Middle in the middle, and Late at the bottom
+    percentage_pivot = percentage_pivot.reindex(
+        ["early", "middle", "late", "penultimate"]
+    )
 
     # Initialize the left position for stacking
     left = pd.Series([0] * len(percentage_pivot), index=percentage_pivot.index)
@@ -358,10 +267,15 @@ def plot_semantic_visual(df):
         bbox_to_anchor=(0.5, 1.15),
     )
 
-    ax.set(xlabel="Percentage of Ratings", ylabel="Model")
+    ax.set(xlabel="Percentage of Ratings", ylabel="Layer")
     sns.despine(left=True, bottom=True)
+
+    # Capitalize the y-axis labels
+    ax.set_yticks(range(len(percentage_pivot.index)))
+    ax.set_yticklabels(["Early", "Middle", "Late", "Penultimate"])
+
     fig.savefig(
-        "./results/plots/human_vgg16_quality_ratings.pdf",
+        "./results/plots/early_middle_late_quality_ratings.pdf",
         dpi=300,
         bbox_inches="tight",
     )
@@ -382,18 +296,18 @@ def weighted_uninterpretability(embeddings, df):
     variances = {}
     for name, embedding in embeddings.items():
         variance = calculate_total_sum_of_embedding(embedding)
-        model = df[df["Model"] == name]
-        uninterpretable = model[model["Concept"] == "uninterpretable"]
+        layer = df[df["Layer"] == name]
+        uninterpretable = layer[layer["Concept"] == "uninterpretable"]
         uninterpretable_variance = variance[uninterpretable["Dimension"]].sum()
         variances[name] = uninterpretable_variance * 100
 
     # here is the plotting part now.
     variance = pd.DataFrame(
-        variances.items(), columns=["Model", "Uninterpretable Variance"]
+        variances.items(), columns=["Layer", "Uninterpretable Variance"]
     )
     fig, ax = plt.subplots(figsize=(6, 4))
     sns.barplot(
-        x="Model",
+        x="Layer",
         y="Uninterpretable Variance",
         data=variance,
         ax=ax,
@@ -401,52 +315,45 @@ def weighted_uninterpretability(embeddings, df):
         facecolor=".7",
     )
     ax.set(
-        xlabel="Model",
+        xlabel="Layer",
         ylabel="Variance in Embedding Explained\nby Uninterpretable Dimensions [%]",
     )
     sns.despine(left=True, bottom=True)
-    # # make hatch
+    # make hatch
     # for i, bar in enumerate(ax.patches):
     #     bar.set_hatch("//")
     #     bar.set_edgecolor("black")
 
     fig.savefig(
-        "./results/plots/uninterpretable_variance_explained.pdf",
+        "./results/plots/early_middle_late_uninterpretable_variance.pdf",
         dpi=300,
         bbox_inches="tight",
     )
 
 
-def main(dimension_mapping_path, dimension_rating_path):
-    dimension_mapping = load_dimension_mapping(dimension_mapping_path)
-    ratings = loadmat(dimension_rating_path)["ratings"]
-    df = process_dimension_ratings(ratings, dimension_mapping)
-    df.to_csv("./data/misc/dimension_ratings_processed.csv", index=False)
+def main(dimension_rating_csv):
+    df_ratings = pd.read_csv(dimension_rating_csv)
 
-    print_percentage_concept(df)
-    print_percentage_quality(df)
-    plot_quality(df)
-    plot_concept(df)
+    print_percentage_concept(df_ratings)
+    print_percentage_quality(df_ratings)
+    plot_quality(df_ratings)
+    plot_concept(df_ratings)
 
     # i think this is just a filtered version of the plot quality function. merge!
-    plot_semantic_visual(df)
+    plot_semantic_visual(df_ratings)
 
     embedding_paths = [
-        ("Human", "./data/embeddings/human_behavior/parameters.npz"),
-        ("VGG-16", "./data/embeddings/vgg16_bn/classifier.3/parameters.npz"),
-        ("CLIP", "./data/embeddings/OpenCLIP/visual/parameters.npz"),
-        ("Densenet", "./data/embeddings/densenet/global_pool/parameters.npz"),
-        ("Resnet50", "./data/embeddings/resnet50/avgpool/parameters.npz"),
-        ("Barlow-Twins", "./data/embeddings/barlowtwins-rn50/avgpool/parameters.npz"),
+        ("Early", "./data/embeddings/vgg16_bn/features.5/parameters.npz"),
+        ("Middle", "./data/embeddings/vgg16_bn/features.22/parameters.npz"),
+        ("Late", "./data/embeddings/vgg16_bn/features.42/parameters.npz"),
     ]
 
     embeddings = {name: load_sparse_codes(path) for name, path in embedding_paths}
 
     # TODO separate the plotting function here
-    weighted_uninterpretability(embeddings, df)
-    plot_concept_bar(df)
+    weighted_uninterpretability(embeddings, df_ratings)
 
 
 if __name__ == "__main__":
     args = parse_args()
-    main(args.dimension_mapping_path, args.dimension_rating_path)
+    main(args.dimension_rating_csv)

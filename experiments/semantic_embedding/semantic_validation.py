@@ -195,18 +195,74 @@ def plot_r2_scores(model_r2_data: Dict[str, np.ndarray], threshold: float = 0.3)
         ],
         columns=["model", "r2"],
     )
+    order = ["Human", "VGG-16", "CLIP", "Densenet", "Resnet50", "Barlow-Twins"]
+    r2_df = r2_df[r2_df["model"].isin(order)]
     r2_df = r2_df.explode("r2").reset_index(drop=True)
     r2_df = r2_df[r2_df["r2"] > threshold]
+    r2_df["model"] = pd.Categorical(r2_df["model"], categories=order, ordered=True)
+    r2_df = r2_df.sort_values("model")
     fig, ax = plt.subplots(figsize=(6, 4))
-    ax.set(xlabel="Model", ylabel="Mean $R^2$ score")
-    sns.barplot(x="model", y="r2", data=r2_df, ax=ax)
-    sns.despine(fig)
+    ax.set(
+        xlabel="Model",
+        ylabel="Semantic Embedding Prediction [Mean $R^2$]",
+    )
+    # sns.boxplot(
+    #     x="model",
+    #     y="r2",
+    #     data=r2_df,
+    #     ax=ax,
+    #     # color="grey",
+    #     order=order,
+    #     fliersize=0,
+    #     linewidth=1,
+    #     boxprops=dict(edgecolor="black", facecolor="grey", hatch="//"),
+    #     whiskerprops=dict(color="black"),
+    #     capprops=dict(color="black"),
+    #     medianprops=dict(color="black"),
+    # )
+    # sns.stripplot(
+    #     x="model",
+    #     y="r2",
+    #     data=r2_df,
+    #     ax=ax,
+    #     color="grey",
+    #     order=order,
+    #     jitter=True,
+    #     dodge=True,
+    #     alpha=0.6,
+    # )
+
+    sns.boxplot(
+        x="model",
+        y="r2",
+        data=r2_df,
+        ax=ax,
+        color=".7",
+        linecolor="black",
+        linewidth=1.0,
+        order=order,
+    )
+
+    # Print statistics to console
+    # Calculate statistics
+    stats = r2_df.groupby("model")["r2"].agg(["mean", "count", "std", "min", "max"])
+    ci95_hi = stats["mean"] + 1.96 * stats["std"] / (stats["count"] ** 0.5)
+    ci95_lo = stats["mean"] - 1.96 * stats["std"] / (stats["count"] ** 0.5)
+
+    stats["ci95_hi"] = ci95_hi
+    stats["ci95_lo"] = ci95_lo
+    print("Statistics for each model:")
+    print(stats[["mean", "ci95_lo", "ci95_hi", "min", "max"]])
+    print("\nSample Size and Replicates:")
+    print("n =", stats["count"], "(biological replicates)")
+    sns.despine(fig, left=True, bottom=True)
+    fig.tight_layout()
+
     return fig
 
 
-# def main():
-
 # %%
+# def main():
 base_path = Path("/LOCAL/fmahner/object-dimensions")
 mat_data, dimension_ratings = load_data()
 models = create_models_dict(mat_data)
@@ -218,23 +274,25 @@ results_df = pd.concat(
     ignore_index=True,
 )
 
+
 # %%
+# Here we plot the mean $R^2$ scores for each model as a bar plot
 fig = plot_r2_scores(copy.deepcopy(models), threshold=-1)
 fig.savefig(
     base_path / "results" / "semantic_validation" / "r2_scores.pdf",
     bbox_inches="tight",
     dpi=300,
 )
+
 # %%
-fig = plot_results(results_df)
+figs = plot_results(results_df)
 
-
-fig[0].savefig(
+figs[0].savefig(
     base_path / "results" / "semantic_validation" / "accuracy_semantic_validation.pdf",
     bbox_inches="tight",
     dpi=300,
 )
-fig[1].savefig(
+figs[1].savefig(
     base_path / "results" / "semantic_validation" / "roc_semantic_validation.pdf",
     bbox_inches="tight",
     dpi=300,

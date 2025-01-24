@@ -14,8 +14,6 @@ import seaborn as sns
 
 from objdim.utils import vectorized_pearsonr
 
-sns.set_style("white")
-
 
 def parse_args():
     parser = ArgumentParser()
@@ -150,21 +148,40 @@ def plot_reliability(
     """Plot the reliability of each dimension across all models."""
     ndim = len(reliability_per_dim)
     fig, ax = plt.subplots(figsize=(6, 4))
-    ax.plot(range(ndim), reliability_per_dim, color="black")
-    ax.set_xlabel("Dimension number")
-    ax.set_ylabel("Reproducibility of dimensions\n(Pearson's r)".format(n_embeddings))
 
-    red = sns.color_palette()[3]
+    # Use seaborn to plot the line with improved aesthetics
+    sns.lineplot(
+        x=range(ndim),
+        y=reliability_per_dim,
+        color="#4C72B0",  # A more visually appealing blue from the default seaborn palette
+        linewidth=2,
+        ax=ax,
+    )
 
-    ax.axvline(x=n_pruned, color=red, linestyle="--", label="Dimensions pruned")
-    sns.despine(offset=10)
-    ax.legend()
+    ax.set_xlabel("Dimension number", fontsize=10)
+    ax.set_ylabel("Reproducibility of dimensions\n(Pearson Correlation)", fontsize=10)
+
+    # Customize colors
+    red = sns.color_palette("deep")[3]
+
+    # Add vertical line for pruned dimensions with improved styling
+    ax.axvline(
+        x=n_pruned,
+        color=red,
+        linestyle="--",
+        linewidth=2,
+        label="Dimensions pruned",
+    )
+
+    sns.despine()
+    ax.legend(fontsize=10, frameon=True, facecolor="white", edgecolor="lightgray")
+
     plt.tight_layout()
     plt.savefig(
         os.path.join(
             "./results",
             "plots",
-            f"reproducibility_across_dimensions_{modality}_features42.pdf",
+            f"reproducibility_across_dimensions_{modality}_classifier.4.pdf",
         ),
         dpi=300,
         bbox_inches="tight",
@@ -180,26 +197,33 @@ def plot_reliability_across_seeds(
 
     fig, ax = plt.subplots(figsize=(6, 4))
 
-    # make patches of lines inside the bar
-    seaborn_grey = sns.color_palette()[7]
-    ax.bar(
-        list(mean_reliabilities.keys()),
-        list(mean_reliabilities.values()),
-        color=seaborn_grey,
+    sns.barplot(
+        x=list(mean_reliabilities.keys()),
+        y=list(mean_reliabilities.values()),
+        edgecolor=".1",
+        facecolor=".85",
+        ax=ax,
     )
     ax.set_xlabel("Random Seed")
-    ax.set_ylabel("Mean reproducibility (Pearson's r)")
+    ax.set_ylabel("Mean reproducibility (Pearson Correlation)")
 
-    for i, bar in enumerate(ax.patches):
-        # bar.set_hatch("//")
-        bar.set_edgecolor("black")
+    # make patches of lines inside the bar
+    # for i, bar in enumerate(ax.patches):
+    #     bar.set_hatch("//")
+    #     bar.set_edgecolor("black")
+
+    # Reduce the number of x-axis ticks
+    ax.xaxis.set_major_locator(plt.MaxNLocator(11))
+
+    # Reduce the number of y-axis ticks
+    ax.yaxis.set_major_locator(plt.MaxNLocator(11))
 
     sns.despine(left=True, bottom=True)
     plt.savefig(
         os.path.join(
             "./results",
             "plots",
-            f"reproducibility_across_seeds_{modality}_features42.pdf",
+            f"reproducibility_across_seeds_{modality}_classifier.4.pdf",
         ),
         dpi=300,
         bbox_inches="tight",

@@ -11,6 +11,7 @@ from .data import (
     img_to_uint8,
     get_image_transforms,
     load_image_data,
+    load_data,
 )
 
 

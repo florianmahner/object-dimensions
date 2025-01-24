@@ -90,7 +90,7 @@ def load_model(model_name: str):
             device=device,
             source="custom",
             # I think what we used is the resnet50.visual version for the paper.
-            model_parameters={"variant": "ViT-B-32", "dataset": "laion2b_s32b_b79k"},
+            model_parameters={"variant": "RN50", "dataset": "laion2b_s32b_b79k"},
         )
     elif model_name == "barlowtwins-rn50":
         model = get_extractor(
