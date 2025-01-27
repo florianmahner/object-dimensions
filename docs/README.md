@@ -41,7 +41,7 @@ poetry shell
 
 ## Main Experiments of the Paper
 
-Prior to running the experiments, download the required data from [osf]() by executing the following command, which will download the data and extract it to the `data` folder:
+Prior to running the experiments, download the required data from [osf](https://osf.io/nva43/) by executing the following command, which will download the data and extract it to the `data` folder:
 
 ```bash
 make data
