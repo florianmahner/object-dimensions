@@ -1,18 +1,19 @@
-# Object Dimensions in Humans :elf: and DNNs :spider_web:
+# Core Object Dimensions of Deep Neural Networks and Humans
 
 ## Overview
 
-This repository provides the code to reproduce the main parts of the paper. In addition, it provides the code to learn interpretable representational embeddings from behavioral responses to natural images using a triplet odd-one-out task.
+This repository contains code to reproduce the key results of our paper. Additionally, it provides tools to learn interpretable representational embeddings from behavioral responses to natural images using a triplet odd-one-out task.
 
-This repository is split into two parts:
-1. Code and experiments to reproduce the main results of the paper [Dimensions underlying the representational alignment of deep neural networks with humans](arxiv.org/pdf/2406.19087). See [Main Experiments of the Paper](#main-experiments-of-the-paper) for more details.
-2. Code to learn interpretable representational embeddings from behavioral responses to natural images using a triplet odd-one-out task. See [Learning Representational Embeddings](#learning-representational-embeddings) for more details.
+The repository is organized into two main sections:
 
-## Installation and System Requirements
+1. **Reproducing the main experiments** (see [Main Experiments](#main-experiments))
+2. **Learning interpretable representational embeddings** (see [Learning Representational Embeddings](#learning-representational-embeddings))
 
-### Step 1: Install Poetry
+## Installation
 
-This project uses Python 3.9.12 and Poetry for dependency management. Most experiments can be run using a normal desktop computer in a reasonable amount of time. However, most experiments require PyTorch and an NVIDIA GPU.
+### 1. Install Poetry
+
+This project requires **Python 3.9.12** and **Poetry** for dependency management. Most experiments can be run on a standard desktop, but a **GPU** (with PyTorch) is recommended.
 
 First, install [Poetry](https://python-poetry.org/):
 
@@ -21,56 +22,57 @@ curl -sSL https://install.python-poetry.org | python3 -
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-### Step 2: Clone the Repository
-
-Clone the repository and navigate to the project root:
+### 2. Clone the Repository
 
 ```bash
 git clone git@github.com:florianmahner/object-dimensions.git
 cd object-dimensions
 ```
 
-### Step 3: Install Dependencies
-
-Install the project dependencies using Poetry:
+### 3. Install Dependencies
 
 ```bash
 poetry install
 poetry shell
 ```
 
-## Main Experiments of the Paper
+## Main Experiments
 
-Prior to running the experiments, download the required data from [osf](https://osf.io/nva43/) by executing the following command, which will download the data and extract it to the `data` folder:
+### Downloading Data
+
+Before running experiments, download the required data from [OSF](https://osf.io/nva43/) by executing:
 
 ```bash
 make data
 ```
 
-Additionally, we use the THINGS dataset, which consists of 1,854 images of everyday objects. We provide a script to download the THINGS and THINGS+ data. To download the data, run:
+Additionally, this project uses the **THINGS dataset** (1,854 images of everyday objects). To download THINGS and THINGS+, run:
 
 ```bash
 make images
 ```
 
-We have provided a separate [README](../experiments/README.md) in the [experiments](../experiments) folder that explains how to use the data and reproduce the experiments. We provide config files for each experiment in the [configs](../configs) folder.
+### Running Experiments
+
+Each experiment is configured via a `.toml` file in the [`configs`](../configs) folder. A detailed guide is available in the [experiments README](../experiments/README.md).
 
 ## Learning Representational Embeddings
 
-We learn interpretable representational embeddings from behavioral responses to natural images using a triplet odd-one-out task. The choices can be obtained by:
+We learn interpretable embeddings from behavioral responses to natural images using a **triplet odd-one-out task**. Choices can come from:
 
-1. Running behavioral experiments with humans.
-2. Simulating triplet choices from any representation space (e.g., DNN activations, neural recordings).
+1. **Human behavioral experiments**
+2. **Simulated choices from representational spaces** (e.g., DNN activations, neural recordings)
 
-The repository supports both the simulation of behavioral choices and the use of actual behavioral data to train an embedding model. A small example demo can be found in [scripts/demo.ipynb](../scripts/demo.ipynb).
+The repository supports both **simulating triplets** and **using real behavioral data** to train an embedding model. A small demo is available in [`scripts/demo.ipynb`](../scripts/demo.ipynb).
 
-Triplets can be simulated from any representation space or collected from actual behavioral responses. If you have actual behavioral responses, make sure that the data is of shape [n_samples, 3], where each row contains the indices of the triplets and the *last column* by definition denotes the odd one out.
+> **Note:**  
+> If using real behavioral data, ensure the format is `[n_samples, 3]`, where each row contains triplet indices, with the *last column* denoting the odd one out.
 
 ### Simulating Triplets
 
-Use the `run_tripletization.py` script to simulate triplets. Example configurations are provided in the [configs](../configs) folder.
+Use `run_tripletization.py` to generate triplets. Example configurations are in [`configs`](../configs).
 
-To extract triplets from DNN representations, run:
+To extract triplets from DNN representations:
 
 ```bash
 python run_tripletization.py --config "./configs/tripletize.toml"
@@ -78,7 +80,7 @@ python run_tripletization.py --config "./configs/tripletize.toml"
 
 ## Training the Model
 
-Train the model with different hyperparameters and optimization methods. For a list of available arguments, run:
+To explore training options, run:
 
 ```bash
 python run_optimization.py --help
@@ -86,9 +88,12 @@ python run_optimization.py --help
 
 ### Training Methods
 
-You can train the model deterministically using MLE (as in [SPoSE](https://www.nature.com/articles/s41562-020-00951-3)) or variationally (as in [VICE](https://arxiv.org/abs/2205.00756)) by specifying the `--method` flag.
+The model can be trained using:
 
-Example command:
+- **Deterministic Maximum Likelibood Estimation** (as in [SPoSE](https://www.nature.com/articles/s41562-020-00951-3))
+- **Variational Inference** (as in [VICE](https://arxiv.org/abs/2205.00756))
+
+Example training command:
 
 ```bash
 python run_optimization.py --config "./configs/train_behavior.toml" --method "deterministic"
@@ -96,12 +101,19 @@ python run_optimization.py --config "./configs/train_behavior.toml" --method "de
 
 ### Model Run Paths
 
-The model run paths are organized based on the modality:
+Training logs and results are organized as follows:
 
-- **Behavior:** `./log_path/identifier/behavior/n_samples/prior/init_dim/batch_size/beta/seed`
-- **DNN:** `./log_path/identifier/deep/model_name/module_name/n_samples/prior/init_dim/batch_size/beta/seed`
+#### **For Behavioral Data**
+```
+./log_path/identifier/behavior/n_samples/prior/init_dim/batch_size/beta/seed
+```
 
-Each run path includes the following files:
+#### **For DNN Representations**
+```
+./log_path/identifier/deep/model_name/module_name/n_samples/prior/init_dim/batch_size/beta/seed
+```
+
+Each run contains:
 
 ```
 path
@@ -116,8 +128,11 @@ path
 
 ## Evaluating the Model
 
-The final model parameters are stored in `parameters.npz`, along with all training configurations. For SPoSE, only the mean of the embedding is modeled, while for VICE, both the mean and variance of the Gaussian variational distribution are modeled.
+The trained model parameters are saved in `parameters.npz`, along with the full training configuration.
+
+- **SPoSE**: Models only the **mean** of the embedding.  
+- **VICE**: Models both the **mean** and **variance** of the Gaussian variational distribution.
 
 ## Contact
 
-For any questions or issues, please open an issue on GitHub or contact the repository maintainers.
+For questions or issues, open a GitHub issue or contact the maintainers.
