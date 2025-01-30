@@ -65,7 +65,7 @@ We learn interpretable embeddings from behavioral responses to natural images us
 
 The repository supports both **simulating triplets** and **using real behavioral data** to train an embedding model. A small demo is available in [`scripts/demo.ipynb`](../scripts/demo.ipynb).
 
-> **Note:**  
+> [!Important]
 > If using real behavioral data, ensure the format is `[n_samples, 3]`, where each row contains triplet indices, with the *last column* denoting the odd one out.
 
 ### Simulating Triplets
