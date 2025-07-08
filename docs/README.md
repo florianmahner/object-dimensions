@@ -1,4 +1,4 @@
-# Core Object Dimensions of Deep Neural Networks and Humans
+# Dimensions underlying the representational alignment of deep neural networks with humans
 
 ## Overview
 
