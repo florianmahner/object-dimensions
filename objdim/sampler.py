@@ -250,27 +250,21 @@ class Sampler(object):
 
     def create_train_test_split(self, similarity_judgements):
         """Split triplet data into train and test splits."""
+        random.seed(0)
+        random.shuffle(similarity_judgements)
+        N = similarity_judgements.shape[0]
+        frac = int(N * self.train_fraction)
+        train_split = similarity_judgements[:frac]
+        test_split = similarity_judgements[frac:]
 
-        with open(os.path.join(self.out_path, "test_10.npy"), "wb") as train_file:
-            np.save(train_file, similarity_judgements)
-
-        breakpoint()
-
-        # random.seed(0)
-        # random.shuffle(similarity_judgements)
-        # N = similarity_judgements.shape[0]
-        # frac = int(N * self.train_fraction)
-        # train_split = similarity_judgements[:frac]
-        # test_split = similarity_judgements[frac:]
-
-        # N = similarity_judgements.shape[0]
-        # rnd_perm = np.random.permutation(N)
-        # train_split = similarity_judgements[
-        #     rnd_perm[: int(len(rnd_perm) * self.train_fraction)]
-        # ]
-        # test_split = similarity_judgements[
-        #     rnd_perm[int(len(rnd_perm) * self.train_fraction) :]
-        # ]
+        N = similarity_judgements.shape[0]
+        rnd_perm = np.random.permutation(N)
+        train_split = similarity_judgements[
+            rnd_perm[: int(len(rnd_perm) * self.train_fraction)]
+        ]
+        test_split = similarity_judgements[
+            rnd_perm[int(len(rnd_perm) * self.train_fraction) :]
+        ]
         return train_split, test_split
 
     def save_similarity_judgements(self, similarity_judgements):
