@@ -89,6 +89,7 @@ def load_model(model_name: str):
             pretrained=True,
             device=device,
             source="custom",
+            # use openai dataset for clip
             model_parameters={"variant": "RN50", "dataset": "openai"},
         )
     elif model_name == "barlowtwins-rn50":
@@ -128,8 +129,6 @@ def load_model(model_name: str):
         )
 
     return model
-
-
 if __name__ == "__main__":
     args = parse_args()
     extract_features(
