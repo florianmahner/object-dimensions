@@ -82,3 +82,45 @@ python experiments/labeling/dnn_dimension_ratings.py --config configs/human_labe
 
 
 
+
+### Expert-rating stimulus preparation and dimension mapping
+
+The historical preparation script is now included as
+[`scripts/behavioral_ratings_visualization.py`](../scripts/behavioral_ratings_visualization.py).
+Its imports and embedding paths have been updated for the released repository,
+and execution is guarded so importing it does not generate stimuli.
+The original shuffling and visualization procedure is retained.
+
+For each model, the script draws `np.random.permutation(W.shape[1])`,
+reorders the embedding columns, and records a mapping from the displayed
+zero-based dimension index to the original zero-based column index. JSON
+serializes these index keys as strings. It also assigns anonymous model names
+(`model_a` through `model_f`).
+
+The outputs are saved under `results/plots/mixing_experiment_anonymous/`:
+
+- `images/`: 9 × 9 grids of the 81 highest-weight images per dimension;
+  entries with weights below 0.5 are replaced with gray images. These are
+  top-weight grids, not percentile-sampled grids.
+- `dimension_mapping.json`: the dimension permutations, keyed by model.
+- `filenames_to_models.json`: original model names mapped to anonymous names.
+
+The analysis reads the retained mapping at `data/misc/dimension_mapping.json`.
+The preparation script writes to the results directory; it does not copy the
+file into `data/misc`. Keep the released mapping with the released ratings.
+The historical script does not set a random seed, so rerunning it generates
+a new permutation and cannot reliably reconstruct the released mapping.
+
+To prepare a new rating round, first download the embeddings and images and
+check the input paths inside the script. Image order must match embedding row
+order; the human image selection uses filenames containing `01b`. Run from
+the repository root in the installed project environment:
+
+```bash
+poetry run python -m scripts.behavioral_ratings_visualization
+```
+
+The script retains its historical fixed paths and overwrites its output files
+on reruns. Use a separate output location for each rating round and retain
+the exact mapping with the corresponding stimuli and ratings. For another
+dataset, adapt the input paths and image selection before running it.
